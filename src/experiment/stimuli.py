@@ -45,6 +45,13 @@ def load_video_stimulus(
         noAudio=not with_audio,
         loop=False,
     )
+    # Fallback: some PsychoPy/ffpyplayer versions ignore noAudio,
+    # so force volume to zero as a safety net.
+    if not with_audio:
+        try:
+            movie.setVolume(0)
+        except Exception:
+            pass
     return movie
 
 
