@@ -124,25 +124,35 @@ def run_experiment(
         aborted = False
 
         for trial_idx, trial_spec in enumerate(trials):
-            # Fixation
+            # --- Load video + audio BEFORE fixation so file I/O and
+            # ffmpeg extraction happen during the fixation period. ---
+            if trial_spec.section_type == "visual_only":
+                movie, audio = load_video_stimulus(win, trial_spec.video_path, with_audio=False)
+            elif trial_spec.section_type == "audio_only":
+                movie, audio = load_video_stimulus(win, trial_spec.audio_path, with_audio=True)
+            elif trial_spec.section_type == "dichotic":
+                movie, audio = load_video_stimulus(win, trial_spec.video_path, with_audio=True)
+            else:
+                movie, audio = load_video_stimulus(win, trial_spec.video_path, with_audio=True)
+
+            # Fixation (file is already loaded & parsed)
             present_fixation(win, fixation, fixation_ms)
 
             clock.reset()
 
             # Present stimulus based on section type
             if trial_spec.section_type == "visual_only":
-                movie = load_video_stimulus(win, trial_spec.video_path, with_audio=False)
                 video_end_time = present_video(win, movie, clock)
             elif trial_spec.section_type == "audio_only":
-                # Show fixation during audio playback
-                # Audio from the congruent video file
-                movie = load_video_stimulus(win, trial_spec.audio_path, with_audio=True)
-                # Full-screen cover to hide video, fixation on top
+                # Play muted video (for timing) with cover hiding frames,
+                # audio via ptb backend for precise sync
                 cover = visual.Rect(
                     win, width=2, height=2, pos=(0, 0),
                     fillColor=bg_color, lineColor=bg_color,
                 )
                 movie.play()
+                if audio is not None:
+                    audio.play()
                 while not movie.isFinished:
                     movie.draw()
                     cover.draw()
@@ -150,14 +160,17 @@ def run_experiment(
                     win.flip()
                 win.flip()
                 video_end_time = clock.getTime()
+                if audio is not None:
+                    audio.stop()
             elif trial_spec.section_type == "dichotic":
-                # Pre-generated stereo mp4: left ear = one syllable, right ear = another
-                movie = load_video_stimulus(win, trial_spec.video_path, with_audio=True)
+                # Stereo mp4: left ear = one syllable, right ear = another
                 cover = visual.Rect(
                     win, width=2, height=2, pos=(0, 0),
                     fillColor=bg_color, lineColor=bg_color,
                 )
                 movie.play()
+                if audio is not None:
+                    audio.play()
                 while not movie.isFinished:
                     movie.draw()
                     cover.draw()
@@ -165,10 +178,11 @@ def run_experiment(
                     win.flip()
                 win.flip()
                 video_end_time = clock.getTime()
+                if audio is not None:
+                    audio.stop()
             else:
                 # McGurk and AV congruent: normal video+audio
-                movie = load_video_stimulus(win, trial_spec.video_path, with_audio=True)
-                video_end_time = present_video(win, movie, clock)
+                video_end_time = present_video(win, movie, clock, audio=audio)
 
             # Show response options
             options_shown_time = clock.getTime()

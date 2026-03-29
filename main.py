@@ -5,6 +5,21 @@ Usage:
     python main.py --config path/to/config.yaml
 """
 
+# ---------- Platform-specific A/V sync fix ----------
+# MovieStim uses ffpyplayer which plays audio through SDL2 directly,
+# bypassing PsychoPy's audioLib setting entirely.  On Windows the default
+# SDL2 audio driver can introduce 50-150 ms of extra buffering latency,
+# causing audible lag relative to the video frames.
+#
+# Setting SDL_AUDIODRIVER=wasapi (Windows 10+) selects the low-latency
+# Windows Audio Session API path inside SDL2.  On Linux this env var is
+# ignored (SDL2 picks PulseAudio/ALSA automatically).
+import os
+import platform
+
+if platform.system() == "Windows":
+    os.environ.setdefault("SDL_AUDIODRIVER", "wasapi")
+
 # PsychoPy prefs must be set BEFORE any other psychopy imports
 from psychopy import prefs
 

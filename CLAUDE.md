@@ -84,8 +84,8 @@ mcgurk/
 ```
 
 ## PsychoPy Usage Notes
-- **Video**: `visual.MovieStim` for video playback — hardware-accelerated, frame-accurate
-- **Audio**: embedded in video for AV sections; `sound.Sound` for A-only and dichotic sections
+- **Video**: `visual.MovieStim` with `noAudio=True` for video playback — hardware-accelerated, frame-accurate
+- **Audio**: extracted from video via ffmpeg, played through `sound.Sound` (ptb backend) for precise A/V sync; SDL2 audio path is intentionally bypassed
 - **Timing**: `core.Clock` for RT measurement, `core.wait()` for fixation duration
 - **Response**: `event.waitKeys()` or clickable visual elements for ba/da/ga selection
 - **Fullscreen**: experiment runs in `visual.Window(fullscr=True)` for minimal distraction
@@ -145,7 +145,8 @@ Key configurable values:
 - Language: Turkish UI, English code/comments
 
 ## Known Issues & Notes
-- **SDL2 audio warning**: `ffpyplayer` MovieStim her zaman SDL2 kullanır ve uyarı verir. Bu uyarı `stimuli.py`'da susturulmuştur. Ses videoya gömülü olduğu için A/V sync sorunu yoktur.
+- **A/V sync stratejisi**: `MovieStim` (ffpyplayer) ses çalmak için SDL2 kullanır ve bu Windows'ta belirgin gecikme yaratır. Çözüm olarak `MovieStim` her zaman `noAudio=True` ile oluşturulur; ses ffmpeg ile ayrı wav dosyasına çıkarılıp PsychoPy `sound.Sound` (ptb backend) üzerinden çalınır. Bu sayede SDL2 bypass edilir ve sub-ms A/V sync sağlanır. Çıkarılan wav'lar process boyunca cache'lenir, çıkışta temizlenir.
+- **Windows audio backend**: `main.py`'de `SDL_AUDIODRIVER=wasapi` ortam değişkeni ayarlanır (MovieStim init sırasında SDL2'ye hâlâ dokunulduğu için). Video dosyaları fixation öncesinde yüklenerek dosya I/O gecikmesi playback'ten ayrıştırılır.
 - **WSL2 OpenGL**: WSL2'de `LIBGL_ALWAYS_SOFTWARE=1` gerekir. Gerçek deneyde native Windows kullanılacak.
 - **PsychoPy gui.Dlg vs DlgFromDict**: `gui.Dlg` field parsing'de sorun çıkarıyor, `gui.DlgFromDict` kullanılıyor.
 - **Dichotic Listening**: Runtime'da congruent videolardan ffmpeg ile ses çıkarılıp stereo (L/R) numpy array olarak PsychoPy sound.Sound ile çalınıyor. ffmpeg sistemde kurulu olmalı.

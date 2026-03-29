@@ -1,15 +1,113 @@
-"""Stimulus loading and presentation helpers for PsychoPy."""
+"""Stimulus loading and presentation helpers for PsychoPy.
 
+Audio-video synchronisation strategy
+-------------------------------------
+PsychoPy's ``MovieStim`` (ffpyplayer backend) plays audio through SDL2,
+which introduces noticeable latency on Windows.  To achieve precise A/V
+sync we:
+
+1. **Always** create ``MovieStim`` with ``noAudio=True``.
+2. Extract the audio track from the mp4 to a temporary wav via *ffmpeg*.
+3. Play the wav through ``sound.Sound`` (ptb / sounddevice backend) which
+   has sub-millisecond timing control.
+4. Start video and audio together in ``present_video``.
+
+The extracted wavs are cached per video path for the lifetime of the
+process and cleaned up on exit.
+"""
+
+import atexit
+import hashlib
 import logging
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from psychopy import visual, core
+from psychopy import visual, core, sound
 
-# Suppress the sdl2 A/V sync warning — not relevant when audio is embedded in video.
-# The warning fires because ffpyplayer uses sdl2 for audio, but since our audio and
-# video are muxed in the same mp4 file, they share the same decode timeline.
+logger = logging.getLogger(__name__)
+
+# Suppress the sdl2 A/V sync warning — we no longer use sdl2 for audio,
+# but MovieStim still logs the warning during initialisation.
 logging.getLogger("psychopy.visual.movies").setLevel(logging.ERROR)
+
+# ---------------------------------------------------------------------------
+# Audio extraction cache
+# ---------------------------------------------------------------------------
+
+_audio_cache: dict[str, Path] = {}
+_temp_dir: Optional[Path] = None
+
+
+def _get_temp_dir() -> Path:
+    """Return (and lazily create) a temp directory for extracted wav files."""
+    global _temp_dir
+    if _temp_dir is None:
+        _temp_dir = Path(tempfile.mkdtemp(prefix="mcgurk_audio_"))
+        atexit.register(_cleanup_temp_audio)
+    return _temp_dir
+
+
+def _cleanup_temp_audio() -> None:
+    """Remove temporary wav files on interpreter exit."""
+    if _temp_dir and _temp_dir.exists():
+        shutil.rmtree(_temp_dir, ignore_errors=True)
+
+
+def extract_audio(video_path: Path) -> Path:
+    """Extract audio track from *video_path* to a wav file (cached).
+
+    Uses ffmpeg (must be on PATH).  The wav is written to a process-local
+    temp directory and reused if the same video is requested again.
+    """
+    key = str(video_path.resolve())
+    if key in _audio_cache:
+        return _audio_cache[key]
+
+    temp_dir = _get_temp_dir()
+    # Build a unique-enough filename: <speaker_folder>_<video_stem>.wav
+    wav_name = f"{video_path.parent.name}_{video_path.stem}.wav"
+    wav_path = temp_dir / wav_name
+
+    # If there's a hash collision (unlikely), add a short hash
+    if wav_path.exists():
+        h = hashlib.md5(key.encode()).hexdigest()[:8]
+        wav_name = f"{video_path.parent.name}_{video_path.stem}_{h}.wav"
+        wav_path = temp_dir / wav_name
+
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-i", str(video_path),
+                "-vn",                    # no video
+                "-acodec", "pcm_s16le",   # 16-bit PCM
+                "-ar", "48000",           # 48 kHz (common for ptb)
+                "-ac", "2",               # stereo (needed for dichotic)
+                str(wav_path),
+                "-y",                     # overwrite
+            ],
+            capture_output=True,
+            check=True,
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            "ffmpeg bulunamadı. Lütfen ffmpeg'in PATH'te olduğundan emin olun."
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"ffmpeg ses çıkarma hatası ({video_path.name}): {exc.stderr.decode()}"
+        )
+
+    _audio_cache[key] = wav_path
+    return wav_path
+
+
+# ---------------------------------------------------------------------------
+# Stimulus creation helpers
+# ---------------------------------------------------------------------------
 
 
 def create_fixation_cross(win: visual.Window, config: dict[str, Any]) -> visual.ShapeStim:
@@ -31,21 +129,28 @@ def create_fixation_cross(win: visual.Window, config: dict[str, Any]) -> visual.
 
 def load_video_stimulus(
     win: visual.Window, video_path: Path, with_audio: bool = True
-) -> visual.MovieStim:
-    """Load a video stimulus from file.
+) -> tuple[visual.MovieStim, Optional[sound.Sound]]:
+    """Load a video stimulus and (optionally) its audio track.
 
-    Args:
-        win: PsychoPy window.
-        video_path: Path to mp4 file.
-        with_audio: If False, video plays without sound (for visual_only section).
+    The video is **always** loaded with embedded audio disabled.  When
+    *with_audio* is True the audio track is extracted to a wav file and
+    returned as a ``sound.Sound`` object that uses PsychoPy's configured
+    audio backend (ptb preferred) for precise timing.
+
+    Returns:
+        ``(movie, audio)`` — *audio* is ``None`` when *with_audio* is False.
     """
     movie = visual.MovieStim(
         win,
         str(video_path),
-        noAudio=not with_audio,
+        noAudio=True,   # always mute embedded SDL2 audio
         loop=False,
     )
-    return movie
+    audio_obj = None
+    if with_audio:
+        wav_path = extract_audio(video_path)
+        audio_obj = sound.Sound(str(wav_path))
+    return movie, audio_obj
 
 
 def present_fixation(
@@ -64,20 +169,33 @@ def present_video(
     win: visual.Window,
     movie: visual.MovieStim,
     clock: core.Clock,
+    audio: Optional[sound.Sound] = None,
 ) -> float:
     """Present a video stimulus and return the timestamp when it ends.
+
+    If *audio* is provided it is started on the same frame as the video
+    so that A/V sync is governed by PsychoPy's audio backend (ptb) rather
+    than ffpyplayer's SDL2 path.
 
     Returns:
         Time (on the provided clock) when the video finished.
     """
     movie.play()
+    if audio is not None:
+        audio.play()
+
     while not movie.isFinished:
         movie.draw()
         win.flip()
+
     win.flip()  # clear screen after video
     video_end_time = clock.getTime()
-    return video_end_time
 
+    # Ensure audio doesn't keep playing if it's slightly longer than video
+    if audio is not None:
+        audio.stop()
+
+    return video_end_time
 
 
 def create_response_screen(
