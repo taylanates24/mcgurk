@@ -27,6 +27,26 @@ from typing import Any, Optional
 
 from psychopy import visual, core, sound
 
+
+def _get_ffmpeg() -> str:
+    """Return path to ffmpeg binary.
+
+    Prefers the system ffmpeg (PATH), falls back to the binary bundled with
+    imageio-ffmpeg (installed as a PsychoPy dependency).
+    """
+    import shutil as _shutil
+    system_ffmpeg = _shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        pass
+    raise RuntimeError(
+        "ffmpeg bulunamadı. Lütfen ffmpeg'in PATH'te olduğundan emin olun."
+    )
+
 logger = logging.getLogger(__name__)
 
 # Suppress the sdl2 A/V sync warning — we no longer use sdl2 for audio,
@@ -38,6 +58,7 @@ logging.getLogger("psychopy.visual.movies").setLevel(logging.ERROR)
 # ---------------------------------------------------------------------------
 
 _audio_cache: dict[str, Path] = {}
+_silent_video_cache: dict[str, Path] = {}
 _temp_dir: Optional[Path] = None
 
 
@@ -80,7 +101,7 @@ def extract_audio(video_path: Path) -> Path:
     try:
         subprocess.run(
             [
-                "ffmpeg",
+                _get_ffmpeg(),
                 "-i", str(video_path),
                 "-vn",                    # no video
                 "-acodec", "pcm_s16le",   # 16-bit PCM
@@ -92,10 +113,6 @@ def extract_audio(video_path: Path) -> Path:
             capture_output=True,
             check=True,
         )
-    except FileNotFoundError:
-        raise RuntimeError(
-            "ffmpeg bulunamadı. Lütfen ffmpeg'in PATH'te olduğundan emin olun."
-        )
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(
             f"ffmpeg ses çıkarma hatası ({video_path.name}): {exc.stderr.decode()}"
@@ -103,6 +120,48 @@ def extract_audio(video_path: Path) -> Path:
 
     _audio_cache[key] = wav_path
     return wav_path
+
+
+def extract_silent_video(video_path: Path) -> Path:
+    """Return a copy of *video_path* with the audio track stripped (cached).
+
+    noAudio=True and setVolume(0) are both ignored by some ffpyplayer builds
+    on Windows.  The only reliable way to guarantee silence is to give
+    MovieStim a video file that has no audio stream at all.
+    """
+    key = str(video_path.resolve())
+    if key in _silent_video_cache:
+        return _silent_video_cache[key]
+
+    temp_dir = _get_temp_dir()
+    out_name = f"{video_path.parent.name}_{video_path.stem}_silent.mp4"
+    out_path = temp_dir / out_name
+
+    if out_path.exists():
+        h = hashlib.md5(key.encode()).hexdigest()[:8]
+        out_name = f"{video_path.parent.name}_{video_path.stem}_{h}_silent.mp4"
+        out_path = temp_dir / out_name
+
+    try:
+        subprocess.run(
+            [
+                _get_ffmpeg(),
+                "-i", str(video_path),
+                "-an",          # strip audio stream
+                "-vcodec", "copy",
+                str(out_path),
+                "-y",
+            ],
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"ffmpeg sessiz video hatası ({video_path.name}): {exc.stderr.decode()}"
+        )
+
+    _silent_video_cache[key] = out_path
+    return out_path
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +199,12 @@ def load_video_stimulus(
     Returns:
         ``(movie, audio)`` — *audio* is ``None`` when *with_audio* is False.
     """
+    if not with_audio:
+        # noAudio=True and setVolume(0) are both ignored by some ffpyplayer
+        # builds on Windows.  Strip the audio stream at the file level so
+        # MovieStim literally has nothing to play.
+        video_path = extract_silent_video(video_path)
+
     movie = visual.MovieStim(
         win,
         str(video_path),
@@ -180,6 +245,9 @@ def present_video(
     Returns:
         Time (on the provided clock) when the video finished.
     """
+    # Silence movie-level SDL2 audio right before play — ffpyplayer may
+    # reset volume on play(), so this must happen here, not just at load time.
+    movie.setVolume(0)
     movie.play()
     if audio is not None:
         audio.play()
