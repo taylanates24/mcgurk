@@ -199,16 +199,15 @@ def load_video_stimulus(
     Returns:
         ``(movie, audio)`` — *audio* is ``None`` when *with_audio* is False.
     """
-    if not with_audio:
-        # noAudio=True and setVolume(0) are both ignored by some ffpyplayer
-        # builds on Windows.  Strip the audio stream at the file level so
-        # MovieStim literally has nothing to play.
-        video_path = extract_silent_video(video_path)
+    # Always give MovieStim a silent video — noAudio=True and setVolume(0)
+    # are both ignored by some ffpyplayer builds on Windows, causing SDL2
+    # audio to leak through alongside the ptb sound.Sound track.
+    silent_path = extract_silent_video(video_path)
 
     movie = visual.MovieStim(
         win,
-        str(video_path),
-        noAudio=True,   # always mute embedded SDL2 audio
+        str(silent_path),
+        noAudio=True,
         loop=False,
     )
     audio_obj = None
@@ -248,9 +247,16 @@ def present_video(
     # Silence movie-level SDL2 audio right before play — ffpyplayer may
     # reset volume on play(), so this must happen here, not just at load time.
     movie.setVolume(0)
-    movie.play()
+
+    # Schedule audio to start on the exact next flip so video frame 1 and
+    # audio onset land on the same display refresh (ptb backend required).
     if audio is not None:
-        audio.play()
+        try:
+            audio.play(when=win.getFutureFlipTime(clock="ptb"))
+        except Exception:
+            audio.play()  # fallback: non-ptb backend
+
+    movie.play()
 
     while not movie.isFinished:
         movie.draw()

@@ -42,6 +42,7 @@ def main():
         config_path = sys.argv[2]
     config = load_config(config_path)
 
+
     # Initialize database
     project_root = Path(__file__).resolve().parent
     db_path = project_root / config.get("database_path", "data/mcgurk.db")
@@ -61,6 +62,10 @@ def main():
         if setup is None:
             print("Deney iptal edildi (admin ayarları).")
             return
+
+        # Apply selected audio device before any Sound objects are created
+        if setup.audio_device:
+            prefs.hardware["audioDevice"] = setup.audio_device
 
         # Step 3: Run experiment
         run_experiment(
