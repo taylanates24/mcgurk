@@ -59,7 +59,11 @@ logging.getLogger("psychopy.visual.movies").setLevel(logging.ERROR)
 
 _audio_cache: dict[str, Path] = {}
 _silent_video_cache: dict[str, Path] = {}
+_noise_wav_cache: dict[str, Path] = {}
+_mixed_wav_cache: dict[str, Path] = {}
 _temp_dir: Optional[Path] = None
+
+_SR = 48000
 
 
 def _get_temp_dir() -> Path:
@@ -120,6 +124,89 @@ def extract_audio(video_path: Path) -> Path:
 
     _audio_cache[key] = wav_path
     return wav_path
+
+
+def _get_noise_wav(noise_file: Path) -> Path:
+    """Convert noise file (mp3/wav/…) to 48 kHz stereo PCM wav, cached."""
+    key = str(noise_file.resolve())
+    if key in _noise_wav_cache:
+        return _noise_wav_cache[key]
+
+    temp_dir = _get_temp_dir()
+    out_path = temp_dir / f"noise_{noise_file.stem}.wav"
+    try:
+        subprocess.run(
+            [
+                _get_ffmpeg(),
+                "-i", str(noise_file),
+                "-vn",
+                "-acodec", "pcm_s16le",
+                "-ar", str(_SR),
+                "-ac", "2",
+                str(out_path),
+                "-y",
+            ],
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"ffmpeg gürültü dönüştürme hatası ({noise_file.name}): {exc.stderr.decode()}"
+        )
+
+    _noise_wav_cache[key] = out_path
+    return out_path
+
+
+def mix_noise_into_audio(speech_wav: Path, noise_file: Path, snr_db: float) -> Path:
+    """Mix *speech_wav* with *noise_file* at *snr_db* dB SNR, return mixed wav (cached).
+
+    The mixed wav is written once to the process temp directory and reused on
+    subsequent calls with the same arguments.
+    """
+    cache_key = f"{speech_wav}|{noise_file}|{snr_db}"
+    if cache_key in _mixed_wav_cache:
+        return _mixed_wav_cache[cache_key]
+
+    import numpy as np
+    from scipy.io import wavfile
+
+    noise_wav = _get_noise_wav(noise_file)
+
+    _, speech_raw = wavfile.read(speech_wav)
+    speech = speech_raw.astype(np.float32)
+    if speech.ndim == 1:
+        speech = np.stack([speech, speech], axis=1)
+
+    _, noise_raw = wavfile.read(noise_wav)
+    noise = noise_raw.astype(np.float32)
+    if noise.ndim == 1:
+        noise = np.stack([noise, noise], axis=1)
+
+    # Loop noise to cover full speech length
+    n = len(speech)
+    repeats = n // len(noise) + 1
+    noise = np.tile(noise, (repeats, 1))[:n]
+
+    # Scale noise to achieve desired SNR: SNR = 20*log10(rms_speech / rms_noise)
+    speech_rms = np.sqrt(np.mean(speech ** 2) + 1e-10)
+    noise_rms  = np.sqrt(np.mean(noise  ** 2) + 1e-10)
+    target_noise_rms = speech_rms / (10 ** (snr_db / 20.0))
+    noise_scaled = noise * (target_noise_rms / noise_rms)
+
+    mixed = speech + noise_scaled
+    peak = np.abs(mixed).max()
+    if peak > 32700:
+        mixed = mixed * (32700.0 / peak)
+    mixed = mixed.astype(np.int16)
+
+    temp_dir = _get_temp_dir()
+    h = hashlib.md5(cache_key.encode()).hexdigest()[:8]
+    out_path = temp_dir / f"mixed_{speech_wav.stem}_{h}.wav"
+    wavfile.write(out_path, _SR, mixed)
+
+    _mixed_wav_cache[cache_key] = out_path
+    return out_path
 
 
 def extract_silent_video(video_path: Path) -> Path:
@@ -187,7 +274,11 @@ def create_fixation_cross(win: visual.Window, config: dict[str, Any]) -> visual.
 
 
 def load_video_stimulus(
-    win: visual.Window, video_path: Path, with_audio: bool = True
+    win: visual.Window,
+    video_path: Path,
+    with_audio: bool = True,
+    noise_file: Optional[Path] = None,
+    snr_db: Optional[float] = None,
 ) -> tuple[visual.MovieStim, Optional[sound.Sound]]:
     """Load a video stimulus and (optionally) its audio track.
 
@@ -195,6 +286,10 @@ def load_video_stimulus(
     *with_audio* is True the audio track is extracted to a wav file and
     returned as a ``sound.Sound`` object that uses PsychoPy's configured
     audio backend (ptb preferred) for precise timing.
+
+    When *noise_file* and *snr_db* are provided the extracted speech audio is
+    mixed with the noise file at the given SNR before creating the Sound object.
+    The mixed wav is cached so repeated trials incur no extra I/O cost.
 
     Returns:
         ``(movie, audio)`` — *audio* is ``None`` when *with_audio* is False.
@@ -213,6 +308,8 @@ def load_video_stimulus(
     audio_obj = None
     if with_audio:
         wav_path = extract_audio(video_path)
+        if noise_file is not None and snr_db is not None:
+            wav_path = mix_noise_into_audio(wav_path, noise_file, snr_db)
         audio_obj = sound.Sound(str(wav_path))
     return movie, audio_obj
 

@@ -1,17 +1,20 @@
 """Section definitions and trial generation for each experiment section."""
 
+import logging
 import random
 from itertools import permutations
+from pathlib import Path
 from typing import Any
 
 from ..utils.assets import (
     Speaker,
-    VideoStimulus,
-    discover_videos,
+    get_assets_dir,
     get_congruent_videos,
     get_incongruent_videos,
 )
 from .trial import TrialSpec
+
+logger = logging.getLogger(__name__)
 
 
 def generate_mcgurk_trials(
@@ -20,13 +23,13 @@ def generate_mcgurk_trials(
     """Generate McGurk (incongruent) trials for a speaker.
 
     Uses all incongruent videos where visual != audio.
+    Noise is mixed at runtime by the engine using assets/noise/.
     """
-    videos = get_incongruent_videos(speaker)
     return [
         TrialSpec(
             section_type="mcgurk",
             video_path=v.path,
-            audio_path=None,  # audio embedded in video
+            audio_path=None,
             visual_syllable=v.visual_syllable,
             audio_syllable=v.audio_syllable,
             noise_condition=noise_condition,
@@ -34,15 +37,17 @@ def generate_mcgurk_trials(
             correct_answer=v.audio_syllable,
             speaker_name=speaker.folder_name,
         )
-        for v in videos
+        for v in get_incongruent_videos(speaker)
     ]
 
 
 def generate_av_congruent_trials(
     speaker: Speaker, noise_condition: str = "clean", snr_db: float | None = None
 ) -> list[TrialSpec]:
-    """Generate AV congruent trials (visual == audio)."""
-    videos = get_congruent_videos(speaker)
+    """Generate AV congruent trials (visual == audio).
+
+    Noise is mixed at runtime by the engine using assets/noise/.
+    """
     return [
         TrialSpec(
             section_type="av_congruent",
@@ -55,7 +60,7 @@ def generate_av_congruent_trials(
             correct_answer=v.audio_syllable,
             speaker_name=speaker.folder_name,
         )
-        for v in videos
+        for v in get_congruent_videos(speaker)
     ]
 
 
@@ -65,26 +70,29 @@ def generate_audio_only_trials(
     noise_condition: str = "clean",
     snr_db: float | None = None,
 ) -> list[TrialSpec]:
-    """Generate audio-only trials. Uses congruent videos for audio extraction."""
-    videos = get_congruent_videos(speaker)
-    video_map = {v.audio_syllable: v for v in videos}
+    """Generate audio-only trials. Uses congruent videos for audio extraction.
+
+    Noise is mixed at runtime by the engine using assets/noise/.
+    """
+    video_map = {v.audio_syllable: v for v in get_congruent_videos(speaker)}
     trials = []
     for syl in syllables:
         v = video_map.get(syl)
-        if v:
-            trials.append(
-                TrialSpec(
-                    section_type="audio_only",
-                    video_path=None,
-                    audio_path=v.path,  # will play audio from this video
-                    visual_syllable="",
-                    audio_syllable=syl,
-                    noise_condition=noise_condition,
-                    snr_db=snr_db,
-                    correct_answer=syl,
-                    speaker_name=speaker.folder_name,
-                )
+        if v is None:
+            continue
+        trials.append(
+            TrialSpec(
+                section_type="audio_only",
+                video_path=None,
+                audio_path=v.path,  # audio will be extracted from this video
+                visual_syllable="",
+                audio_syllable=syl,
+                noise_condition=noise_condition,
+                snr_db=snr_db,
+                correct_answer=syl,
+                speaker_name=speaker.folder_name,
             )
+        )
     return trials
 
 
@@ -152,17 +160,31 @@ def build_trial_list(
     speaker: Speaker,
     selected_sections: list[str],
     config: dict[str, Any],
-    noise_enabled: bool = False,
+    noisy_sections: list[str] | None = None,
 ) -> list[TrialSpec]:
     """Build the complete trial list for an experiment session.
 
-    Generates trials for all selected sections, optionally adds noisy variants,
-    applies repetitions, and randomizes order.
+    Args:
+        speaker: Selected speaker.
+        selected_sections: Sections to run in clean mode.
+        config: Experiment config dict.
+        noisy_sections: Subset of sections that also run in noisy mode.
     """
     syllables = config.get("syllables", ["ba", "da", "ga"])
     repetitions = config.get("trial_repetitions", 1)
-    noise_type = config.get("noise", {}).get("type", "speech_shaped")
     snr_db = config.get("noise", {}).get("snr_db", 5)
+    noisy_set = set(noisy_sections or [])
+
+    # Discover all noise types from assets/noise/ (e.g. white, cocktail)
+    noise_dir = get_assets_dir(config) / "noise"
+    noise_types = [
+        f.stem[: -len("_noise")]
+        for f in sorted(noise_dir.iterdir())
+        if f.is_file() and f.stem.endswith("_noise")
+    ] if noise_dir.is_dir() else []
+    if not noise_types:
+        # Fallback to config value if no files found
+        noise_types = [config.get("noise", {}).get("type", "white")]
 
     generators = {
         "mcgurk": lambda nc, snr: generate_mcgurk_trials(speaker, nc, snr),
@@ -172,20 +194,23 @@ def build_trial_list(
         "dichotic": lambda nc, snr: generate_dichotic_trials(syllables, speaker),
     }
 
+    # Collect all sections to run (union of clean + noisy)
+    all_sections = list(dict.fromkeys(list(selected_sections) + list(noisy_set)))
+
     all_trials = []
-    for section in selected_sections:
+    for section in all_sections:
         gen = generators.get(section)
         if not gen:
             continue
 
-        # Clean trials
-        clean_trials = gen("clean", None)
-        all_trials.extend(clean_trials * repetitions)
+        # Clean trials (run if section is in selected_sections)
+        if section in selected_sections:
+            all_trials.extend(gen("clean", None) * repetitions)
 
-        # Noisy trials (if enabled and section supports it)
-        if noise_enabled and section not in ("visual_only", "dichotic"):
-            noisy_trials = gen(noise_type, snr_db)
-            all_trials.extend(noisy_trials * repetitions)
+        # Noisy trials — one set per noise type (white, cocktail, …)
+        if section in noisy_set:
+            for nt in noise_types:
+                all_trials.extend(gen(nt, snr_db) * repetitions)
 
     random.shuffle(all_trials)
     return all_trials

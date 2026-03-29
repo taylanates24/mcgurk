@@ -1,6 +1,8 @@
 """Main experiment engine: runs the trial loop in a PsychoPy window."""
 
+import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from psychopy import visual, core, event
@@ -20,6 +22,25 @@ from .stimuli import (
 )
 from .response import collect_response
 from .trial import TrialResult
+from ..utils.assets import get_assets_dir
+
+logger = logging.getLogger(__name__)
+
+
+def _find_noise_file(noise_condition: str, config: dict[str, Any]) -> Path | None:
+    """Return the noise file path for *noise_condition* from assets/noise/.
+
+    Tries common audio extensions in order.  Returns None if not found.
+    """
+    if noise_condition == "clean":
+        return None
+    noise_dir = get_assets_dir(config) / "noise"
+    for ext in (".mp3", ".wav", ".ogg", ".flac"):
+        candidate = noise_dir / f"{noise_condition}_noise{ext}"
+        if candidate.exists():
+            return candidate
+    logger.warning("Gürültü dosyası bulunamadı: assets/noise/%s_noise.*", noise_condition)
+    return None
 
 
 def _show_instruction_screen(win: visual.Window, text: str):
@@ -76,7 +97,7 @@ def run_experiment(
         speaker=setup.speaker,
         selected_sections=setup.selected_sections,
         config=config,
-        noise_enabled=setup.noise_enabled,
+        noisy_sections=setup.noisy_sections,
     )
 
     if not trials:
@@ -126,14 +147,24 @@ def run_experiment(
         for trial_idx, trial_spec in enumerate(trials):
             # --- Load video + audio BEFORE fixation so file I/O and
             # ffmpeg extraction happen during the fixation period. ---
+            noise_file = _find_noise_file(trial_spec.noise_condition, config)
+            snr_db = trial_spec.snr_db
+
             if trial_spec.section_type == "visual_only":
                 movie, audio = load_video_stimulus(win, trial_spec.video_path, with_audio=False)
             elif trial_spec.section_type == "audio_only":
-                movie, audio = load_video_stimulus(win, trial_spec.audio_path, with_audio=True)
+                movie, audio = load_video_stimulus(
+                    win, trial_spec.audio_path, with_audio=True,
+                    noise_file=noise_file, snr_db=snr_db,
+                )
             elif trial_spec.section_type == "dichotic":
                 movie, audio = load_video_stimulus(win, trial_spec.video_path, with_audio=True)
             else:
-                movie, audio = load_video_stimulus(win, trial_spec.video_path, with_audio=True)
+                # mcgurk, av_congruent
+                movie, audio = load_video_stimulus(
+                    win, trial_spec.video_path, with_audio=True,
+                    noise_file=noise_file, snr_db=snr_db,
+                )
 
             # Fixation (file is already loaded & parsed)
             present_fixation(win, fixation, fixation_ms)
