@@ -1,0 +1,53 @@
+# McGurk Experiment Configuration
+
+# Syllables used in the experiment (Phase 1: phonemes only)
+syllables:
+  - ba
+  - da
+  - ga
+
+# Experiment timing (milliseconds)
+fixation_duration_ms: 3000
+
+# Noise settings
+noise:
+  type: speech_shaped  # white | speech_shaped | cocktail
+  snr_db: 5            # signal-to-noise ratio in dB
+
+# Reaction time measurement mode (both are always recorded)
+# "from_video_end" or "from_options_shown"
+rt_mode: from_video_end
+
+# Available test sections
+sections:
+  mcgurk: true
+  av_congruent: true
+  audio_only: true
+  visual_only: true
+  dichotic: true
+
+# How many times each trial is repeated within a section
+trial_repetitions: 1
+
+# Display settings
+fullscreen: true
+monitor_name: default
+background_color: [0.5, 0.5, 0.5]  # grey, PsychoPy color space [-1, 1]
+
+# Fixation cross
+fixation:
+  size: 0.05       # height units
+  color: [-1, -1, -1]  # black
+  line_width: 3
+
+# Response keys (keyboard mapping)
+response_keys:
+  ba: "1"
+  da: "2"
+  ga: "3"
+
+# Assets directory (relative to project root)
+assets_dir: assets
+
+# Database
+database_path: data/mcgurk.db
