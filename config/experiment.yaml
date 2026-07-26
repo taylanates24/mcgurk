@@ -152,7 +152,7 @@ modules:
     # 200 × 0.18 = 36 targets, the floor for a d' estimate.  Note this deviates
     # from steps.md §C Adım 7 ("~5-6 dakika"): it runs ~3.5 min.  It also saves
     # the least time of any cut here, so raising it back to 300 costs ~1.7 min.
-    n_trials: 200
+    n_trials: 300
     tone_duration_ms: 50
     tone_ramp_ms: 10
     isi_ms: [900, 1100]
