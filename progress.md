@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-26
-Aktif adım: 2 (Adım 1 tamamlandı)
+Aktif adım: 3 (Adım 2 tamamlandı)
 
 ## Durum tablosu
 
@@ -9,7 +9,7 @@ Aktif adım: 2 (Adım 1 tamamlandı)
 |---|---|---|---|---|
 | 0 | Baseline düzeltme | TAMAMLANDI | 2026-07-26 | `f45eeda`…`618ef1c` |
 | 1 | Proje iskeleti | TAMAMLANDI | 2026-07-26 | `0fb3d3f`…`9dbedee` |
-| 2 | Uyaran hazırlama | BEKLİYOR | | |
+| 2 | Uyaran hazırlama | TAMAMLANDI | 2026-07-26 | `d6e7aaf` |
 | 3 | A/V senkron çekirdeği | BEKLİYOR | | |
 | 4 | Modül 1: McGurk | BEKLİYOR | | |
 | 5 | Modül 2: AVSR | BEKLİYOR | | |
@@ -329,13 +329,166 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
     sütun hâlinde.
 
 ### Adım 2 — Uyaran hazırlama ve kalite kontrol
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
-- **Commit:** —
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-26. Otomatik testler yeşil (301 test, ruff + mypy
+  temiz; CI alt kümesi 264), `TEST_ADIM_2.md` manuel testleri kullanıcı
+  tarafından iki turda yürütüldü ve geçti.
+- **Commit:**
+  - `d6e7aaf` — mcgurk/stimuli paketi, hazırlama ve doğrulama araçları,
+    config'e stimulus_prep bölümü
+
 - **Ne yapıldı:**
+  - **Yeni paket `mcgurk/stimuli/`** — PsychoPy import etmez, sınır testine
+    eklendi. `ffmpeg.py` (ikili bulma, akış çözümleme, sessiz yeniden
+    kodlama), `wavfile.py` (24-bit PCM), `dsp.py` (patlama tespiti,
+    aktif-konuşma seviyesi, gürültü tabanı, LTAS/SSN, SNR, GIN boşlukları),
+    `manifest.py`, `prepare.py`, `verify.py`. CLI'lar `tools/prepare_stimuli.py`
+    ve `tools/verify_stimuli.py`.
+  - **Üretilen set** (`stimuli/`, 121 dosya, ~70 MB, gitignore'lu): 6 sessiz
+    CFR 30 fps all-intra video, 18 hizalanmış 48 kHz 24-bit ses, 54 gürültülü
+    türev (SSN +5 dB SNR, hücre başına 3 farklı gürültü), 12 dikotik stereo
+    WAV, 30 GIN segmenti, 1 SSN master. Ölçülen: hizalama sapması **< 1 ms**
+    (tolerans 5 ms), SSN LTAS sapması **0.35 dB** (tolerans 3 dB), tüm
+    token'lar −23.0 dBFS aktif-konuşma seviyesinde.
+  - **Patlama anları yeniden ölçüldü (A0-3).** Konuşmacı 1: 1092/1119/1108 ms
+    (`steps.md`'nin 1105/1119/1108 değerleriyle ±13 ms uyuşuyor). Konuşmacı 2:
+    **1084/849/836 ms — aralarında 248 ms fark var.** /da/ ve /ga/ çekimleri
+    /ba/'dan çeyrek saniye erken başlamış. Hizalama olmadan Vis-ga + Aud-ba
+    denemesinde ses görüntüden 248 ms geç gelirdi; bu, McGurk füzyonunun
+    zamansal penceresinin (~±200 ms) tamamen dışıdır. Bu adım o denemeyi
+    kurtarıyor. `steps.md`'nin "14 ms yayılım" tespiti yalnızca konuşmacı 1
+    için geçerli.
+  - **Kaynak yalnızca uyumlu kayıtlar.** `Vis-<t>_Aud-<t>.mp4` doğal
+    çekimlerdir; 6 uyumsuz mp4 aynı token'ların sesi t=0'a yapıştırılmış eski
+    bir re-mux'ı ve bu adımın düzelttiği şey tam olarak o hizalama.
+  - **Hizalama hedefi videoya özgü**: Vis-X videosuna monte edilen her Y sesi,
+    X'in kendi akustik patlama anına oturur (`steps.md` §C Adım 2). 29.97 → 30
+    fps dönüşümü görsel zaman eksenini %0.1 sıkıştırdığı için hedef
+    `source_fps / target_fps` ile ölçekleniyor. Kare sayısı korunumu QC'de
+    doğrulanıyor (77 → 77).
+  - **Config'e `stimulus_prep` bölümü** (§G "eksik gördüğün alanı ekle").
+    İçinde `speaker_id` → klasör eşlemesi de var; bu eşleme daha önce hiçbir
+    yerde yazılı değildi. Config artık yükleme anında tasarımı uyaran setiyle
+    karşılaştırıyor: olmayan bir `speaker_id` veya hazırlanmamış bir token
+    açık hata veriyor. SNR listesi ikinci kez yazılmıyor, etkin modüllerin
+    `noise_conditions`'larından türetiliyor.
+  - **`verify_stimuli.py`** diskteki her dosyayı manifest'e karşı yeniden
+    ölçüyor (sağlama toplamı, ses akışı yokluğu, kare sayısı/fps, patlama,
+    seviye, LTAS, kırpma, GIN kısıtları, kenar sessizliği) ve etkin modüllerin
+    istediği her uyaranın var olduğunu kontrol ediyor. Çıkış kodu 0/1.
+  - **Test:** 92 yeni test (toplam 301). Ölçüm fonksiyonları sentetik
+    sinyallerle test ediliyor — gerçek korpusa karşı test etmek yalnızca
+    korpusun kendisiyle tutarlı olduğunu söylerdi. ffmpeg gerektirenler
+    `ffmpeg` marker'ıyla ayrıldı ve ikili yoksa kendini atlıyor;
+    `requirements-ci.txt`'e numpy/scipy/soundfile eklendi.
+
 - **Alınan kararlar:**
+  - **29.97 → 30 fps.** 60 Hz'de kare başına 2.002 yenileme periyodik takılma
+    üretiyordu. 2.58 s'lik klipte `fps=30` hiçbir kareyi çoğaltmıyor/atmıyor,
+    yalnızca zaman damgaları %0.1 sıkışıyor (klip sonunda en fazla 2.6 ms,
+    patlama anında ~1.1 ms). All-intra H.264 CRF 16: her kare bağımsız
+    çözülür, sunumda çözücü duraklaması olmaz.
+  - **24-bit PCM, kaynak kayıplı AAC olmasına rağmen.** Depoda ham kayıt yok
+    (A0-3). Bit derinliği kaynak hassasiyeti eklemez ama normalizasyon +
+    gürültü karışımı sonrası kuantalama gürültüsü biriktirmez. Manifest her
+    dosyanın kaynak codec'ini (`aac`, 44100 Hz) kaydediyor.
+  - **Gürültü örneği başına 3 varyant.** Gürültülü hücrede 10 tekrar var; aynı
+    dalga formunu 10 kez duymak o dalga formunun sessiz anlarını öğrenmeyi
+    ("listening in the dips") mümkün kılar. Üç varyant birbirinden bağımsız
+    (korelasyon < 0.05) ama *aynı duyulmaları beklenir* — SSN durağan bir
+    süreçtir, farklı duyulsalardı biri diğerinden farklı bir gürültü olurdu.
+  - **Dikotik dosyalarda iki kulak ortak bir patlama anına hizalanıyor.**
+    Konuşmacı 2'de token'ların doğal patlama anları 248 ms ayrışıyor; kulak
+    avantajı bu farkla ölçülseydi kısmen başlangıç asenkronisi etkisi olurdu.
+    Video olmadığı için ortak bir an dayatmanın maliyeti yok.
+  - **Oddball tonları bu adımda üretilmedi** — `steps.md` onları Adım 7'ye
+    koyuyor ve kabul kriteri orada (§B.3).
+  - **Sentetik test korpusu bant şekilli gürültüden yapılıyor**, tondan değil.
+    SSN korpusun kendi spektrumundan türetildiği için ayrık spektral çizgilerden
+    oluşan bir korpus dar bantlı gürültü üretiyordu; zarfı birkaç dB oynayan
+    dar bantlı gürültüyle yapılan her seviye ölçümü, boru hattıyla ilgisi
+    olmayan nedenlerle yazı-tura hâline geliyordu.
+
+- **Manuel test turunda çıkan beş düzeltme (2026-07-26):**
+  - **GIN segment rampası 50 → 200 ms.** Kullanıcı segmentin sert başladığını
+    bildirdi; ölçüm doğruladı (25 ms'te −6 dB). Rampa, gürültülü konuşma
+    uyaranlarındaki SSN kesitiyle **aynı parametreyi** paylaşıyordu ve orada
+    kısa olması gerekiyor. Ayrıldı: `stimulus_prep.gin.segment_ramp_ms`.
+    Config doğrulaması eklendi — segment rampası `min_gap_separation_s`'i
+    aşamaz, yoksa bir boşluk kendi rampasının içine düşer ve diğerlerinden
+    daha kısık sunulur; duyulup duyulmaması nereye denk geldiğine bağlı olurdu.
+  - **Gürültü rampası 50 → 250 ms.** Aynı sorun gürültülü konuşma
+    uyaranlarında da vardı. Yukarıdan sınırlı: rampa token'ın patlama anından
+    önce bitmeli, yoksa konuşmanın başı nominalinden yüksek SNR'de sunulur —
+    ve token'a göre değişen miktarda. `_check_noise_is_up_before_the_speech`
+    bunu her dosyada kontrol ediyor.
+  - **Ölçüt olarak patlama anı, enerji tabanlı "konuşma başlangıcı" değil.**
+    İlk yazdığım kontrol konuşmacı 2'de yanlış alarm verdi: o kaydın gürültü
+    tabanı konuşma tepesinin yalnızca ~31 dB altında, aktiflik eşiği (30 dB)
+    tabanın kendisini yakalıyor ve konuşmanın 180 ms'te başladığını sanıyor.
+    Patlayıcılarda patlamadan önce kapanma sessizliği vardır, yani konuşmanın
+    başlangıcı patlamadır — ve o zaten milimetrik ölçülüyor.
+  - **Her yazılan konuşma dosyasına 10 ms kenar rampası**
+    (`stimulus_prep.audio.edge_ramp_ms`). 121 dosyanın tamamı taranınca çıktı:
+    hizalamada başından kırpılan iki dosya (`speaker_2/Vis-da_Aud-ba` ve
+    `Vis-ga_Aud-ba`, 235–249 ms kırpıldı) **kaydın hışırtısının ortasından**
+    başlıyordu (−48/−54 dBFS), diğerleri dijital sessizlikle. Yani bazı
+    denemelerde başlangıç tıklaması var, bazılarında yok — uyaranla ilgisi
+    olmayan, denemeye göre değişen bir ipucu. SSN master'ının hiç rampası
+    yoktu; eklendi ve kesitler yalnızca iç bölgeden alınıyor ki master'ın
+    rampası bir kesitin içine düşmesin. `verify_stimuli.py` artık her denetimde
+    kenar sessizliğini kontrol ediyor.
+  - `TEST_ADIM_2.md`'de iki yanlış beklenti düzeltildi: gürültü varyantlarının
+    kulağa farklı gelmesi beklenmez (ölçüm komutu eklendi), ve `provenance`
+    manifest'in kökünde, tek tek kayıtlarda değil.
+
+- **Yol boyunca çıkan üç sorun:**
+  - **`.gitignore`'daki `stimuli/` kuralı `mcgurk/stimuli/` paketini de
+    gizliyordu** — yeni paketin tamamı sessizce commit edilmeyecekti. Kural
+    köke sabitlendi (`/stimuli/`).
+  - Hizalama sesi 248 ms kaydırınca dosyanın başına **tam dijital sıfır**
+    ekliyor; patlama detektörünün gürültü tabanı tahmini bunu "çok sessiz
+    kayıt" sanıp ilk gerçek hışırtıyı patlama olarak işaretliyordu (764 ms
+    hata). Taban tahmini artık tam sıfır çerçeveleri hariç tutuyor — çözülmüş
+    ses hiçbir zaman tam sıfır değildir, ayrım kesin.
+  - LTAS karşılaştırması `n_fft=1024` ile yapılınca 125 Hz 1/3 oktav bandına
+    hiç FFT bini düşmüyor ve bant "sessiz" okunuyordu — sahte 21.6 dB sapma.
+    `n_fft=4096`'ya çıkarıldı, bini olmayan bantlar NaN döndürüp
+    karşılaştırmadan çıkarılıyor.
+
 - **Bilinen sınırlar:**
+  - **Kaynak kayıpsız değil.** Set 44.1 kHz AAC'den türetiliyor (A0-3: depoda
+    ham kayıt yok). Yeni bir çekim yapılırsa aynı boru hattı kayıpsız kaynakla
+    daha iyisini üretir — kod değişmez.
+  - Oddball tonları yok (Adım 7).
+  - `src/` hâlâ doğrudan `assets/` içindeki ham mp4'leri sunuyor ve Adım 0'ın
+    tüm uyaran sınırlarını taşımaya devam ediyor. İki yol Adım 8'e kadar yan
+    yana duruyor.
+  - GIN segmentlerinde boşluk sayısı segment başına 0–3 arasında dağılıyor
+    (60 boşluk / 30 segment). Standart GIN'de 0 boşluklu yakalama segmentleri
+    de var; mevcut dağılımda bunlar rastlantısal olarak ortaya çıkıyor,
+    garanti edilmiyor. Gerekiyorsa Adım 7c'de tasarım kararı.
+  - `stimuli/` ~70 MB ve gitignore'lu; makineler arası taşınırsa
+    `verify_stimuli.py` ile doğrulanmalı.
+
 - **Sonraki adıma not:**
+  - **Adım 3 `stimuli/manifest.json`'dan okumalı, `assets/`'ten değil.**
+    `TokenEntry.burst_time_s` ve `VideoEntry.burst_time_s` aynı zaman eksenine
+    oturuyor; SOA hesabı bu ortak patlama anı üzerinden yapılacak
+    (`steps.md` §C Adım 3: "ses zamanlaması ortak patlama anı üzerinden").
+  - Videolar 2.567 s / 77 kare / 30 fps; ses dosyaları tam olarak aynı
+    uzunlukta. Negatif SOA'da sesin videodan önce başlaması gerekiyor, yani
+    pay hesabı ses dosyasının kendi giriş boşluğundan (en az ~586 ms)
+    yararlanabilir.
+  - `mcgurk.stimuli.manifest.load()` ve `verify(..., deep=False)` Adım 8'in
+    `mcgurk.checklist` komutu için hazır: hızlı yol yalnızca dosya varlığı ve
+    sağlama toplamına bakıyor.
+  - Adım 7c (GIN) boşluk konumlarını manifest'ten `trials.design_extra`'ya
+    taşımalı: `gin_segments[].gap_onsets_s` ve `gap_durations_ms` alanları
+    `mcgurk/db/design.py`'nin beklediği adlarla aynı.
+  - Adım 4–5 gürültülü koşulda `manifest.noisy(...)` ile gelen 3 varyanttan
+    birini tohumlanmış RNG ile seçmeli ve hangisinin kullanıldığını
+    `design_extra`'ya yazmalı.
 
 ### Adım 3 — A/V senkron çekirdeği
 - **Durum:** BEKLİYOR
@@ -510,3 +663,12 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
     yerleşimi ve modüller arası geçiş hiç sayılmıyor. Gerçek oturumu ~75–80
     dakika olarak planlayın.
 - §F.2 (kelime listesi) Adım 5'ten önce; §F.3 (kulaklık tipi) Adım 8'den önce.
+- **Konuşmacı 2'nin token'ları arasında 248 ms patlama farkı var** (Adım 2
+  ölçümü: ba 1084, da 849, ga 836 ms). Hizalama bunu düzeltiyor, ama fark
+  şunu ima ediyor: /da/ ve /ga/ çekimlerinde konuşmacı hem görsel hem işitsel
+  olarak daha erken başlamış. Hizalama, kaynak kaydın kendi içinde senkron
+  olduğu varsayımına dayanıyor (`steps.md` §C Adım 2'nin gerekçesi). Bu
+  varsayım konuşmacı 2 için de geçerli görünüyor, ancak **fotodiyot ölçümü
+  (`01_av_gecikme_olcumu.md`) yapılırken konuşmacı 2'nin bir uyumsuz
+  denemesiyle de bir kontrol koşulması** varsayımı doğrudan sınar. Adım 3'ün
+  kademe 3 ölçümüne not düşüldü.
