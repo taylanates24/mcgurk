@@ -7,7 +7,7 @@ Aktif adım: 0
 
 | Adım | Başlık | Durum | Tarih | Commit |
 |---|---|---|---|---|
-| 0 | Baseline düzeltme | TESTTE | 2026-07-26 | |
+| 0 | Baseline düzeltme | TESTTE | 2026-07-26 | `f45eeda` |
 | 1 | Proje iskeleti | BEKLİYOR | | |
 | 2 | Uyaran hazırlama | BEKLİYOR | | |
 | 3 | A/V senkron çekirdeği | BEKLİYOR | | |
@@ -26,7 +26,7 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
 - **Durum:** TESTTE (otomatik testler yeşil; manuel test onayı bekleniyor —
   `TEST_ADIM_0.md`)
 - **Tamamlanma:** —
-- **Commit:** —
+- **Commit:** `f45eeda`
 
 - **Ne yapıldı:**
   - `git tag baseline-original` → `867939c`; `data/mcgurk.db` `VACUUM INTO` ile
