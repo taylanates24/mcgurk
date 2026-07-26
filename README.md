@@ -33,7 +33,9 @@ Her bölüm sessiz ve gürültülü koşulda çalıştırılabilir.
 
 ## Kurulum
 
-Python 3.10 gerekir (PsychoPy 3.12+ desteklemez).
+**Python 3.10 gerekir.** Pinlenmiş `psychopy==2026.1.2` yalnızca 3.9–3.11
+aralığını destekler; 3.12 ve üstünde pip bu sürümü bulamaz ve sessizce
+2023 sürümlerine düşmeye çalışır.
 
 ```bash
 conda create -n mcgurk python=3.10
@@ -42,6 +44,16 @@ conda create -n mcgurk python=3.10
 ```bash
 conda activate mcgurk
 ```
+
+**Kurulumdan önce doğru yorumlayıcıda olduğunuzu doğrulayın:**
+
+```bash
+python -c "import sys; print(sys.version.split()[0], sys.executable)"
+```
+
+Çıktı `3.10.x` ile başlamalı ve yol `envs\mcgurk` içinde olmalı. `3.12`/`3.13`
+görüyorsanız ortam aktive olmamıştır — bu durumda kurulum base ortamına gider
+ve `No matching distribution found for psychopy==2026.1.2` hatası alırsınız.
 
 ```bash
 pip install -r requirements.txt
@@ -52,6 +64,16 @@ Geliştirme ve test araçları için ek olarak:
 ```bash
 pip install -r requirements-dev.txt
 ```
+
+> **Aynı isimde birden fazla conda ortamınız varsa dikkat.** Hem Anaconda hem
+> Miniconda kuruluysa ikisinde de `mcgurk` adlı ortam olabilir; `conda activate
+> mcgurk` bunlardan yalnızca birini açar ve diğeri isimsiz görünür
+> (`conda env list` ile kontrol edin). Belirsizliği bitirmek için ortamı tam
+> yoluyla aktive edin:
+>
+> ```bash
+> conda activate C:\Users\tayla\miniconda3\envs\mcgurk
+> ```
 
 **Sürümler pinlidir.** Aylarca sürecek bir psikofizik çalışmasında PsychoPy
 veya ses/video yığınında sessiz bir ara sürüm değişikliği zamanlamayı hiçbir

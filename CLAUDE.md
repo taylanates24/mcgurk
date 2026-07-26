@@ -138,7 +138,12 @@ Key configurable values:
 
 ## Development Environment
 - Primary OS: Linux (WSL2), must also work on Windows
-- Python 3.10 via Miniconda: `conda activate mcgurk`
+- **Python 3.10 via Miniconda — activate by full path:**
+  `conda activate C:\Users\tayla\miniconda3\envs\mcgurk`
+  This machine has a second, *empty* `mcgurk` env under `anaconda3\envs\`, and
+  bare `conda activate mcgurk` resolves to that one. Base is Python 3.13, where
+  `pip install -r requirements.txt` fails with
+  `No matching distribution found for psychopy==2026.1.2` (psychopy needs <3.12).
 - Install: `pip install -r requirements.txt`
 - Run experiment: `python main.py` (WSL2'de `LIBGL_ALWAYS_SOFTWARE=1` prefix gerekebilir)
 - Run admin panel: `python admin.py`

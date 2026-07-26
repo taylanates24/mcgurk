@@ -133,8 +133,15 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
   - `assets/dichotic/` dosyaları 64×64 piksel **1 fps** sahte videolar. Kare
     döngüsü bunların bitmesini bekliyor; Adım 3'te dikotik yol videosuz
     kurgulanmalı.
-  - Gerçek çalışma ortamı `C:\Users\tayla\miniconda3\envs\mcgurk` (Python
-    3.10.20). `anaconda3\envs\mcgurk` boş bir kabuk — karıştırmayın.
+  - **Conda ortam çakışması (2026-07-26'da kullanıcıyı engelledi).** Gerçek
+    çalışma ortamı `C:\Users\tayla\miniconda3\envs\mcgurk` (Python 3.10.20,
+    tüm paketler pinlenmiş sürümlerde kurulu). `anaconda3\envs\mcgurk` boş bir
+    kabuk (4 paket) ve **`conda activate mcgurk` onu açıyor** — conda isim
+    çözümlemesinde `anaconda3\envs` önceliyor, dolu ortam isimsiz listeleniyor.
+    Base ortam Python 3.13.9 olduğu için orada `pip install -r requirements.txt`
+    `No matching distribution found for psychopy==2026.1.2` veriyor
+    (psychopy 2026.1.2 → `>=3.9,<3.12`). Çözüm: ortamı tam yoluyla aktive et.
+    README, CLAUDE.md ve TEST_ADIM_0.md bu tuzağa karşı güncellendi.
   - Sistemde `ffmpeg`/`ffprobe` PATH'te yok; kod `imageio-ffmpeg` ikilisine
     düşüyor. `ffprobe` o pakette **yok** → Adım 2'nin uyaran doğrulama
     araçları kurulu ffmpeg gerektirecek.

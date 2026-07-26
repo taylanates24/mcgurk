@@ -8,8 +8,28 @@ Tahmini süre: ekransız testler ~5 dakika, ekran/ses testleri ~25 dakika.
 
 ## Ön koşullar
 
-- [ ] `conda activate mcgurk` (Python 3.10)
-- [ ] `pip install -r requirements.txt -r requirements-dev.txt` temiz tamamlandı
+### Doğru conda ortamı
+
+Bu makinede **iki ayrı `mcgurk` ortamı** var ve `conda activate mcgurk` boş
+olanı açıyor. Ortamı tam yoluyla aktive edin:
+
+```bash
+conda activate C:\Users\tayla\miniconda3\envs\mcgurk
+```
+
+Doğrulayın — çıktıda `3.10.20`, bir PsychoPy sürümü ve `miniconda3` yolu
+görmelisiniz:
+
+```bash
+python -c "import sys, psychopy; print(sys.version.split()[0], psychopy.__version__, sys.executable)"
+```
+
+`ModuleNotFoundError: psychopy` veya `3.13.x` görüyorsanız yanlış ortamdasınız.
+`pip install` çalıştırmayın — base ortamda Python 3.13 olduğu için
+`No matching distribution found for psychopy==2026.1.2` hatası alırsınız.
+
+- [ ] Yukarıdaki doğrulama komutu `3.10.20 2026.1.2 ...\miniconda3\envs\mcgurk\python.exe` veriyor
+- [ ] Bu ortamda paketler **zaten kurulu** — `pip install` adımına gerek yok
 - [ ] `assets/` yerinde: `female_speaker_1/`, `male_speaker_1/`,
       `dichotic/`, `noise/`
 - [ ] Kulaklık takılı ve ses çıkışı çalışıyor
