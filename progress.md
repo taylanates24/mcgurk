@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-26
-Aktif adım: 3 (Adım 2 tamamlandı)
+Aktif adım: 4 (Adım 3 tamamlandı)
 
 ## Durum tablosu
 
@@ -10,7 +10,7 @@ Aktif adım: 3 (Adım 2 tamamlandı)
 | 0 | Baseline düzeltme | TAMAMLANDI | 2026-07-26 | `f45eeda`…`618ef1c` |
 | 1 | Proje iskeleti | TAMAMLANDI | 2026-07-26 | `0fb3d3f`…`9dbedee` |
 | 2 | Uyaran hazırlama | TAMAMLANDI | 2026-07-26 | `d6e7aaf` |
-| 3 | A/V senkron çekirdeği | BEKLİYOR | | |
+| 3 | A/V senkron çekirdeği | TAMAMLANDI | 2026-07-26 | `bc215d8` |
 | 4 | Modül 1: McGurk | BEKLİYOR | | |
 | 5 | Modül 2: AVSR | BEKLİYOR | | |
 | 6 | Modül 3: TBW | BEKLİYOR | | |
@@ -491,13 +491,164 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
     `design_extra`'ya yazmalı.
 
 ### Adım 3 — A/V senkron çekirdeği
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
-- **Commit:** —
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-26. Otomatik testler yeşil (381 test, ruff + mypy
+  temiz; CI alt kümesi 332), `TEST_ADIM_3.md` manuel testleri kullanıcı
+  tarafından yürütüldü ve geçti.
+- **Commit:**
+  - `bc215d8` — mcgurk/engine paketi, timing_selftest aracı, config'te
+    expected_refresh_hz 75
+
 - **Ne yapıldı:**
+  - **Yeni paket `mcgurk/engine/`**, dört katmana ayrıldı — ayrım "çalışmak
+    için neye ihtiyaç duyuyor" ölçütüne göre:
+    - `scheduling.py` — pay hesabı, ses planlama anı, gerçekleşen SOA, kare
+      istatistiği. **PsychoPy yok, G/Ç yok.** Sesin ne zaman başlayacağına
+      karar veren kod böylece ekransız ve ses kartsız bir makinede test
+      edilebiliyor (kabul kriteri: "sentetik zaman damgalarıyla, PsychoPy'sız").
+    - `audio.py` — lateralizasyon, kalibrasyon trim'i, PTB kapısı, aygıt açma.
+      Dizi işleri saf numpy; yalnızca `sound.Sound` kurulumu PsychoPy'ye
+      dokunuyor ve onu lazy import ediyor.
+    - `window.py` — pencere, **ölçülen** yenileme hızı, kare aralığı kaydı,
+      sabitleme haçı.
+    - `av_presenter.py` — `TrialSpec` → sunum → `TimingRecord`.
+    - `loopback.py` — kademe 2 jitter analizi (saf numpy).
+    - `psychopy_prefs.py` — `psychopy.sound` import'undan önce çalışması
+      gereken tek yer.
+  - **`tools/timing_selftest.py`**: kademe 1 (donanımsız), kademe 2 (loopback,
+    `--play` / `--analyze` iki fazlı), kademe 3 (fotodiyot yönergesi —
+    `docs/01`'i yeniden yazmıyor), `--demo` (hazırlanmış uyaranlarla altı
+    gerçek deneme), `--devices` / `--device` (aygıt listeleme ve tek koşuluk
+    ezme).
+  - **Test: 80 yeni test (301 → 381).** CI'da koşanlar: zamanlama matematiği
+    (34), ses dizisi hazırlama (16), loopback analizi (9), TrialSpec/
+    TimingRecord sözleşmesi (9), paket sınırı (yeni 6). Gerçek donanımda
+    koşanlar (`psychopy` işaretli, 6): pencere + ses aygıtı açılıyor,
+    hazırlanmış uyaranlarla AV / −200 ms SOA / A-only / V-only denemeleri
+    sunuluyor, negatif SOA'da sesin videodan önce başladığı ve payın
+    config'teki 6 kareyi aştığı doğrulanıyor.
+  - **Manuel doğrulama** (kullanıcı): sol/sağ kulak izolasyonu, deneme 3↔4
+    farkı, V-only sessizliği, ESC'nin video ortasında çalışması, kademe 3
+    yönergesi.
+
 - **Alınan kararlar:**
+  - **`trials.actual_soa_ms` = katılımcının yaşadığı SOA** (kullanıcı kararı,
+    2026-07-26): yazılımda ölçülen fark **artı** uygulanan
+    `system_av_offset_ms`. Nominal ile doğrudan karşılaştırılabilir olması
+    seçildi; ham yazılım farkı `actual_soa_ms − sessions.system_av_offset_ms`
+    ile geri hesaplanıyor. Alternatif (ham farkı saklamak) analizde D'nin elle
+    eklenmesini gerektirirdi ve unutulduğunda sistematik bir kayma olarak
+    görünürdü.
+  - **Fark iki akışın akustik patlama anları arasında ölçülüyor**, dosya
+    başlangıçları arasında değil. Hazırlanmış dosyalardaki kalıntı hizalama
+    hatası (< 1 ms, Adım 2) böylece varsayılmak yerine kayda giriyor.
+  - **Çalışma anında gürültü karıştırma yok** (plan onayında kullanıcıyla
+    doğrulandı). `steps.md` §C Adım 3 SNR karıştırmayı `engine/audio.py`'ye
+    koyuyor, ama o madde Adım 2'den önce yazılmış: gürültülü dosyalar artık
+    offline üretiliyor ve §A.12 çalışma anında ağır DSP'yi zaten yasaklıyor.
+    `mix_at_snr` `stimuli/dsp.py`'de kaldı, yalnızca hazırlıkta kullanılıyor.
+    Motorun ses tarafındaki işi dosyaya gömülemeyecek olanlar: **lateralizasyon**
+    (kulak bir tasarım değişkeni, tek mono dosya iki kulağa hizmet ediyor) ve
+    **kalibrasyon trim'i** (makineye ve kulaklığa ait, uyarana değil).
+  - **Pay (lead) denemeye göre hesaplanıyor.** Config'in `lead_frames: 6`
+    değeri 60 Hz'de 100 ms eder ve TBW'nin −300 ms'ine yetmez; taban değer
+    olarak kullanılıyor, gereken pay her denemede `|SOA − D|` üzerinden
+    yeniden hesaplanıyor (−300 ms için 60 Hz'de ~19 kare). Üst sınır 1 saniye
+    (`max_lead_s`): aşılırsa deneme **hata veriyor**. Sessizce bir saniye
+    bekleyen bir deneme "başarısız olmuş" görünmez, tam da bu yüzden
+    başarısız olması sağlandı.
+  - **Lateralizasyonda karşı kanal tam sıfır**, kısılmış değil. Manipülasyonun
+    anlamı, ses kartının o tarafa hiçbir şey göndermemesi; oraya ulaşan şey
+    kafatası yoluyla ulaşmış demektir ve Adım 8'in çapraz dinleme kontrolü
+    tam olarak onu ölçecek.
+  - **Kalibrasyon trim'i kırpma yaparsa hata**, limiter yok. Çalışmadaki her
+    seviye kalibrasyon sayılarından türüyor; limiter yanlış bir trim'i sessizce
+    bozulmuş ama geçerli görünen bir uyarana çevirirdi.
+  - **Aygıtın akış hızı `audio.sample_rate` ile karşılaştırılıyor**, tutmazsa
+    program duruyor. PsychoPy aksi hâlde her uyaranı yükleme anında yeniden
+    örnekler ve setin 48 kHz'de hazırlanmış olması anlamını yitirirdi.
+  - **Kademe 2 penceresiz koşuyor.** Ölçtüğü şey ses yolunun jitter'ı; pencere
+    açmak ekranın zamanlamasını ses kartı hakkındaki bir sayıya karıştırırdı.
+  - **Kademe 3 gerçeklenmedi**, `docs/01_av_gecikme_olcumu.md`'ye yönlendiriyor
+    (`steps.md`: "yeniden yazma"). Çıktısına projeye özel bir not eklendi:
+    doğrulama süpürmesine konuşmacı 2'nin bir uyumsuz denemesi de konmalı
+    (Adım 2'nin 248 ms bulgusu, hizalamanın dayandığı varsayımı doğrudan sınar).
+
+- **PsychoPy 2026.1 API'siyle ilgili üç bulgu (Adım 0'daki `sound.audioLib`
+  olayının devamı):**
+  - **`prefs.hardware['audioLatencyMode']` tercih şemasından kaldırılmış.**
+    Gecikme sınıfı artık `SpeakerDevice(latencyClass=...)` argümanı ve
+    **varsayılanı 1** — yani "aygıtı sistemle paylaş". Eski anahtarı yazmak
+    hata vermiyor, configobj kabul edip sessizce yok sayıyor; config'teki
+    `timing.audio_latency_mode: 3` hiç uygulanmamış olacaktı. Artık
+    `audio.open_speaker()` içinde uygulanıyor.
+  - **`SoundPTB.statusDetailed['StartTime']` bir ölçüm değil.** Bu makinede
+    (WASAPI, gecikme sınıfı 3) istenen zamanın **birebir aynısı** dönüyor;
+    aygıt çıkış damgası vermediği için (`PredictedLatency` ve `LatencyBias`
+    ikisi de 0) PTB'nin bildirecek başka bir şeyi yok. İlk yazdığım alan adı
+    `audio_onset_measured` idi ve planlanan zamanı "ölçüldü" diye kaydederdi;
+    `audio_onset_reported` olarak değiştirildi ve ne olduğu docstring'e
+    yazıldı. Onset'i doğrulayan tek şey fiziksel ölçüm: kademe 2 (jitter) ve
+    fotodiyot (mutlak gecikme). Aynı status sözlüğündeki **`TimeFailed` ve
+    `XRuns` ise gerçek** — sıfır değilse ses istendiği anda çıkmamıştır — ve
+    her denemede okunup loglanıyor.
+  - **`MovieStim.frameIndex` her zaman 0 dönüyor** (gövdesi `return 0`);
+    hangi karenin gösterildiğini öğrenmek için `pts` kullanılıyor.
+    **`movie.stop()` dosyayı diskten yeniden yüklüyor**, bu yüzden denemeler
+    arasında hiç çağrılmıyor (`pause()` / `unload()`).
+
+- **Manuel test turunda çıkan bulgu — ses duyulmuyordu:**
+  Sorun kodda değildi: `audio.device: null` olduğu için PTB **listedeki ilk
+  aygıtı** seçiyordu, o da hiçbir şeyin bağlı olmadığı SPDIF dijital çıkışıydı.
+  Sessizlik burada şanslı sonuç; şanssız olanı oturumun fark edilmeden monitör
+  hoparlöründen toplanmasıydı. Araca `--devices` (aygıtları listeler, config'in
+  hangisini seçtiğini işaretler) ve `--device` (config'e dokunmadan tek koşuluk
+  ezer; değer şemadan geçtiği için hatalı ad orada patlar) eklendi. Kademe 1
+  ayrıca `audio.device` boşken uyarı basıyor. Gerçek veri toplamada bu hata
+  oluşamaz — `data_collection` config kapısı `audio.device`'ı zaten zorunlu
+  kılıyor (Adım 1).
+
 - **Bilinen sınırlar:**
+  - **Kademe 2 (loopback) koşulmadı** — ses arayüzü ve kablo yok. Kod yazıldı,
+    analiz sentetik kayıtlarla test edildi (bilinen 3 ms jitter enjekte edilip
+    ±1 ms içinde geri okunuyor). Donanım geldiğinde koşulacak; `TEST_ADIM_3.md`
+    yordamı içeriyor.
+  - **Kademe 3 (fotodiyot) yapılmadı** — tasarım gereği tüm kod bittikten
+    sonra. `timing.system_av_offset_ms` hâlâ `null`, motor 0 kabul ediyor ve
+    oturum başına bir kez uyarı loglanıyor.
+  - **Test kulaklığı Bluetooth (WH-1000XM4) ve veri toplama için uygun değil**
+    — aşağıdaki bekleyen aksiyona işlendi.
+  - **İlk denemenin flip'i birkaç ms kayabiliyor** (ölçülen: +5.13 ms, kare
+    13.3 ms). İlk video çözümlemesinin ısınma maliyeti; sonraki denemelerde
+    1–2 ms'e iniyor. Kayda giriyor (`flip_error_ms`, ve dolayısıyla
+    `actual_soa_ms`). Adım 8'in alıştırma bloğu bu ısınmayı doğal olarak
+    karşılayacak.
+  - **`TimeFailed`/`XRuns` veritabanına yazılmıyor**, yalnızca loglanıyor —
+    `trials`'ta sütunları yok. §A.4'ün istediği alanlar arasında değiller;
+    Adım 9'un QC raporu isterse şema kararı orada verilir.
+  - Motor henüz hiçbir modül tarafından kullanılmıyor; `TrialSpec` üretimi
+    Adım 4'ün işi.
+
 - **Sonraki adıma not:**
+  - **Adım 4 `TrialSpec`'i manifest'ten kuracak.** Presenter açık yollar ve
+    patlama anları alıyor (`video_path`, `video_burst_s`, `audio_path`,
+    `audio_burst_s`, `ear`, `nominal_soa_ms`); gürültülü koşulda
+    `manifest.noisy(...)`'den gelen 3 varyanttan birini tohumlanmış RNG ile
+    seçmek ve hangisinin kullanıldığını `design_extra`'ya yazmak modülün işi.
+  - **RT referansı hazır:** `TimingRecord.burst_onset_s` akustik patlamanın
+    duvar saati (oturum referansına göre). `responses.rt_from_burst_ms` bundan
+    hesaplanacak; `rt_from_prompt_ms` yanıt ekranının kendi flip'inden.
+  - **Yanıt toplama motorda yok.** `check_abort()` ve `ABORT_KEY`
+    `av_presenter.py`'de; Adım 4 tuş toplamayı eklerken `event.getKeys`'in
+    `keyList` dışındaki tuşları **tamponu boşaltarak** attığına dikkat etmeli.
+  - `AVPresenter` `fixation` alıyor ve video olmayan denemelerde onu çiziyor;
+    sabitleme süresi ve deneme yapısı Adım 4'ün kararı.
+  - `TimingRecord.to_trial_timing()` doğrudan `db.set_trial_timing()`'e
+    veriliyor — modül ayrıca bir dönüşüm yazmamalı.
+  - **Adım 8'in kontrol listesi bu adımdan üç şey devralabilir:**
+    `window.measure_refresh_hz` + `check_refresh_hz(strict=True)`,
+    `audio.open_speaker` (aygıt adı ve örnekleme hızı kapısı) ve
+    `audio.require_ptb_backend`.
 
 ### Adım 4 — Modül 1: McGurk
 - **Durum:** BEKLİYOR
@@ -649,6 +800,25 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   Danışmanın karara bağlaması gereken altı madde listelendi; en kritik ikisi
   **kontrol grubunda kulak seçimi** (taslak, SSD gruplarının iyi kulak
   dağılımına oranlı dengeleme öneriyor) ve **yanıt penceresi süresi**.
+- **§F.3 — kulaklık kararı artık somut bir gerekçeye sahip (Adım 3 bulgusu).**
+  Test kulaklığı **Sony WH-1000XM4, Bluetooth** ve gerçek veri toplama için
+  uygun değil: (a) 100–300 ms gecikme ekliyor ve bu gecikme **sabit değil**,
+  oysa TBW modülünün ölçtüğü şey ±50 ms mertebesinde farklar; (b) kulaklığın
+  kendi DSP'si (gürültü engelleme, DSEE, EQ) seviyeyi ve spektrumu
+  değiştirdiği için `02_kalibrasyon.md` ölçümü kararlı olmaz; (c) SSD
+  lateralizasyonu yüksek kulaklar arası zayıflama istiyor (§F.3 insert
+  kulaklık öneriyor). Adım 3 testlerinde Bluetooth yeterli oldu — kulak
+  izolasyonu ve SOA farkı doğrulandı — ama "ses ve dudak birlikte mi" yargısı
+  kablolu kulaklıkla tekrar bakılmalı (`TEST_ADIM_3.md` Test 2, madde 7).
+- **`audio.device` config'te hâlâ `null`.** Bu makinede kullanılabilir aygıtlar:
+  `SPDIF Arabirimi (Realtek USB Audio)`, `Kulaklıklar (2- WH-1000XM4)`,
+  `ASUS VZ27V -2 (HD Audio Driver for Display Audio)`. Boş bırakılırsa PTB
+  ilkini (SPDIF, bağlı değil) seçiyor. Deneyin koşulacağı kulaklık
+  netleştiğinde config'e yazılmalı; `data_collection` modu zaten dolu olmasını
+  şart koşuyor. Listelemek için: `python tools/timing_selftest.py --devices`.
+- **Fotodiyot ölçümü (`01_av_gecikme_olcumu.md`) hâlâ bekliyor** — tasarım
+  gereği tüm kod bittikten sonra. O ana kadar `timing.system_av_offset_ms`
+  `null` ve motor 0 kabul edip uyarı basıyor.
 - **Adım 1 manuel testleri** (`TEST_ADIM_1.md`): tasarım özeti, config kapısı
   ve push sonrası GitHub Actions.
 - **Yaş aralığı kısıtı (K4).** `participants.age` için `CHECK (18–60)` kondu.
