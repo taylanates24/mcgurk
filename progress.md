@@ -403,10 +403,20 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
   0..n yanıt. Uyaran üretimi Adım 2'de, modül gerçeklemesi bu adımda.)
 - **Alınan kararlar:** Standart GIN parametreleri (Musiek ve ark., 2005)
   config varsayılanı olarak girildi; eşik ölçütü `4_of_6`.
-- **Bilinen sınırlar:** Yöntem dokümanında tanımlı değil — bkz. bekleyen
-  aksiyonlar. Kulak seçimi katılımcıya bağlı (`ear_selection: good_ear`),
-  seçim mantığı Adım 8'de.
+- **Bilinen sınırlar:** Yöntem dokümanında tanımlı değil — taslak bölüm
+  `docs/EK_GIN.docx`, danışman onayı bekliyor. Kulak seçimi katılımcıya bağlı
+  (`ear_selection: good_ear`), seçim mantığı Adım 8'de.
 - **Sonraki adıma not:**
+  - **Config'de eksik alan: yanıt penceresi.** Bir tuş basımının hangi zaman
+    aralığında isabet sayılacağı `modules.gin` altında tanımlı değil.
+    Puanlama bu adımın işi olduğu için Adım 1'de eklenmedi, ancak
+    `response_window_ms` alanı bu adımda şemaya girmeli. Değerin **veri
+    toplanmadan önce** sabitlenmesi gerekiyor; sonradan seçilmesi isabet ve
+    yanlış alarm oranlarının sonuçlara göre ayarlanabilmesi anlamına gelir.
+    `docs/EK_GIN.docx` bu maddeyi danışman kararına bırakıyor.
+  - Kontrol grubunda kulak seçimi kuralı (`ear_selection` için yeni bir
+    strateji gerekebilir: SSD gruplarının iyi kulak dağılımına oranlı
+    dengeleme) danışman kararına bağlı — bkz. `docs/EK_GIN.docx`.
 
 ### Adım 8 — Oturum akışı ve arayüz
 - **Durum:** BEKLİYOR
@@ -476,12 +486,16 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   sayısı, görevin SSD grubuna uygulanıp uygulanmayacağı, indeksin birincil mi
   kalite kontrol ölçütü mü olduğu, yönerge biçimi, kovaryat kullanımı).
   Kaynak numaraları mevcut kaynakçaya göre yeniden numaralandırılmalı.
-- **GIN görevinin yöntem dokümanına eklenmesi — hâlâ tamamen açık.**
-  `946383_YONTEM (3).docx` içinde tanımlı değil ve henüz taslak bölüm yazılmadı.
-  Dikotik için yazılan belgeyle aynı yapıda bir bölüm gerekiyor (gerekçe,
-  uyaranlar, boşluk süreleri, eşik tanımı, **kulak seçimi kuralı**, ölçülen
-  değişkenler). Kodda olup protokolde olmayan ölçüm etik kurul ve yayın
-  açısından sorun yaratır.
+- **GIN — taslak bölüm hazır, danışman onayı bekliyor.**
+  `docs/EK_GIN.docx`, yöntem dokümanına **6.6** olarak eklenmek üzere yazıldı
+  (2026-07-26). Gerekçe, görevin TBW ölçütü için bir kontrol olması üzerine
+  kuruldu: geniş bir TBW, modaliteler arası entegrasyon farkından değil düşük
+  düzeyli işitsel zamansal keskinlikten kaynaklanıyor olabilir; GIN bu ikisini
+  ayrıştırır. Bu, oddball'ın dikkat için üstlendiği role paralel — ölçüt Bölüm
+  8 modellerinde kovaryat olarak konumlandırıldı.
+  Danışmanın karara bağlaması gereken altı madde listelendi; en kritik ikisi
+  **kontrol grubunda kulak seçimi** (taslak, SSD gruplarının iyi kulak
+  dağılımına oranlı dengeleme öneriyor) ve **yanıt penceresi süresi**.
 - **Adım 1 manuel testleri** (`TEST_ADIM_1.md`): tasarım özeti, config kapısı
   ve push sonrası GitHub Actions.
 - **Yaş aralığı kısıtı (K4).** `participants.age` için `CHECK (18–60)` kondu.
