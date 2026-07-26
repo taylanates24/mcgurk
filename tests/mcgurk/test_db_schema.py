@@ -238,6 +238,7 @@ def _mcgurk_trial(db: Database) -> int:
             visual_token="ga",
             audio_token="ba",
             ear="left",
+            design_extra={"speaker_id": 1},
         )
     )
 

@@ -18,10 +18,13 @@ PACKAGE_ROOT = PROJECT_ROOT / "mcgurk"
 #: engine/, ui/ and modules/ legitimately use PsychoPy.
 PSYCHOPY_ALLOWED = {"engine", "ui", "modules"}
 
-#: Engine modules that must still *import* without PsychoPy installed.  They
-#: may use it — but only inside a function, so that the timing arithmetic, the
-#: audio preparation and the loopback analysis stay testable on a machine with
-#: no screen and no sound card, which is where CI runs.
+#: Engine and module files that must still *import* without PsychoPy installed.
+#: They may use it — but only inside a function, so that the timing arithmetic,
+#: the audio preparation, the trial design and the response categorisation stay
+#: testable on a machine with no screen and no sound card, which is where CI
+#: runs.  ``modules/response.py`` and ``modules/block.py`` are deliberately not
+#: here: drawing an option grid and running a trial loop cannot be done without
+#: PsychoPy in any case.
 ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY = (
     "mcgurk.engine.scheduling",
     "mcgurk.engine.audio",
@@ -29,6 +32,8 @@ ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY = (
     "mcgurk.engine.window",
     "mcgurk.engine.av_presenter",
     "mcgurk.engine.psychopy_prefs",
+    "mcgurk.modules.base",
+    "mcgurk.modules.mcgurk",
 )
 
 

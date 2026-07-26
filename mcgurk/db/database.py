@@ -33,7 +33,7 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
@@ -285,6 +285,21 @@ class Database:
         )
         self.conn.commit()
         return _last_row_id(cursor)
+
+    def next_block_index(self, session_id: int) -> int:
+        """The index a new block of *session_id* should take.
+
+        ``blocks`` is unique on ``(session_id, block_index)``, and a module can
+        contribute several blocks (§A.5 puts the commit at the block boundary,
+        so a long module is split).  Asking the database rather than counting in
+        the caller keeps a resumed session from colliding with its own history.
+        """
+        row = self.conn.execute(
+            "SELECT MAX(block_index) AS last FROM blocks WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        last = row["last"] if row is not None else None
+        return 0 if last is None else int(last) + 1
 
     def finish_block(
         self, block_id: int, status: str, completed_at: str | None = None

@@ -48,7 +48,12 @@ def populated_db(tmp_path: Path) -> Iterator[Database]:
     )
     for index in range(3):
         database.add_trial(
-            Trial(block_id=block_id, trial_index=index, module="mcgurk")
+            Trial(
+                block_id=block_id,
+                trial_index=index,
+                module="mcgurk",
+                design_extra={"speaker_id": 1},
+            )
         )
     database.finish_block(block_id, SESSION_COMPLETED)
     yield database

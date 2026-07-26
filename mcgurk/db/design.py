@@ -31,6 +31,24 @@ class NoExtra(_Extra):
     """Modules whose design fits entirely in the shared trial columns."""
 
 
+class McGurkExtra(_Extra):
+    """Which speaker was seen, and which noise waveform was heard.
+
+    ``speaker_id`` is recorded per trial rather than left to the config
+    snapshot: the snapshot only pins it down while
+    ``speaker_selection.strategy`` is ``fixed``, and §F.4 leaves ``balanced``
+    and ``random`` open.
+
+    ``noise_instance`` is 1-based, matching the manifest, and None in the quiet
+    condition.  Adım 2 prepares several noise waveforms per cell so that the
+    repetitions of a cell are not repetitions of one waveform; which one a
+    trial used is part of the trial.
+    """
+
+    speaker_id: int = Field(ge=1)
+    noise_instance: int | None = Field(default=None, ge=1)
+
+
 class AVSRExtra(_Extra):
     stimulus_type: Literal["syllable", "word"]
     item: str = Field(min_length=1)
@@ -74,7 +92,7 @@ class CrossHearingExtra(_Extra):
 
 _BY_MODULE: dict[str, type[_Extra]] = {
     "practice": NoExtra,
-    "mcgurk": NoExtra,
+    "mcgurk": McGurkExtra,
     "avsr": AVSRExtra,
     "tbw": NoExtra,
     "oddball": OddballExtra,

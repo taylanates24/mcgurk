@@ -245,14 +245,29 @@ def open_speaker(
         AudioError: if the device cannot be opened, runs at another rate, or
             is not stereo (lateralisation needs two channels).
     """
+    # PsychoPy 2026.1's DeviceNotConnectedError derives from **BaseException**,
+    # not Exception, so it is caught explicitly: without it a Bluetooth
+    # headset that is merely switched off produces a raw traceback instead of
+    # the operator-facing message, and no ``except Exception`` anywhere up the
+    # stack would intercept it either.
+    from psychopy.hardware.exceptions import DeviceNotConnectedError
     from psychopy.hardware.speaker import SpeakerDevice
 
     try:
         speaker = SpeakerDevice(name=device_name, latencyClass=latency_class)
-    except (ConnectionError, OSError, ValueError, KeyError) as exc:
+    except (
+        ConnectionError,
+        OSError,
+        ValueError,
+        KeyError,
+        DeviceNotConnectedError,
+    ) as exc:
         raise AudioError(
             f"Ses aygıtı açılamadı (aygıt: {device_name or 'varsayılan'}, "
-            f"gecikme sınıfı {latency_class}): {exc}"
+            f"gecikme sınıfı {latency_class}): {exc}\n"
+            "Aygıt gerçekten bağlı mı? Bluetooth kulaklık kapalıysa ya da "
+            "eşleşmemişse adı listede görünmez. Kullanılabilir aygıtlar:\n"
+            "  python tools/timing_selftest.py --devices"
         ) from exc
 
     device_rate = int(getattr(speaker, "sampleRateHz", 0) or 0)

@@ -122,7 +122,14 @@ def test_trials_are_not_committed_until_the_block_closes(
     block_id = db.add_block(
         Block(session_id=session_id, module="mcgurk", block_index=0, n_trials_planned=2)
     )
-    db.add_trial(Trial(block_id=block_id, trial_index=0, module="mcgurk"))
+    db.add_trial(
+        Trial(
+            block_id=block_id,
+            trial_index=0,
+            module="mcgurk",
+            design_extra={"speaker_id": 1},
+        )
+    )
 
     # A separate connection sees only committed data, which is exactly what
     # "no disk I/O inside a trial" means in practice.
@@ -229,10 +236,23 @@ def test_design_extra_round_trip() -> None:
 def test_module_without_extras_takes_none(db: Database, session: tuple[int, int]) -> None:
     _, session_id = session
     block_id = db.add_block(
+        Block(session_id=session_id, module="tbw", block_index=0, n_trials_planned=1)
+    )
+    trial_id = db.add_trial(Trial(block_id=block_id, trial_index=0, module="tbw"))
+    assert trial_id > 0
+
+
+def test_mcgurk_trial_must_say_which_speaker(
+    db: Database, session: tuple[int, int]
+) -> None:
+    """The config snapshot only pins the speaker down while the strategy is
+    ``fixed`` (§F.4), so the trial itself has to carry it."""
+    _, session_id = session
+    block_id = db.add_block(
         Block(session_id=session_id, module="mcgurk", block_index=0, n_trials_planned=1)
     )
-    trial_id = db.add_trial(Trial(block_id=block_id, trial_index=0, module="mcgurk"))
-    assert trial_id > 0
+    with pytest.raises(DesignExtraError, match="speaker_id"):
+        db.add_trial(Trial(block_id=block_id, trial_index=0, module="mcgurk"))
 
 
 # --------------------------------------------------------------- flat view
@@ -289,7 +309,14 @@ def test_trial_without_response_still_appears(
     block_id = db.add_block(
         Block(session_id=session_id, module="mcgurk", block_index=0, n_trials_planned=1)
     )
-    db.add_trial(Trial(block_id=block_id, trial_index=0, module="mcgurk"))
+    db.add_trial(
+        Trial(
+            block_id=block_id,
+            trial_index=0,
+            module="mcgurk",
+            design_extra={"speaker_id": 1},
+        )
+    )
     db.finish_block(block_id, SESSION_COMPLETED)
 
     rows = db.flat_rows()

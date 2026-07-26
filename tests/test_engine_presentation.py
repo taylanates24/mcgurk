@@ -20,7 +20,6 @@ import pytest
 from mcgurk.config.loader import load_config, resolve_path
 from mcgurk.config.schema import DisplayConfig
 from mcgurk.engine import EngineError
-from mcgurk.engine.audio import AudioError, open_speaker, require_ptb_backend
 from mcgurk.engine.av_presenter import AVPresenter, TrialSpec
 from mcgurk.engine.psychopy_prefs import configure_psychopy
 from mcgurk.engine.scheduling import TimingParams
@@ -47,17 +46,9 @@ def manifest(config: Any) -> Any:
 
 
 @pytest.fixture(scope="module")
-def speaker(config: Any) -> Any:
-    configure_psychopy(audio_device=config.audio.device)
-    require_ptb_backend()
-    try:
-        return open_speaker(
-            device_name=config.audio.device,
-            latency_class=config.timing.audio_latency_mode,
-            sample_rate=config.audio.sample_rate,
-        )
-    except AudioError as exc:
-        pytest.skip(f"Ses aygıtı bu makinede uygun değil: {exc}")
+def speaker(hardware_speaker: Any) -> Any:
+    """The session's shared device — see ``tests/conftest.py``."""
+    return hardware_speaker
 
 
 @pytest.fixture(scope="module")
@@ -138,6 +129,30 @@ def test_backend_is_ptb(speaker: Any) -> None:
     from psychopy import sound
 
     assert sound.Sound.backend == "ptb"
+
+
+def test_a_device_that_is_not_there_is_an_operator_facing_error(config: Any) -> None:
+    """A named device that is absent — a Bluetooth headset switched off, say —
+    must produce the engine's own message, not a PsychoPy traceback.
+
+    PsychoPy 2026.1 raises ``DeviceNotConnectedError``, which derives from
+    ``BaseException``: before it was caught by name, it escaped ``open_speaker``
+    *and* every ``except Exception`` above it.
+
+    Deliberately independent of the ``speaker`` fixture: this test is about the
+    device *not* being there, so requiring a working one would make it skip on
+    exactly the machine state it describes.
+    """
+    from mcgurk.engine.audio import AudioError, open_speaker
+
+    configure_psychopy(audio_device=config.audio.device)
+
+    with pytest.raises(AudioError, match="Ses aygıtı açılamadı"):
+        open_speaker(
+            device_name="Boyle Bir Ses Aygiti Yok",
+            latency_class=config.timing.audio_latency_mode,
+            sample_rate=config.audio.sample_rate,
+        )
 
 
 def test_av_trial_records_both_onsets(

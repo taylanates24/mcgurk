@@ -165,6 +165,19 @@ class AVPair(StrictModel):
     reps: int = Field(gt=0)
 
 
+class PromptTexts(StrictModel):
+    """Everything a response screen says to the participant (§A.9).
+
+    Turkish, and in the config rather than in the module: a wording change in
+    the response prompt is a protocol change, and it has to be visible in
+    ``sessions.config_snapshot`` for the sessions it applied to.
+    """
+
+    question: str = Field(min_length=1)
+    other: str = Field(min_length=1)
+    timeout: str = Field(min_length=1)
+
+
 class McGurkConfig(ModuleBase):
     speaker_id: int = Field(ge=1)
     av_pairs: list[AVPair] = Field(min_length=1)
@@ -172,7 +185,16 @@ class McGurkConfig(ModuleBase):
     noise_conditions: list[float | None] = Field(min_length=1)
     ears: list[Ear] = Field(min_length=1)
     response_set: list[str] = Field(min_length=2)
+    #: Key that selects each entry of ``response_set``, in the same order.
+    response_keys: list[str] = Field(min_length=2)
+    #: The option that opens a free-text field.  Null means the module offers
+    #: no escape hatch; naming it here keeps the Turkish label out of the code.
+    free_text_response: str | None = None
     response_timeout_s: float = Field(gt=0)
+    fixation_duration_ms: float = Field(gt=0)
+    #: Blank screen after a response, before the next trial's fixation.
+    post_response_ms: float = Field(ge=0)
+    prompts: PromptTexts
     randomization: Literal["block_shuffle", "full_shuffle"]
     #: "visual|audio" -> accepted responses.  Kept out of the code (§A.9) so
     #: the categorisation can be revised without touching the module.
@@ -207,6 +229,44 @@ class McGurkConfig(ModuleBase):
                         f"modules.mcgurk.{name}['{key}'] response_set'te "
                         f"olmayan yanıt içeriyor: {unknown}"
                     )
+                # Categorisation is ordered: the audio token is scored as
+                # AUDITORY and the visual token as VISUAL before either map is
+                # consulted, so a map that lists one of them contains a rule
+                # that can never fire — and whoever wrote it expected it to.
+                visual, audio = key.split("|", 1)
+                shadowed = [
+                    v
+                    for v in values
+                    if v.casefold() in (visual.casefold(), audio.casefold())
+                ]
+                if shadowed:
+                    raise ValueError(
+                        f"modules.mcgurk.{name}['{key}'] çiftin kendi "
+                        f"token'ını içeriyor: {shadowed}. Bu yanıt zaten "
+                        "AUDITORY/VISUAL olarak sınıflanır, kural hiç çalışmaz"
+                    )
+        return self
+
+    @model_validator(mode="after")
+    def _keys_match_the_response_set(self) -> McGurkConfig:
+        if len(self.response_keys) != len(self.response_set):
+            raise ValueError(
+                "modules.mcgurk.response_keys ile response_set aynı uzunlukta "
+                f"olmalı ({len(self.response_keys)} tuş, "
+                f"{len(self.response_set)} yanıt) — eşleme sıraya dayanıyor"
+            )
+        if len(set(self.response_keys)) != len(self.response_keys):
+            raise ValueError("modules.mcgurk.response_keys tekrarlı tuş içeriyor")
+        if len({r.casefold() for r in self.response_set}) != len(self.response_set):
+            raise ValueError("modules.mcgurk.response_set tekrarlı yanıt içeriyor")
+        if self.free_text_response is not None and self.free_text_response.casefold() not in {
+            r.casefold() for r in self.response_set
+        }:
+            raise ValueError(
+                f"modules.mcgurk.free_text_response '{self.free_text_response}' "
+                "response_set içinde yok — seçilemeyen bir seçenek serbest metin "
+                "alanını hiç açmaz"
+            )
         return self
 
     @model_validator(mode="after")

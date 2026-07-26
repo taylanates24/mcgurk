@@ -66,13 +66,25 @@ def test_data_collection_requires_an_explicit_audio_device(
 
 def test_all_problems_are_reported_at_once(write_config, config_dict) -> None:
     # The operator should not have to fix one gate, rerun, and find the next.
+    #
+    # Every gated field is emptied explicitly rather than left as the shipped
+    # config happens to have it: the point of the shipped file is that these get
+    # filled in — audio.device once the headphones are decided,
+    # system_av_offset_ms after the photodiode measurement — and a test that
+    # depends on them being empty fails the day the project makes progress.
     config_dict["experiment"]["mode"] = "data_collection"
+    config_dict["timing"]["system_av_offset_ms"] = None
+    config_dict["timing"]["measured_on"] = None
+    config_dict["audio"]["calibration_file"] = None
+    config_dict["audio"]["device"] = None
+    config_dict["display"]["fullscreen"] = False
     with pytest.raises(ConfigError) as exc:
         load_config(write_config(config_dict), check_filesystem=False)
     message = str(exc.value)
     assert "system_av_offset_ms" in message
     assert "calibration_file" in message
     assert "audio.device" in message
+    assert "fullscreen" in message
 
 
 def test_missing_calibration_file_on_disk_is_caught(

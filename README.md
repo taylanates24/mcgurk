@@ -19,7 +19,7 @@ klinik çalışma. Katılımcılar: 20 sağ SSD + 20 sol SSD + 20 kontrol.
 | | `src/` (Adım 0) | `mcgurk/` (Adım 1→) |
 |---|---|---|
 | Durum | Çalışan baseline deney | Yeni platform, inşa hâlinde |
-| Giriş | `python main.py` | Henüz yok (Adım 8); `tools/timing_selftest.py` çalışır |
+| Giriş | `python main.py` | Henüz yok (Adım 8); `tools/run_module.py` ve `tools/timing_selftest.py` çalışır |
 | Config | `config.yaml` | `config/experiment.yaml` |
 | Veritabanı | `data/mcgurk.db` | `data/mcgurk.sqlite` |
 | PsychoPy | Zorunlu | `config/` ve `db/` katmanlarında **yasak** |
@@ -446,6 +446,28 @@ python tools/timing_selftest.py --level 3
 Kademe 3 bu araçta gerçeklenmez; `docs/01_av_gecikme_olcumu.md` scriptleriyle,
 **tüm kod bittikten sonra** bir kez yapılır.
 
+### Bir modülü tek başına koşmak (Adım 4→)
+
+Oturum akışı Adım 8'de geliyor; o zamana kadar bir modül `tools/run_module.py`
+ile koşuluyor. Önce tasarımı donanım açmadan denetleyin — deneme sayısını
+config'in hesabıyla karşılaştırır, hücre tablosunu basar ve her uyaran
+dosyasının yerinde olduğunu doğrular:
+
+```bash
+python tools/run_module.py --module mcgurk --dry-run
+```
+
+Sonra gerçek koşu. `--limit` kısa bir kontrol için, `--seed` sırayı tekrar
+üretmek için:
+
+```bash
+python tools/run_module.py --module mcgurk --limit 8
+```
+
+Bu bir **geliştirme aracıdır**: yönerge, alıştırma bloğu, mola ve katılımcı
+girişi yok, veritabanına `DEV01` kodlu bir geliştirme katılımcısı yazıyor.
+Gerçek oturum akışı Adım 8'in işi.
+
 Kod, değişken adları ve docstring'ler İngilizce; katılımcıya ve operatöre
 gösterilen metinler Türkçedir.
 
@@ -494,19 +516,26 @@ gürültüsü biriktirmesini engeller. Manifest her dosyanın kaynak codec'ini v
 - Ses kalibrasyonu yapılmadı (`docs/02_kalibrasyon.md`); mutlak SPL bilinmiyor.
 - Fixation süresi `core.wait()` ile veriliyor, flip ızgarasına oturmuyor.
 
-**Tasarım ve arayüz (Adım 4–8):**
+**Tasarım ve arayüz — `src/` yolunda geçerli; ilk üçü yeni pakette çözüldü
+(Adım 4):**
 - Yanıt seti `BA/DA/GA` ile sınırlı; kombinasyon algısı ("bga") ifade
-  edilemiyor ve "DİĞER" seçeneği yok.
-- Füzyon/kombinasyon kategorizasyonu yok.
-- Katılımcıya gösterilen metinler hâlâ koda gömülü (config'e taşınacak).
+  edilemiyor ve "DİĞER" seçeneği yok. *(Yeni paket: dokuz seçenek, `BGA`/`BDA`
+  ve serbest metin dahil, hepsi config'ten.)*
+- Füzyon/kombinasyon kategorizasyonu yok. *(Yeni paket:
+  `AUDITORY`/`VISUAL`/`FUSION`/`COMBINATION`/`OTHER`/`NONE`, haritalar
+  config'ten — §A.9.)*
+- Katılımcıya gösterilen metinler hâlâ koda gömülü. *(Yeni paket: McGurk
+  modülünün tüm metinleri `modules.mcgurk.prompts` altında; diğer modüller
+  Adım 5–7c'de aynı yapıyı alacak.)*
 - Deprivasyon süresi ve PTA değerleri toplanmıyor.
 - Alıştırma bloğu, molalar, oturum öncesi kontrol listesi ve çapraz dinleme
   kontrolü yok.
 - Kesilen oturuma kaldığı yerden devam etme yok.
 
-**Adım 1–2'de gelmeyenler:**
-- `mcgurk/` paketinin `engine/`, `modules/`, `ui/`, `analysis/` alt paketleri
-  boş — sırasıyla Adım 3, 4–7, 8 ve 9.
+**Yeni pakette henüz gelmeyenler:**
+- `mcgurk/modules/` yalnızca McGurk'ü içeriyor (Adım 4); AVSR, TBW, oddball,
+  dikotik ve GIN sırasıyla Adım 5–7c'de. `ui/` ve `analysis/` hâlâ boş
+  (Adım 8 ve 9).
 - Oddball tonları henüz üretilmiyor: `steps.md` onları Adım 7'ye koyuyor. Orada
   da çevrimdışı üretilecek (§A.12).
 - Yeni config ve veritabanı henüz hiçbir deneyi çalıştırmıyor; `main.py` Adım

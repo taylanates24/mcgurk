@@ -67,7 +67,7 @@ audio:
   calibration_file: null
   # Exact output device name.  Null lets the operator choose, which is fine in
   # development and refused in data_collection.
-  device: null
+  device: "Kulaklıklar (2- WH-1000XM4)"
 
 session:
   module_order: [practice, mcgurk, avsr, tbw, oddball, dichotic, gin]
@@ -97,7 +97,19 @@ modules:
     # BGA/BDA are here because a combination percept has to be expressible;
     # the Adım 0 set (BA/DA/GA only) forced it into "wrong answer".
     response_set: [BA, DA, GA, TA, PA, KA, BGA, BDA, DIGER]
+    # Same order as response_set — the schema checks the 1:1 correspondence, so
+    # adding a response without a key fails at load rather than at run time.
+    response_keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+    free_text_response: DIGER
     response_timeout_s: 5.0
+    # Trial structure.  The fixation also absorbs the presenter's per-trial
+    # lead, so it is the interval the participant sees, not an extra wait.
+    fixation_duration_ms: 1000
+    post_response_ms: 300
+    prompts:
+      question: "Ne duydunuz?"
+      other: "Duyduğunuz sesi yazıp Enter'a basın:"
+      timeout: "Yanıt alınamadı"
     randomization: block_shuffle
     # Categorisation maps stay out of the code (§A.9).  Keys must name a pair
     # that actually exists in av_pairs and values must be in response_set —

@@ -78,7 +78,11 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── av_presenter.py          # TrialSpec -> presentation -> TimingRecord
 │   ├── loopback.py              # level-2 jitter analysis (pure numpy)
 │   └── psychopy_prefs.py        # must run before psychopy.sound is imported
-├── modules/                     # Adım 4–7c (empty)
+├── modules/                     # Adım 4 (mcgurk); 5–7c to come
+│   ├── base.py                  # seeding, ordering, PlannedTrial — no PsychoPy
+│   ├── mcgurk.py                # design + categorisation — no PsychoPy
+│   ├── response.py              # option grid, keyboard, two RTs, free text
+│   └── block.py                 # trial loop + DB writes, block boundaries
 ├── analysis/                    # Adım 9 (empty)
 ├── ui/                          # Adım 8 (empty)
 ├── logging_setup.py
@@ -89,6 +93,7 @@ tools/verify_backup.py           # an untested backup is not a backup
 tools/prepare_stimuli.py         # assets/ -> stimuli/
 tools/verify_stimuli.py          # audit stimuli/ against manifest + design
 tools/timing_selftest.py         # --level 1|2|3, --demo
+tools/run_module.py              # run one module; --dry-run, --limit (dev harness)
 .github/workflows/ci.yml         # ruff + mypy, pytest -m "not psychopy"
 ```
 
@@ -155,6 +160,43 @@ to get wrong:
   from disk, so it must never be called between trials; `pause()`/`unload()`.
 - The device's stream rate is checked against `audio.sample_rate`: PsychoPy
   resamples at load time otherwise, undoing the 48 kHz the set was prepared at.
+
+### Assessment modules (`mcgurk/modules/`, from Adım 4)
+
+The split follows the engine's: `base.py` and `mcgurk.py` are PsychoPy-free, so
+the design and the categorisation are tested in CI. Things that are easy to get
+wrong:
+
+- **The RNG seed is derived per module**, not shared. One stream would make
+  McGurk's trial order depend on where it sits in `session.module_order`.
+  `sessions.seed` still determines every order in the session.
+- **`randomization: block_shuffle` means rounds, evenly spread.** A cell with
+  fewer reps than the maximum is placed in rounds `floor(k·R/r)`, not in the
+  first `r` rounds — otherwise every congruent control lands in the first half
+  of the module.
+- **`reps` is per cell**, so `reps: 10` on a pair with 2 noise × 2 ear
+  conditions is 40 presentations. `config.trial_counts()` is the authority and
+  a test asserts the generator matches it.
+- **Noise instances are balanced within a cell** (3 over 10 reps → 4/3/3) and
+  the one used is written to `trials.design_extra.noise_instance`. The noisy
+  file is the clean token plus noise of the same length, so its burst time is
+  the clean token's — the manifest records it only once.
+- **`trials.design_extra.speaker_id` is per trial.** The config snapshot only
+  pins the speaker down while `speaker_selection.strategy` is `fixed`;
+  `plan_trials(..., speaker_id=...)` lets Adım 8 choose per participant.
+- **Both RTs come from one measurement.** `rt_from_prompt_ms` is the keyboard's
+  own clock, reset at the prompt flip; `rt_from_burst_ms` adds the known
+  prompt−burst interval. Nothing is computed from `KeyPress.tDown`, but the
+  disagreement between the two clocks is checked and logged.
+- **Keys pressed before the prompt are discarded** (and counted in the log): a
+  press during the video would otherwise be recorded with a near-zero RT.
+- **A timeout writes no `responses` row.** `NONE` is derived from the row's
+  absence; `categorise(None)` returns it too so QC and analysis agree.
+- **A block is at most `session.break_every_n_trials` trials** — §A.5 puts the
+  commit there, and one 140-trial block would risk the whole module.
+- Categorisation order is fixed (auditory > visual > fusion > combination) and
+  the config validation depends on it: a map listing the pair's own token is a
+  rule that can never fire, so it is rejected at load.
 
 ### Legacy Structure (src/, Adım 0)
 ```
@@ -244,7 +286,13 @@ Validated by `mcgurk/config/schema.py`; **unknown fields are an error**.
   anything else.
 - Categorisation maps (`fusion_map`, `combination_map`) live here, not in code
   (§A.9). Their keys must name a real `av_pairs` entry and their values must be
-  in `response_set`; both are checked at load.
+  in `response_set`; both are checked at load, as is the rule that a map may not
+  list the pair's own visual or audio token (it could never fire).
+- Response collection is config-driven too (Adım 4): `response_keys` maps 1:1
+  onto `response_set` by position, `free_text_response` names the option that
+  opens a text field, and `prompts.{question,other,timeout}` carries every
+  string the participant reads. `fixation_duration_ms` and `post_response_ms`
+  are the trial structure.
 - `stimulus_prep.*`: everything `tools/prepare_stimuli.py` needs — the seed,
   the `speaker_id` → source-folder map, the token list, and the video/audio/
   burst/noise/GIN parameters. The SNRs to prepare are **derived** from the
@@ -252,7 +300,7 @@ Validated by `mcgurk/config/schema.py`; **unknown fields are an error**.
   checks: every `modules.*.speaker_id` names a declared speaker, and every
   token the design uses is in `stimulus_prep.tokens`.
 
-## Data Model (new package — data/mcgurk.sqlite)
+## Data Model (new package — data/mcgurk.sqlite, schema version 2)
 Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - `participants` — anonymous code, group (`SSD_R`/`SSD_L`/`CTRL`), age, sex,
   deprivation_months, PTA left/right, postlingual
@@ -261,9 +309,13 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
   OS, audio backend, measured refresh, `system_av_offset_ms`, status
 - `blocks` — module, index, planned trial count, status
 - `trials` — shared design columns + realised timing; module-specific fields in
-  `design_extra` (JSON), validated by `mcgurk/db/design.py`
+  `design_extra` (JSON), validated by `mcgurk/db/design.py`. `mcgurk` trials
+  carry `speaker_id` (required) and `noise_instance`; `v_trials_flat` exposes
+  both as columns.
 - `responses` — **0..n per trial**: none on timeout, several for a GIN segment
 - A trigger refuses `is_correct` on `mcgurk`/`dichotic` trials (§A.10)
+- A module may write several blocks; use `db.next_block_index(session_id)`
+  rather than counting in the caller.
 
 ## Legacy Data Model (src/, data/mcgurk.db)
 ### Participants Table
@@ -302,6 +354,8 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Monitor setup (ilk kurulumda bir kez): `python scripts/setup_monitor.py`
 - Validate config + design cost: `python -m mcgurk.config`
 - Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
+- Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk --dry-run`
+- Run a module: `python tools/run_module.py --module mcgurk [--limit N] [--seed N]`
 - Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
 - Verify stimuli: `python tools/verify_stimuli.py [--quick]`
 - Verify a backup: `python tools/verify_backup.py <yedek> --compare-with data/mcgurk.sqlite`
@@ -345,3 +399,6 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't back up SQLite by copying the file — use `VACUUM INTO`; a WAL-mode copy is silently inconsistent
 - Don't commit inside a trial (§A.5) — `add_trial`/`add_response` defer, `finish_block` commits
 - Don't add a module to `modules.*` without also adding it to `blocks.module`'s CHECK list and `design.py`
+- Don't import PsychoPy at module level in `modules/base.py` or `modules/mcgurk.py` — the design and the categorisation are CI-tested, and a test enforces it
+- Don't give the participant correctness feedback in any module — the McGurk effect must not be taught mid-session (demand characteristics)
+- Don't derive a category from `free_text`; the participant declined the options that were on screen

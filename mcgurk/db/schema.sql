@@ -1,4 +1,11 @@
--- McGurk / SSD platform database schema (version 1).
+-- McGurk / SSD platform database schema (version 2).
+--
+-- Version history:
+--   1 (Adım 1) — six tables + v_trials_flat + the §A.10 trigger.
+--   2 (Adım 4) — v_trials_flat exposes speaker_id and noise_instance from
+--     trials.design_extra.  No table changed; the version is bumped because a
+--     CREATE VIEW IF NOT EXISTS leaves an existing file on the old definition,
+--     and analysis reading v_trials_flat would silently miss the columns.
 --
 -- Design notes:
 --   * Six tables plus a flat VIEW for analysis (steps.md Adım 1).
@@ -214,6 +221,8 @@ SELECT
     t.dropped_frames,
     t.max_frame_interval_ms,
 
+    json_extract(t.design_extra, '$.speaker_id')       AS speaker_id,
+    json_extract(t.design_extra, '$.noise_instance')   AS noise_instance,
     json_extract(t.design_extra, '$.left_token')       AS dichotic_left_token,
     json_extract(t.design_extra, '$.right_token')      AS dichotic_right_token,
     json_extract(t.design_extra, '$.gap_onsets_s')     AS gin_gap_onsets_s,
