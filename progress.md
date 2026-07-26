@@ -133,15 +133,20 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
   - `assets/dichotic/` dosyaları 64×64 piksel **1 fps** sahte videolar. Kare
     döngüsü bunların bitmesini bekliyor; Adım 3'te dikotik yol videosuz
     kurgulanmalı.
-  - **Conda ortam çakışması (2026-07-26'da kullanıcıyı engelledi).** Gerçek
-    çalışma ortamı `C:\Users\tayla\miniconda3\envs\mcgurk` (Python 3.10.20,
-    tüm paketler pinlenmiş sürümlerde kurulu). `anaconda3\envs\mcgurk` boş bir
-    kabuk (4 paket) ve **`conda activate mcgurk` onu açıyor** — conda isim
-    çözümlemesinde `anaconda3\envs` önceliyor, dolu ortam isimsiz listeleniyor.
-    Base ortam Python 3.13.9 olduğu için orada `pip install -r requirements.txt`
-    `No matching distribution found for psychopy==2026.1.2` veriyor
-    (psychopy 2026.1.2 → `>=3.9,<3.12`). Çözüm: ortamı tam yoluyla aktive et.
-    README, CLAUDE.md ve TEST_ADIM_0.md bu tuzağa karşı güncellendi.
+  - **Conda ortamı (2026-07-26'da kullanıcıyı engelledi).** Çalışma ortamı
+    `C:\Users\tayla\miniconda3\envs\mcgurk` (Python 3.10.20, tüm paketler
+    pinlenmiş sürümlerde kurulu). Bu dizin conda'nın `envs_dirs` listesinde
+    değil (liste `anaconda3\envs`, `.conda\envs`, `AppData\Local\conda\conda\envs`),
+    bu yüzden ortam `conda env list` çıktısında **isimsiz** görünür ve
+    `conda activate mcgurk` onu bulamaz. Başlangıçta `anaconda3\envs\mcgurk`
+    altında boş bir kabuk ortam da vardı ve ismi o kapıyordu; kullanıcı onu
+    sildi (2026-07-26), ancak isim çözümlemesi hâlâ arama yoluna bağlı.
+    Kalıcı çözüm: `conda config --append envs_dirs C:\Users\tayla\miniconda3\envs`.
+    Tam yolla aktivasyon her koşulda çalışır.
+    Aktivasyon tutmazsa pip base ortamda (Python 3.13.9) çalışır ve
+    `No matching distribution found for psychopy==2026.1.2` verir
+    (psychopy 2026.1.2 → `>=3.9,<3.12`).
+    README, CLAUDE.md ve TEST_ADIM_0.md bu duruma göre güncellendi.
   - Sistemde `ffmpeg`/`ffprobe` PATH'te yok; kod `imageio-ffmpeg` ikilisine
     düşüyor. `ffprobe` o pakette **yok** → Adım 2'nin uyaran doğrulama
     araçları kurulu ffmpeg gerektirecek.

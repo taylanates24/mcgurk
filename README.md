@@ -65,11 +65,16 @@ Geliştirme ve test araçları için ek olarak:
 pip install -r requirements-dev.txt
 ```
 
-> **Aynı isimde birden fazla conda ortamınız varsa dikkat.** Hem Anaconda hem
-> Miniconda kuruluysa ikisinde de `mcgurk` adlı ortam olabilir; `conda activate
-> mcgurk` bunlardan yalnızca birini açar ve diğeri isimsiz görünür
-> (`conda env list` ile kontrol edin). Belirsizliği bitirmek için ortamı tam
-> yoluyla aktive edin:
+> **Hem Anaconda hem Miniconda kuruluysa dikkat.** `conda activate <isim>`
+> yalnızca `envs_dirs` listesindeki dizinlerde arar (`conda config --show
+> envs_dirs`). Diğer kurulumun ortamları `conda env list` çıktısında **isimsiz**
+> görünür ve isimle aktive edilemez. Ortamı arama yoluna ekleyin:
+>
+> ```bash
+> conda config --append envs_dirs C:\Users\tayla\miniconda3\envs
+> ```
+>
+> Alternatif olarak tam yolla aktivasyon her koşulda çalışır:
 >
 > ```bash
 > conda activate C:\Users\tayla\miniconda3\envs\mcgurk

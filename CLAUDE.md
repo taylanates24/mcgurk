@@ -138,10 +138,11 @@ Key configurable values:
 
 ## Development Environment
 - Primary OS: Linux (WSL2), must also work on Windows
-- **Python 3.10 via Miniconda — activate by full path:**
-  `conda activate C:\Users\tayla\miniconda3\envs\mcgurk`
-  This machine has a second, *empty* `mcgurk` env under `anaconda3\envs\`, and
-  bare `conda activate mcgurk` resolves to that one. Base is Python 3.13, where
+- **Python 3.10 via Miniconda:** `C:\Users\tayla\miniconda3\envs\mcgurk`.
+  That directory is not in conda's `envs_dirs` (which points at `anaconda3\envs`),
+  so the env lists without a name and `conda activate mcgurk` fails until you run
+  `conda config --append envs_dirs C:\Users\tayla\miniconda3\envs`. Activating by
+  full path always works. Base is Python 3.13, where
   `pip install -r requirements.txt` fails with
   `No matching distribution found for psychopy==2026.1.2` (psychopy needs <3.12).
 - Install: `pip install -r requirements.txt`

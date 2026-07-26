@@ -10,8 +10,21 @@ Tahmini süre: ekransız testler ~5 dakika, ekran/ses testleri ~25 dakika.
 
 ### Doğru conda ortamı
 
-Bu makinede **iki ayrı `mcgurk` ortamı** var ve `conda activate mcgurk` boş
-olanı açıyor. Ortamı tam yoluyla aktive edin:
+Ortam `C:\Users\tayla\miniconda3\envs\mcgurk` altında. Bu dizin conda'nın isim
+arama yolunda (`envs_dirs`) olmadığı için `conda env list` çıktısında isimsiz
+görünür. Tek seferlik olarak arama yoluna ekleyin:
+
+```bash
+conda config --append envs_dirs C:\Users\tayla\miniconda3\envs
+```
+
+Sonra normal şekilde aktive edebilirsiniz:
+
+```bash
+conda activate mcgurk
+```
+
+Bunu yapmak istemezseniz tam yolla aktivasyon her koşulda çalışır:
 
 ```bash
 conda activate C:\Users\tayla\miniconda3\envs\mcgurk
