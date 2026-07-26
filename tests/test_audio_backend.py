@@ -13,6 +13,8 @@ from psychopy import sound
 
 from src.experiment.stimuli import require_ptb_backend
 
+pytestmark = pytest.mark.psychopy
+
 
 @pytest.fixture(autouse=True)
 def restore_backend() -> Iterator[None]:

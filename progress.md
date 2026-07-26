@@ -1,24 +1,31 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-26
-Aktif adım: 1 (Adım 0 tamamlandı)
+Aktif adım: 1 (TESTTE — kullanıcı manuel testleri bekleniyor)
 
 ## Durum tablosu
 
 | Adım | Başlık | Durum | Tarih | Commit |
 |---|---|---|---|---|
 | 0 | Baseline düzeltme | TAMAMLANDI | 2026-07-26 | `f45eeda`…`618ef1c` |
-| 1 | Proje iskeleti | BEKLİYOR | | |
+| 1 | Proje iskeleti | TESTTE | | |
 | 2 | Uyaran hazırlama | BEKLİYOR | | |
 | 3 | A/V senkron çekirdeği | BEKLİYOR | | |
 | 4 | Modül 1: McGurk | BEKLİYOR | | |
 | 5 | Modül 2: AVSR | BEKLİYOR | | |
 | 6 | Modül 3: TBW | BEKLİYOR | | |
 | 7 | Modül 4: Oddball | BEKLİYOR | | |
+| 7b | Modül 5: Dikotik dinleme | BEKLİYOR | | |
+| 7c | Modül 6: GIN | BEKLİYOR | | |
 | 8 | Oturum akışı ve arayüz | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
 
 Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAMAMLANDI
+
+**Adım 7b ve 7c `steps.md`'de yoktur** — kullanıcı kararıyla eklendi
+(2026-07-26). Dikotik kodda zaten vardı; GIN (Gaps-In-Noise) yeni bir istek.
+İkisi de Adım 8'den önce bitmeli, çünkü Adım 8 modülleri oturuma bağlıyor.
+`steps.md` §C'ye karşılık gelen iki bölümün yazılması gerekiyor.
 
 ## Adım kayıtları
 
@@ -196,13 +203,123 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
     araçları kurulu ffmpeg gerektirecek.
 
 ### Adım 1 — Proje iskeleti
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
+- **Durum:** TESTTE
+- **Tamamlanma:** — (otomatik testler yeşil: 208 test, ruff + mypy temiz;
+  `TEST_ADIM_1.md` kullanıcıda)
 - **Commit:** —
+
 - **Ne yapıldı:**
+  - **Yeni paket `mcgurk/`**, `src/` yanına kuruldu (A0-1 kararı). Alt paketler:
+    `config/`, `db/`, `engine/`, `modules/`, `analysis/`, `ui/`. Son dördü şu an
+    boş — sırasıyla Adım 3, 4–7c, 9 ve 8'de doldurulacak.
+  - **Config katmanı (Pydantic v2, `extra="forbid"`).** `config/experiment.yaml`
+    §G şemasını uygular; `mcgurk/config/schema.py` doğrular. Mod bazlı kapı:
+    `data_collection` için `system_av_offset_ms`, `calibration_file`,
+    `fullscreen: true` ve `audio.device` zorunlu; eksikler **tek seferde**
+    bildiriliyor. Dosya varlığı kontrolü `loader.py`'de (şema diske dokunmuyor).
+  - **Config, tasarım hatalarını da yakalıyor:** `fusion_map`/`combination_map`
+    anahtarları gerçek bir `av_pairs` çiftini göstermeli ve değerleri
+    `response_set` içinde olmalı; TBW SOA listesi artan ve tekrarsız olmalı;
+    oddball'da rampa ton süresine ve hedef aralığı deneme sayısına sığmalı;
+    dikotik çiftler farklı ve tekrarsız olmalı; GIN'de boşluklar segmentlere
+    hem sayıca hem süre olarak sığmalı; etkin her modül `module_order`'da
+    olmalı. `display.video_position` [0,0] dışında bir değeri reddediyor (§A.13).
+  - **Kalibrasyon okuyucu.** `02_kalibrasyon.md`'nin `hesap` komutu Türkçe
+    anahtarlı JSON yazıyor (`K_ortalama`, `trim_sol_db`…); Pydantic `alias` ile
+    İngilizce alanlara eşlendi. Bilinmeyen anahtar reddediliyor.
+  - **Veritabanı (`data/mcgurk.sqlite`, şema sürümü 1).** Altı tablo
+    (`participants`, `calibrations`, `sessions`, `blocks`, `trials`,
+    `responses`) + `v_trials_flat` VIEW. WAL, `foreign_keys = ON`, CHECK
+    kısıtları (grup kodu, yaş 18–60, oturum/blok durumu, modül adı).
+  - **`trials.design_extra` (JSON) + modül başına Pydantic doğrulama.** Dikotik
+    iki eşzamanlı token, GIN boşluk listesi, oddball ton tipi taşıyor. Sabit
+    sütun eklemek her yeni modülde şema migrasyonu demekti; 12 aylık bir
+    çalışmada bu daha büyük risk. VIEW `json_extract` ile bilinen anahtarları
+    sütun olarak açıyor, analiz JSON görmüyor.
+  - **`responses` deneme başına 0..n satır.** Zaman aşımında hiç satır yok
+    (VIEW `LEFT JOIN` kullandığı için deneme yine görünüyor), GIN segmentinde
+    birden fazla tuş basımı olabiliyor.
+  - **§A.10 veritabanı tetikleyicisiyle zorlanıyor:** `mcgurk` ve `dichotic`
+    denemelerinde `is_correct` yazma girişimi INSERT ve UPDATE'te reddediliyor.
+  - **§A.5 commit sınırı:** `add_trial`, `set_trial_timing` ve `add_response`
+    commit etmiyor; `finish_block` ediyor. Ayrı bir bağlantıyla test edildi.
+  - **Yedekleme.** `VACUUM INTO` ile; ham dosya kopyası kullanılmıyor (WAL'da
+    tutarsız kopya üretir). `tools/verify_backup.py` yedeği açıp
+    `integrity_check`, `foreign_key_check`, şema sürümü, tablo varlığı ve satır
+    sayımlarını kontrol ediyor, canlı veritabanıyla karşılaştırabiliyor;
+    çıkış kodu 0/1.
+  - **`provenance.py`** git commit (kirli ağaçta `+dirty`), Python/OS ve paket
+    sürümlerini topluyor. PsychoPy sürümünü `importlib.metadata` ile okuyor —
+    import etmiyor.
+  - **Loglama** (`logging_setup.py`): dosyaya DEBUG, konsola INFO; tekrar
+    çağrıldığında handler çoğaltmıyor.
+  - **CI (GitHub Actions):** `ruff` + `mypy` ve `pytest -m "not psychopy"`.
+    `requirements-ci.txt` PsychoPy içermiyor.
+  - **Test:** 151 yeni test (toplam 209; CI'da 172). `pyproject.toml`'a `psychopy`
+    marker'ı, `mypy` sıkılaştırması (`mcgurk.*` ve `tools.*` için
+    `disallow_untyped_defs`), `explicit_package_bases`. `.gitignore`'a
+    `stimuli/` ve `raw_recordings/`. README ve CLAUDE.md güncellendi.
+
 - **Alınan kararlar:**
+  - **Dikotik ve GIN eklendi (kullanıcı, 2026-07-26).** Config ve DB yerleri
+    açıldı; modül gerçeklemeleri Adım 7b ve 7c'ye bırakıldı (§B.3: bir adımın
+    işi o adımda). GIN parametreleri standart GIN'den (Musiek ve ark., 2005)
+    alındı.
+  - **`mcgurk/config` ve `mcgurk/db` PsychoPy import etmiyor.** CI'da PsychoPy
+    kurulu değil ve analiz makinesinde de gerekmemeli. AST tabanlı bir test
+    (`test_package_boundaries.py`) bunu her koşuda doğruluyor; `engine/`,
+    `modules/` ve `ui/` muaf.
+  - **İki ayrı veritabanı dosyası.** Eski `data/mcgurk.db` (src/) ve yeni
+    `data/mcgurk.sqlite`. Şemalar uyumsuz, aynı dosyayı paylaşamazlar. Yeni
+    katman eski dosyayı açmaya çalışırsa açık hata veriyor.
+  - **İki ayrı config dosyası.** Eski `config.yaml` (src/), yeni
+    `config/experiment.yaml`. İkisi de Adım 8'de tek dosyaya inecek.
+  - **Yaş aralığı veritabanında zorlanıyor** (`CHECK age BETWEEN 18 AND 60`,
+    yöntem dokümanı §4). Kullanıcı onayı bekliyor — prova/pilot için gevşetmek
+    gerekebilir.
+  - **§G'deki `fusion_map` ve `combination_map` örnekleri tutarsızdı:**
+    `"ga|pa"` ve `"ba|da"` anahtarları `av_pairs` içinde yok, `bda` da
+    `response_set`'te yoktu. Doğrulama bunları reddediyor; config'e tutarlı
+    hâlleri yazıldı ve `response_set`'e `BGA`/`BDA` eklendi (Adım 0'ın
+    BA/DA/GA seti kombinasyon algısını ifade edemiyordu).
+  - **Deneme sayısı hesabı config katmanında.** Adım 4–7c'nin üreteçleri bu
+    sayıyı üretmek zorunda olacak, böylece tahmin ile gerçek tasarım
+    ayrışamıyor. V-only hücreleri gürültü ve kulakla çaprazlanmıyor (§C Adım 5).
+  - **Varsayılan deneme sayıları minimuma çekildi (kullanıcı, 2026-07-26).**
+    §G'nin örnek değerleri 1167 deneme / ~99.5 dakika veriyordu; config artık
+    697 deneme / ~56.1 dakika ile geliyor. Her modülde ölçtüğü şeyi hâlâ
+    verebilen en küçük sayı seçildi (gerekçeler config yorumlarında ve
+    `TEST_ADIM_1.md` K1 tablosunda). Azaltılmayanlar: gürültü × kulak
+    çaprazlaması (SSD hipotezi), GIN (normlu klinik test — 4/6 eşik kuralı ve
+    normlarla karşılaştırılabilirlik bozulur), `practice_trials`.
+
 - **Bilinen sınırlar:**
+  - Yeni paket henüz hiçbir deney çalıştırmıyor; `main.py` Adım 8'e kadar
+    `src/` yolunu kullanıyor.
+  - `engine/`, `modules/`, `analysis/`, `ui/` boş.
+  - AVSR kelime seti yalnızca şema düzeyinde. `enabled: true` yapılırsa deneme
+    sayısı hesabı açık hata veriyor (§F.2, Adım 5).
+  - `sessions.audio_backend` ve `measured_refresh_hz` sütunları var ama Adım
+    1'de doldurulmuyor — PsychoPy gerektiriyorlar, Adım 3'ün işi.
+  - GIN uyaran üretimi yok (§A.12 gereği offline olmalı) — Adım 2.
+  - Yedekleme oturum kapanışına **bağlanmadı**; `db.backup()` ve
+    `database.backup_on_session_end` bayrağı hazır, çağrı noktası Adım 8'de
+    oturum akışıyla gelecek.
+
 - **Sonraki adıma not:**
+  - `steps.md` §C'ye **Adım 7b (dikotik) ve 7c (GIN)** bölümleri yazılmalı.
+  - Adım 2'nin `prepare_stimuli.py`'si artık **GIN gürültü segmentlerini de**
+    üretmek zorunda: geniş bantlı gürültü, config'teki boşluk süreleri,
+    segment başına en fazla `max_gaps_per_segment`, aralarında en az
+    `min_gap_separation_s`. Boşluk konumları `trials.design_extra`'ya yazılacak.
+  - Adım 2 çıktısı `paths.stimuli` (`stimuli/`) altına gidiyor; `assets/` ham
+    kayıt olarak kalıyor ve `src/` ile birlikte emekli olacak.
+  - Adım 3 `sessions.audio_backend`, `measured_refresh_hz` ve
+    `trials`'ın gerçekleşen zamanlama sütunlarını doldurmalı.
+  - Adım 8 `db.backup()`'ı oturum kapanışına bağlamalı (kesilen oturumda da) ve
+    `mcgurk.checklist` içinde `latest_backup()` tarihini raporlamalı.
+  - Adım 9 `v_trials_flat` üzerinden çalışmalı; modüle özgü alanlar orada zaten
+    sütun hâlinde.
 
 ### Adım 2 — Uyaran hazırlama ve kalite kontrol
 - **Durum:** BEKLİYOR
@@ -256,6 +373,32 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
 - **Ne yapıldı:**
 - **Alınan kararlar:**
 - **Bilinen sınırlar:**
+- **Sonraki adıma not:**
+
+### Adım 7b — Modül 5: Dikotik dinleme
+- **Durum:** BEKLİYOR
+- **Tamamlanma:** —
+- **Commit:** —
+- **Ne yapıldı:** (Adım 1'de config ve DB yeri açıldı: `modules.dichotic`,
+  `trials.design_extra` → `left_token`/`right_token`, `blocks.module` CHECK
+  listesi. Modül gerçeklemesi bu adımda.)
+- **Alınan kararlar:**
+- **Bilinen sınırlar:** Yöntem dokümanında tanımlı değil — bkz. bekleyen
+  aksiyonlar.
+- **Sonraki adıma not:**
+
+### Adım 7c — Modül 6: GIN (Gaps-In-Noise)
+- **Durum:** BEKLİYOR
+- **Tamamlanma:** —
+- **Commit:** —
+- **Ne yapıldı:** (Adım 1'de config ve DB yeri açıldı: `modules.gin`,
+  `trials.design_extra` → `gap_onsets_s`/`gap_durations_ms`, deneme başına
+  0..n yanıt. Uyaran üretimi Adım 2'de, modül gerçeklemesi bu adımda.)
+- **Alınan kararlar:** Standart GIN parametreleri (Musiek ve ark., 2005)
+  config varsayılanı olarak girildi; eşik ölçütü `4_of_6`.
+- **Bilinen sınırlar:** Yöntem dokümanında tanımlı değil — bkz. bekleyen
+  aksiyonlar. Kulak seçimi katılımcıya bağlı (`ear_selection: good_ear`),
+  seçim mantığı Adım 8'de.
 - **Sonraki adıma not:**
 
 ### Adım 8 — Oturum akışı ve arayüz
@@ -317,12 +460,22 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
 
 ## Kullanıcıya bekleyen aksiyonlar
 
-- **Dikotik dinleme görevinin yöntem dokümanına eklenmesi.** Kullanıcı bu bölümün
-  çalışmada kullanılacağını bildirdi, ancak `946383_YONTEM (3).docx` içinde
-  tanımlı değil. Danışmanla görüşülüp dokümana eklenmeli (ölçülen değişkenler,
-  gerekçe, kaç deneme) — aksi hâlde toplanan veri protokol dışı kalır.
-- **Adım 1 planının onaylanması (§B.1 kapısı).** Plan sunulduğunda.
-- §F.1 (deneme sayıları) Adım 4'ten önce netleşmeli; §F.2 (kelime listesi)
-  Adım 5'ten önce; §F.3 (kulaklık tipi) Adım 8'den önce.
-- Adım 1'e geçmeden önce §F.1 (deneme sayıları) kararı henüz gerekmiyor; Adım 4'ten
-  önce netleşmeli.
+- **Dikotik dinleme VE GIN görevlerinin yöntem dokümanına eklenmesi.** İkisi de
+  `946383_YONTEM (3).docx` içinde tanımlı değil. Kullanıcı dikotiğin
+  kullanılacağını (2026-07-26), ardından GIN'in de ekleneceğini bildirdi.
+  Danışmanla görüşülüp dokümana eklenmeli (ölçülen değişkenler, gerekçe, kaç
+  deneme, GIN için kulak seçimi kuralı) — aksi hâlde toplanan veri protokol
+  dışı kalır. **Adım 1'de kod tarafı hazırlandı, bu aksiyon hâlâ açık.**
+- **Adım 1 manuel testleri** (`TEST_ADIM_1.md`): tasarım özeti, config kapısı
+  ve push sonrası GitHub Actions.
+- **Yaş aralığı kısıtı (K4).** `participants.age` için `CHECK (18–60)` kondu.
+  Prova/pilot bu aralık dışında biriyle yapılacaksa gevşetilmeli.
+- **§F.1 — deneme sayıları.** Config **minimumlarla** geliyor: 697 deneme /
+  ~56 dakika (§G örnek değerleri 1167 / ~99.5 dakika veriyordu). Bunlar karar
+  değil, başlangıç noktası — danışman her sayıyı config'ten yükseltebilir.
+  Ayrıntılı tablo ve gerekçeler `TEST_ADIM_1.md` → K1. Adım 4'ten önce
+  netleşmeli.
+  - Not: oddball 300→200 indirildi ama bu toplamdan yalnızca ~1.7 dakika
+    kazandırıyor ve bir dikkat **kontrol** görevini zayıflatıyor. Danışmanın
+    ilk geri alacağı kesinti muhtemelen bu olmalı.
+- §F.2 (kelime listesi) Adım 5'ten önce; §F.3 (kulaklık tipi) Adım 8'den önce.

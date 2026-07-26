@@ -1,9 +1,11 @@
 """Shared pytest fixtures.
 
-The project root is put on ``sys.path`` so ``src`` imports resolve the same
-way they do when running ``python main.py`` from the repository root.
+The project root is put on ``sys.path`` so ``src`` and ``mcgurk`` imports
+resolve the same way they do when running ``python main.py`` from the
+repository root.
 """
 
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -12,6 +14,22 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+# Modules that import PsychoPy at module level.  Each carries
+# ``pytestmark = pytest.mark.psychopy`` so they can be deselected; here they
+# are dropped from collection entirely when PsychoPy is not installed, which
+# is the case on CI.  Marker deselection happens after import and would still
+# hit the ImportError.
+_NEEDS_PSYCHOPY = [
+    "test_abort.py",
+    "test_audio_backend.py",
+    "test_engine_helpers.py",
+    "test_participant_code.py",
+    "test_silent_video.py",
+]
+collect_ignore = (
+    [] if importlib.util.find_spec("psychopy") is not None else list(_NEEDS_PSYCHOPY)
+)
 
 from src.utils.assets import Speaker  # noqa: E402  (needs sys.path above)
 

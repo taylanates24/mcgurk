@@ -13,6 +13,8 @@ from psychopy import event
 from src.experiment.response import collect_response
 from src.experiment.stimuli import ABORT_KEY, AbortSession, check_abort
 
+pytestmark = pytest.mark.psychopy
+
 
 class _FakeClock:
     """Minimal stand-in for core.Clock — collect_response only reads it."""

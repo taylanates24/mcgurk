@@ -1,11 +1,14 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v"
+markers = [
+    "psychopy: PsychoPy (ekran/ses aygıtı) gerektiren testler; CI'da atlanır",
+]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-exclude = ["assets", "backups", "data", "logs"]
+exclude = ["assets", "backups", "data", "logs", "stimuli"]
 
 [tool.ruff.lint]
 select = [
@@ -23,14 +26,31 @@ select = [
 # on purpose.
 "main.py" = ["E402"]
 "scripts/*.py" = ["E402"]
+# tools/ scripts put the project root on sys.path before importing mcgurk.
+"tools/*.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.10"
-files = ["src", "main.py", "admin.py", "tests"]
+files = ["src", "mcgurk", "tools", "main.py", "admin.py", "tests"]
+plugins = ["pydantic.mypy"]
+# Derive module names from the repository root so tests/conftest.py and
+# tests/mcgurk/conftest.py are distinct modules.  pytest needs both to be
+# named conftest.py and neither directory can carry __init__.py: a package
+# named `tests.mcgurk` would shadow the real `mcgurk` package on sys.path.
+mypy_path = "."
+explicit_package_bases = true
+namespace_packages = true
 # PsychoPy, ffpyplayer and PySide6 ship no usable stubs.
 ignore_missing_imports = true
-# Adım 0 baseline: type errors are reported but the pre-existing code is not
-# yet fully annotated.  Adım 1 tightens this (disallow_untyped_defs etc.)
-# once the new mcgurk/ package replaces src/.
 warn_unused_ignores = true
 warn_redundant_casts = true
+
+# The new package is annotated from the start.  src/ is the Adım 0 baseline
+# and is retired in Adım 8, so tightening it would be work spent on code that
+# is going away.
+[[tool.mypy.overrides]]
+module = ["mcgurk.*", "tools.*"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+warn_return_any = true

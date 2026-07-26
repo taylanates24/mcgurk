@@ -8,6 +8,8 @@ import pytest
 
 from src.dialogs.login import sanitize_participant_code
 
+pytestmark = pytest.mark.psychopy
+
 
 @pytest.mark.parametrize(
     ("raw", "expected"),

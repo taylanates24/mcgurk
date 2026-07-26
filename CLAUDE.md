@@ -11,7 +11,7 @@ TÜBİTAK-supported academic research project: "Behavioral Assessment of Audiovi
 - **Database**: SQLite (via Python stdlib `sqlite3`) + CSV export capability
 - **Timing**: PsychoPy `core.Clock` (sub-millisecond precision) for reaction time
 - **Noise Generation**: numpy + scipy for white noise / speech-shaped noise (pre-generated)
-- **Config**: YAML (`pyyaml`) for all experiment parameters
+- **Config**: YAML (`pyyaml`) parsed into **Pydantic v2** models (`mcgurk/config`); unknown fields are rejected
 - **Packaging**: PyInstaller for Windows executable distribution
 
 ## Architecture
@@ -39,11 +39,46 @@ Login/Demographics  →  Admin Setup (speaker + sections)  →  Experiment Loop 
 
 Each section has **clean** and **noisy** variants. Noise type and SNR level are configurable.
 
-### Project Structure (Target)
+### Two packages side by side (from Adım 1)
+
+`src/` is the Adım 0 baseline and still runs the experiment. `mcgurk/` is the
+new platform, built next to it and retired `src/` in Adım 8. They use separate
+config files and separate database files — the schemas are incompatible.
+
+**Hard rule: `mcgurk/config` and `mcgurk/db` must not import PsychoPy.** CI has
+no PsychoPy installed and an analysis machine need not either;
+`tests/mcgurk/test_package_boundaries.py` enforces this with an AST check.
+`engine/`, `modules/` and `ui/` are exempt — that is where PsychoPy belongs.
+
+```
+mcgurk/                          # new platform (Adım 1→)
+├── config/
+│   ├── schema.py                # Pydantic models, §G — extra="forbid"
+│   ├── loader.py                # load, validate, design summary
+│   ├── calibration.py           # 02_kalibrasyon.md JSON (Turkish keys → aliases)
+│   └── __main__.py              # python -m mcgurk.config
+├── db/
+│   ├── schema.sql               # 6 tables + v_trials_flat + §A.10 trigger
+│   ├── database.py              # access layer; trial writes do NOT commit (§A.5)
+│   ├── design.py                # trials.design_extra validation per module
+│   ├── models.py                # row dataclasses
+│   └── backup.py                # VACUUM INTO — never a file copy
+├── engine/                      # Adım 3 (empty)
+├── modules/                     # Adım 4–7c (empty)
+├── analysis/                    # Adım 9 (empty)
+├── ui/                          # Adım 8 (empty)
+├── logging_setup.py
+└── provenance.py                # git commit, OS, package versions
+config/experiment.yaml           # new single source of truth (§G)
+tools/verify_backup.py           # an untested backup is not a backup
+.github/workflows/ci.yml         # ruff + mypy, pytest -m "not psychopy"
+```
+
+### Legacy Structure (src/, Adım 0)
 ```
 mcgurk/
 ├── CLAUDE.md
-├── config.yaml                  # All experiment parameters
+├── config.yaml                  # legacy experiment parameters (src/ only)
 ├── requirements.txt
 ├── main.py                      # Experiment entry point (PsychoPy)
 ├── admin.py                     # Admin panel entry point (PySide6)
@@ -102,7 +137,7 @@ mcgurk/
 - Noisy variants: `assets/noisy/{speaker_folder}/Vis-{visual}_Aud-{audio}_{noise_type}_{snr}dB.mp4`
 - Dichotic stimuli: `assets/dichotic/{speaker_folder}/Left-{left}_Right-{right}.wav` — 48 kHz stereo PCM, **not** a video container
 
-## Config Parameters (config.yaml)
+## Legacy Config Parameters (config.yaml — src/ only)
 Key configurable values:
 - `syllables`: list of syllables (default: [ba, da, ga])
 - `fixation_duration_ms`: time for fixation cross (default: 3000)
@@ -114,7 +149,35 @@ Key configurable values:
 - `fullscreen`: true | false
 - `monitor_name`: PsychoPy monitor profile name
 
-## Data Model
+## Config Parameters (config/experiment.yaml — new package)
+Validated by `mcgurk/config/schema.py`; **unknown fields are an error**.
+- `experiment.mode`: `development` | `data_collection`. The second gates on a
+  measured `timing.system_av_offset_ms`, an existing readable
+  `audio.calibration_file`, `display.fullscreen: true` and an explicit
+  `audio.device`.
+- `modules.*`: six modules — `mcgurk`, `avsr`, `tbw`, `oddball`, `dichotic`,
+  `gin`. Each knows its own trial count; `python -m mcgurk.config` prints the
+  totals and a duration estimate.
+- `display.video_position` must stay `[0, 0]` (§A.13) — the schema rejects
+  anything else.
+- Categorisation maps (`fusion_map`, `combination_map`) live here, not in code
+  (§A.9). Their keys must name a real `av_pairs` entry and their values must be
+  in `response_set`; both are checked at load.
+
+## Data Model (new package — data/mcgurk.sqlite)
+Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
+- `participants` — anonymous code, group (`SSD_R`/`SSD_L`/`CTRL`), age, sex,
+  deprivation_months, PTA left/right, postlingual
+- `calibrations` — parsed 02_kalibrasyon.md output plus the verbatim file
+- `sessions` — seed, **config snapshot**, git commit, PsychoPy/Python version,
+  OS, audio backend, measured refresh, `system_av_offset_ms`, status
+- `blocks` — module, index, planned trial count, status
+- `trials` — shared design columns + realised timing; module-specific fields in
+  `design_extra` (JSON), validated by `mcgurk/db/design.py`
+- `responses` — **0..n per trial**: none on timeout, several for a GIN segment
+- A trigger refuses `is_correct` on `mcgurk`/`dichotic` trials (§A.10)
+
+## Legacy Data Model (src/, data/mcgurk.db)
 ### Participants Table
 - participant_id, **participant_code** (anonymous — never a name, KVKK), age, gender, group (SSD-right, SSD-left, control), created_at, notes
 
@@ -149,6 +212,10 @@ Key configurable values:
 - Run experiment: `python main.py` (WSL2'de `LIBGL_ALWAYS_SOFTWARE=1` prefix gerekebilir)
 - Run admin panel: `python admin.py`
 - Monitor setup (ilk kurulumda bir kez): `python scripts/setup_monitor.py`
+- Validate config + design cost: `python -m mcgurk.config`
+- Verify a backup: `python tools/verify_backup.py <yedek> --compare-with data/mcgurk.sqlite`
+- Tests: `pytest` locally; `pytest -m "not psychopy"` is what CI runs (no
+  PsychoPy installed there — see `requirements-ci.txt`)
 - Language: Turkish UI, English code/comments
 
 ## Known Issues & Notes
@@ -178,3 +245,7 @@ Key configurable values:
 - Don't mix PsychoPy and PySide6 in the same process — separate entry points
 - Don't store experiment data in git (data/ is gitignored)
 - Don't use PsychoPy Builder GUI — all code is hand-written Coder style
+- Don't import PsychoPy from `mcgurk/config` or `mcgurk/db` — CI has none, and a test enforces it
+- Don't back up SQLite by copying the file — use `VACUUM INTO`; a WAL-mode copy is silently inconsistent
+- Don't commit inside a trial (§A.5) — `add_trial`/`add_response` defer, `finish_block` commits
+- Don't add a module to `modules.*` without also adding it to `blocks.module`'s CHECK list and `design.py`

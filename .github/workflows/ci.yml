@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+
+jobs:
+  lint:
+    name: ruff + mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - run: pip install -r requirements-ci.txt
+      - run: ruff check .
+      # PsychoPy is not installed here; ignore_missing_imports covers the
+      # legacy src/ tree, and mcgurk/ must not import it at all.
+      - run: mypy
+
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - run: pip install -r requirements-ci.txt
+      # Tests needing a screen or an audio device are marked `psychopy` and
+      # skip themselves when the import is unavailable; they run on the
+      # development machine instead.
+      - run: pytest -m "not psychopy"

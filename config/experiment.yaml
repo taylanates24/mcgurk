@@ -1,0 +1,209 @@
+# McGurk / SSD platform — single source of truth (steps.md §G).
+#
+# Validated by mcgurk/config/schema.py.  Unknown fields are an error, so a
+# typo cannot silently fall back to a default.
+#
+# The trial counts below are deliberate MINIMUMS, not a decided design — §F.1
+# is still open.  Each is the smallest number that still yields the measure the
+# module exists for; going lower stops measuring rather than measuring faster.
+# Raising them is a config edit and nothing else.
+#
+# Run `python -m mcgurk.config` after any change: it prints the resulting trial
+# count and duration estimate, which is what the §F.1 decision is made against.
+#
+# What was NOT reduced, and why:
+#   * noise_conditions × ears crossing — this is the SSD hypothesis itself.
+#   * modules.gin — a normed clinical test (Musiek et al., 2005); fewer
+#     presentations per gap breaks the 4-of-6 threshold rule and with it the
+#     published norms.
+#   * session.practice_trials — 12 across six modules is already two each.
+
+experiment:
+  name: mcgurk_ssd
+  version: 1.0.0
+  mode: development          # development | data_collection
+
+paths:
+  # Prepared stimuli (silent CFR video + 48 kHz PCM WAV) — produced by
+  # tools/prepare_stimuli.py in Adım 2.  Raw recordings stay in assets/ and
+  # are the legacy src/ tree's input, not this one's.
+  stimuli: stimuli/
+  data: data/
+  logs: logs/
+  backups: backups/
+
+logging:
+  console_level: INFO        # what the operator sees during a session
+  file_level: DEBUG          # what stays on disk for later diagnosis
+
+database:
+  # Separate file from the legacy src/ database (data/mcgurk.db); the schemas
+  # are incompatible and cannot share one file.
+  path: data/mcgurk.sqlite
+  backup_on_session_end: true
+
+timing:
+  # From the photodiode measurement (01_av_gecikme_olcumu.md).  Null until the
+  # code is finished; data_collection mode refuses to start without it.
+  system_av_offset_ms: null
+  measured_on: null
+  audio_latency_mode: 3
+  lead_frames: 6
+  dropped_frame_tolerance: 1.5
+
+display:
+  fullscreen: true
+  screen: 0
+  size: [1920, 1080]
+  background: black
+  video_position: [0, 0]     # centre — §A.13, the schema rejects anything else
+  expected_refresh_hz: 60
+
+audio:
+  sample_rate: 48000
+  target_spl_db: 65.0
+  # Output of 02_kalibrasyon.md.  Null until calibration is done; required in
+  # data_collection mode, where the file must also exist and parse.
+  calibration_file: null
+  # Exact output device name.  Null lets the operator choose, which is fine in
+  # development and refused in data_collection.
+  device: null
+
+session:
+  module_order: [practice, mcgurk, avsr, tbw, oddball, dichotic, gin]
+  break_every_n_trials: 60
+  break_duration_s: 30
+  practice_trials: 12
+
+modules:
+  # ---- Modül 1: McGurk ----
+  mcgurk:
+    enabled: true
+    speaker_id: 1
+    estimated_trial_duration_s: 6.0
+    # reps is PER CELL: each pair is presented `reps` times in every
+    # noise × ear combination, so `reps: 10` here means 40 presentations.
+    # 10 per cell gives 10-point resolution on the fusion rate (binomial SE
+    # ~16% at p=0.5); below that the rate estimate stops being usable.
+    # The congruent pairs are controls, so 5 is enough.
+    av_pairs:
+      - {visual: ga, audio: ba, label: fusion_pair,      reps: 10}
+      - {visual: ba, audio: ga, label: combination_pair, reps: 10}
+      - {visual: ba, audio: ba, label: congruent_ba,     reps: 5}
+      - {visual: da, audio: da, label: congruent_da,     reps: 5}
+      - {visual: ga, audio: ga, label: congruent_ga,     reps: 5}
+    noise_conditions: [null, 5.0]     # null = quiet, number = SNR in dB
+    ears: [left, right]
+    # BGA/BDA are here because a combination percept has to be expressible;
+    # the Adım 0 set (BA/DA/GA only) forced it into "wrong answer".
+    response_set: [BA, DA, GA, TA, PA, KA, BGA, BDA, DIGER]
+    response_timeout_s: 5.0
+    randomization: block_shuffle
+    # Categorisation maps stay out of the code (§A.9).  Keys must name a pair
+    # that actually exists in av_pairs and values must be in response_set —
+    # the schema checks both.
+    fusion_map:
+      "ga|ba": [da, ta]
+    combination_map:
+      "ba|ga": [bga, bda]
+
+  # ---- Modül 2: AVSR ----
+  avsr:
+    enabled: true
+    speaker_id: 1
+    estimated_trial_duration_s: 7.0
+    stimulus_sets:
+      # 3 tokens × 5 reps = 15 trials per A/AV cell — enough for an accuracy
+      # figure per cell, since accuracy is pooled across the three tokens.
+      - {type: syllable, tokens: [ba, da, ga], reps: 5, enabled: true}
+      # Enabled once the word recording session happens (§F.2, Adım 5).
+      # No code change is needed — only this flag and a manifest entry.
+      - {type: word, list: config/word_lists/tr_pb_50.yaml, reps: 1, enabled: false}
+    presentation_modes: [A, V, AV]
+    noise_conditions: [null, 5.0]
+    ears: [left, right]
+    response_mode: closed_set          # closed_set | open_set
+    response_timeout_s: 6.0
+
+  # ---- Modül 3: TBW ----
+  tbw:
+    enabled: true
+    speaker_id: 1
+    estimated_trial_duration_s: 5.0
+    stimulus: {visual: ba, audio: ba}
+    soa_values_ms: [-300, -250, -200, -150, -100, -50, 0, 50, 100, 150, 200, 250, 300]
+    # 10 per SOA point is the floor for fitting a Gaussian psychometric
+    # function; fewer makes the fit unstable at the tails.  Cut the reps
+    # rather than the SOA grid — the grid is what sets the TBW resolution.
+    reps_per_soa: 10
+    ears: [both]
+    tbw_definition: fwhm               # fwhm | sigma1 — written into the report
+    response_labels: {same: "Aynı anda", different: "Farklı zamanda"}
+    response_timeout_s: 4.0
+
+  # ---- Modül 4: Oddball ----
+  oddball:
+    enabled: true
+    estimated_trial_duration_s: 1.05
+    standard_hz: 1000
+    target_hz: 1500
+    target_probability: 0.18
+    min_standards_between_targets: 2
+    # 200 × 0.18 = 36 targets, the floor for a d' estimate.  Note this deviates
+    # from steps.md §C Adım 7 ("~5-6 dakika"): it runs ~3.5 min.  It also saves
+    # the least time of any cut here, so raising it back to 300 costs ~1.7 min.
+    n_trials: 200
+    tone_duration_ms: 50
+    tone_ramp_ms: 10
+    isi_ms: [900, 1100]
+    ears: [both]
+    response_key: space
+
+  # ---- Modül 5: Dikotik dinleme ----
+  # Not in the reference method document yet — see progress.md, "Kullanıcıya
+  # bekleyen aksiyonlar".  Stimuli: assets/dichotic/<speaker>/Left-<l>_Right-<r>.wav
+  dichotic:
+    enabled: true
+    speaker_id: 1
+    estimated_trial_duration_s: 5.0
+    pairs:
+      - {left: ba, right: da}
+      - {left: ba, right: ga}
+      - {left: da, right: ba}
+      - {left: da, right: ga}
+      - {left: ga, right: ba}
+      - {left: ga, right: da}
+    # 6 pairs × 5 = 30 trials; the ear-advantage index is computed over all 30,
+    # not per pair, so 30 observations is the relevant number.
+    reps: 5
+    response_set: [BA, DA, GA, DIGER]
+    response_timeout_s: 5.0
+    randomization: block_shuffle
+
+  # ---- Modül 6: GIN (Gaps-In-Noise, Musiek ve ark. 2005) ----
+  # Not in the reference method document yet — see progress.md.  Noise
+  # segments are generated offline (§A.12); that pipeline is Adım 2.
+  gin:
+    enabled: true
+    estimated_trial_duration_s: 8.0
+    gap_durations_ms: [2, 3, 4, 5, 6, 8, 10, 12, 15, 20]
+    reps_per_gap: 6                    # 10 × 6 = 60 gaps
+    segment_duration_s: 6.0
+    n_segments: 30                     # 30 × max 3 gaps = capacity 90 ≥ 60
+    max_gaps_per_segment: 3
+    min_gap_separation_s: 1.0
+    inter_segment_interval_s: 2.0
+    # GIN is monaural and presenting it to a deaf ear measures nothing, so the
+    # ear is chosen per participant in Adım 8; the database records the ear
+    # that was actually used.
+    ear_selection: good_ear            # good_ear | fixed | both
+    response_key: space
+    threshold_criterion: 4_of_6        # shortest gap detected ≥4 of 6 times
+
+speaker_selection:
+  strategy: fixed      # fixed | balanced | random
+  fixed_id: 1
+
+cross_hearing_check:
+  enabled: true
+  n_trials: 20

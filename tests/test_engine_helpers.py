@@ -6,6 +6,8 @@ import pytest
 
 from src.experiment.engine import _find_noise_file, resolve_seed
 
+pytestmark = pytest.mark.psychopy
+
 
 def test_configured_seed_is_used_verbatim():
     assert resolve_seed({"seed": 20260726}) == 20260726

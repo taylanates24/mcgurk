@@ -16,6 +16,8 @@ from psychopy import logging as psychopy_logging
 
 from src.experiment.stimuli import _get_ffmpeg, _quiet_movie_init, extract_silent_video
 
+pytestmark = pytest.mark.psychopy
+
 SOURCE_VIDEO = Path("assets/female_speaker_1/Vis-ba_Aud-ba.mp4")
 
 

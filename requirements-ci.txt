@@ -1,0 +1,15 @@
+# CI dependencies.
+#
+# PsychoPy is deliberately absent: a headless runner has no audio device and
+# no display, so the tests that need it are marked `psychopy` and skipped
+# there (they still run on the development machine).  Keeping PsychoPy out
+# also keeps CI honest about the mcgurk/ package staying importable without it.
+#
+# Versions must match requirements.txt / requirements-dev.txt.
+
+pydantic==2.13.4
+pyyaml==6.0.3
+
+pytest==9.1.1
+ruff==0.16.0
+mypy==2.3.0

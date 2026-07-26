@@ -7,10 +7,27 @@ deney platformu.
 **Proje:** Atılım Üniversitesi Odyoloji Bölümü, etik kurul onaylı, 12 aylık
 klinik çalışma. Katılımcılar: 20 sağ SSD + 20 sol SSD + 20 kontrol.
 
-> **Durum: Adım 0 (baseline).** Bu depo şu anda düzeltilmiş bir referans
-> noktadır, veri toplamaya hazır değildir. Neyin eksik olduğu için aşağıdaki
+> **Durum: Adım 1 (proje iskeleti).** Bu depo veri toplamaya hazır değildir.
+> Çalışan deney hâlâ Adım 0'ın `src/` ağacıdır; yeni `mcgurk/` paketi onun
+> yanında kuruluyor ve şu an config, veritabanı, yedekleme ve loglama
+> katmanlarını içeriyor. Neyin eksik olduğu için aşağıdaki
 > [Bilinen sınırlar](#bilinen-sınırlar) bölümüne bakın. Geliştirme planı
 > `docs/steps.md`, ilerleme durumu `progress.md` dosyasındadır.
+
+## Depo yapısı — iki paket bir arada
+
+| | `src/` (Adım 0) | `mcgurk/` (Adım 1→) |
+|---|---|---|
+| Durum | Çalışan baseline deney | Yeni platform, inşa hâlinde |
+| Giriş | `python main.py` | Henüz yok (Adım 8) |
+| Config | `config.yaml` | `config/experiment.yaml` |
+| Veritabanı | `data/mcgurk.db` | `data/mcgurk.sqlite` |
+| PsychoPy | Zorunlu | `config/` ve `db/` katmanlarında **yasak** |
+
+İkisi bilinçli olarak ayrı: şemalar uyumsuz olduğu için aynı dosyayı
+paylaşamazlar, ve yeni paketin config/veritabanı katmanları PsychoPy'siz
+çalışabildiği için CI'da ve analiz makinesinde koşabiliyorlar. `src/` Adım 8'de
+oturum akışı yeni pakete taşındığında emekli edilecek.
 
 ---
 
@@ -178,8 +195,51 @@ bu depoda tutulmaz ve bulut senkronizasyonuna konulmaz.
 Ad-soyad sütunu içeren eski bir veritabanı dosyası açılmaya çalışılırsa program
 **açık hatayla durur**, sessizce devam etmez.
 
-**Yedekleme:** `data/`, `backups/` ve `logs/` git dışıdır. Düzenli yedek alın;
-otomatik yedekleme katmanı Adım 1'de gelecek.
+### Yeni paketin veritabanı (`data/mcgurk.sqlite`)
+
+Adım 1'de gelen şema altı tablo ve analiz için düz bir `VIEW` içerir:
+
+- `participants` — anonim kod, grup (`SSD_R`/`SSD_L`/`CTRL`), yaş, cinsiyet,
+  **deprivasyon süresi**, PTA sağ/sol, postlingual bayrağı
+- `calibrations` — `02_kalibrasyon.md` çıktısı, dosyanın kendisi de saklanır
+- `sessions` — seed, **config anlık görüntüsü**, git commit, PsychoPy/Python
+  sürümü, işletim sistemi, ses backend'i, ölçülen yenileme hızı,
+  `system_av_offset_ms`, durum
+- `blocks` — modül, blok sırası, planlanan deneme sayısı, durum
+- `trials` — ortak tasarım alanları + gerçekleşen zamanlama; modüle özgü
+  alanlar `design_extra` (JSON) içinde, `mcgurk/db/design.py` ile doğrulanır
+- `responses` — deneme başına **0..n** satır: zaman aşımında hiç, GIN
+  segmentinde birden fazla
+- `v_trials_flat` — hepsini birleştiren düz tablo; `design_extra` anahtarları
+  sütun olarak açılır, analiz tarafında JSON görünmez
+
+Veritabanı `mcgurk` ve `dichotic` denemelerinde `is_correct` yazılmasını
+**tetikleyiciyle reddeder** — §A.10 depolama katmanında da geçerlidir.
+
+### Yedekleme
+
+`data/`, `backups/`, `logs/`, `stimuli/` ve `raw_recordings/` git dışıdır.
+
+Yedekler `VACUUM INTO` ile alınır, **ham dosya kopyası kullanılmaz**: WAL
+modunda `.sqlite` dosyasının tek başına kopyalanması son commit'leri eksik,
+sessizce tutarsız bir kopya üretir. Her oturum kapanışında otomatik alınır
+(kesilen oturumda da).
+
+Bir yedeği doğrulamak — test edilmemiş yedek yedek değildir:
+
+```bash
+python tools/verify_backup.py backups/mcgurk_20260726T153149.sqlite --compare-with data/mcgurk.sqlite
+```
+
+Çıkış kodu `0` yedek kullanılabilir, `1` güvenilir değil demektir.
+
+**3-2-1 kuralı:** verinin **3** kopyası, **2** farklı ortamda, **1**'i farklı
+fiziksel konumda. Pratikte: çalışma makinesindeki `data/`, aynı makinedeki
+`backups/`, ve **haftalık** olarak harici bir diske alınan kopya. 12 aylık bir
+çalışmada tek makine kabul edilemez risktir.
+
+**KVKK sınırı:** kod ↔ kimlik eşleşme dosyası bulut senkronizasyonuna
+konulmaz ve yedeklerle aynı yerde tutulmaz.
 
 ### Doğru cevap olmayan denemeler
 
@@ -246,6 +306,27 @@ mypy
 
 Üçü de temiz olmadan bir adım kapatılmaz (`docs/steps.md` §B.2).
 
+Ekran veya ses aygıtı gerektiren testler `psychopy` işaretini taşır. Yalnızca
+donanımsız olanları koşmak için:
+
+```bash
+pytest -m "not psychopy"
+```
+
+Bu, GitHub Actions'ın koştuğu komuttur — CI'da PsychoPy hiç kurulu değildir.
+`tests/mcgurk/test_package_boundaries.py` bunun bozulmadığını doğrular:
+`mcgurk/config` ve `mcgurk/db` altında PsychoPy import'u testle yasaklıdır.
+
+### Tasarımın maliyetini görmek
+
+Config'i doğrulamak ve deneme sayısı / süre tahminini almak:
+
+```bash
+python -m mcgurk.config
+```
+
+Deneme sayısı kararı (`docs/steps.md` §F.1) bu çıktıya bakılarak verilecek.
+
 Kod, değişken adları ve docstring'ler İngilizce; katılımcıya ve operatöre
 gösterilen metinler Türkçedir.
 
@@ -288,7 +369,16 @@ Bunlar bilinçli olarak Adım 0 kapsamı dışında bırakıldı; her biri
 - Alıştırma bloğu, molalar, oturum öncesi kontrol listesi ve çapraz dinleme
   kontrolü yok.
 - Kesilen oturuma kaldığı yerden devam etme yok.
-- Pydantic ile config doğrulaması yok; geçersiz alanlar sessizce yok sayılıyor.
+
+**Adım 1'de gelmeyenler:**
+- `mcgurk/` paketinin `engine/`, `modules/`, `ui/`, `analysis/` alt paketleri
+  boş — sırasıyla Adım 3, 4–7, 8 ve 9.
+- Yeni config ve veritabanı henüz hiçbir deneyi çalıştırmıyor; `main.py` Adım
+  8'e kadar `src/` yolunu kullanmaya devam ediyor.
+- AVSR kelime seti (`type: word`) yalnızca şema düzeyinde var; `enabled: true`
+  yapılırsa deneme sayısı hesabı açık hata verir (§F.2, Adım 5).
+- Dikotik ve GIN modülleri **yöntem dokümanında tanımlı değil** — config ve
+  veritabanı yerleri açıldı, ancak protokole eklenmeden veri toplanmamalı.
 
 **Ortam:**
 - `ffmpeg` PATH'te yoksa `imageio-ffmpeg` ile gelen ikili kullanılır. `ffprobe`
