@@ -1,16 +1,23 @@
 """SQLite database operations for the McGurk experiment."""
 
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 from .models import Participant, Session, Trial
 
+logger = logging.getLogger(__name__)
+
+
+class SchemaMismatchError(RuntimeError):
+    """Raised when an existing database file uses an incompatible schema."""
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS participants (
     participant_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
+    participant_code TEXT NOT NULL,
     age INTEGER NOT NULL,
     gender TEXT NOT NULL,
     "group" TEXT NOT NULL,
@@ -23,6 +30,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     participant_id INTEGER NOT NULL,
     speaker TEXT NOT NULL,
     sections_run TEXT NOT NULL,
+    seed INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
     admin_notes TEXT DEFAULT '',
     started_at TEXT NOT NULL,
     completed_at TEXT,
@@ -41,7 +50,7 @@ CREATE TABLE IF NOT EXISTS trials (
     snr_db REAL,
     participant_response TEXT NOT NULL,
     correct_answer TEXT NOT NULL,
-    is_correct INTEGER NOT NULL,
+    is_correct INTEGER,
     rt_from_video_end_ms REAL NOT NULL,
     rt_from_options_shown_ms REAL NOT NULL,
     trial_order INTEGER NOT NULL,
@@ -53,6 +62,14 @@ CREATE TABLE IF NOT EXISTS trials (
 """
 
 
+def _last_row_id(cursor: sqlite3.Cursor) -> int:
+    """Return the row id of the row a successful INSERT just created."""
+    row_id = cursor.lastrowid
+    if row_id is None:
+        raise RuntimeError("INSERT sonrası satır kimliği alınamadı.")
+    return row_id
+
+
 class Database:
     """SQLite database wrapper for experiment data."""
 
@@ -62,7 +79,33 @@ class Database:
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
+        self._check_legacy_schema()
         self._init_schema()
+
+    def _check_legacy_schema(self) -> None:
+        """Refuse to open a pre-anonymisation database.
+
+        Databases written before the KVKK fix carry a ``participants.name``
+        column holding real names.  ``CREATE TABLE IF NOT EXISTS`` would
+        silently leave that schema in place and every insert would then fail
+        on the missing column, so fail loudly instead.
+        """
+        try:
+            columns = {
+                row["name"]
+                for row in self.conn.execute("PRAGMA table_info(participants)")
+            }
+        except sqlite3.DatabaseError as exc:
+            raise SchemaMismatchError(
+                f"Veritabanı okunamadı ({self.db_path}): {exc}"
+            ) from exc
+
+        if columns and "participant_code" not in columns:
+            raise SchemaMismatchError(
+                f"'{self.db_path}' eski şemayı kullanıyor (participants.name).\n"
+                "Bu şema katılımcı adı içerdiği için artık desteklenmiyor (KVKK).\n"
+                "Dosyayı backups/ altına yedekleyip silin, sonra tekrar çalıştırın."
+            )
 
     def _init_schema(self):
         self.conn.executescript(_SCHEMA)
@@ -75,12 +118,12 @@ class Database:
 
     def add_participant(self, p: Participant) -> int:
         cursor = self.conn.execute(
-            'INSERT INTO participants (name, age, gender, "group", notes, created_at) '
+            'INSERT INTO participants (participant_code, age, gender, "group", notes, created_at) '
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (p.name, p.age, p.gender, p.group, p.notes, p.created_at),
+            (p.participant_code, p.age, p.gender, p.group, p.notes, p.created_at),
         )
         self.conn.commit()
-        return cursor.lastrowid
+        return _last_row_id(cursor)
 
     def get_participant(self, participant_id: int) -> dict[str, Any] | None:
         row = self.conn.execute(
@@ -98,17 +141,22 @@ class Database:
 
     def add_session(self, s: Session) -> int:
         cursor = self.conn.execute(
-            "INSERT INTO sessions (participant_id, speaker, sections_run, admin_notes, started_at, completed_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (s.participant_id, s.speaker, s.sections_run, s.admin_notes, s.started_at, s.completed_at),
+            "INSERT INTO sessions "
+            "(participant_id, speaker, sections_run, seed, status, admin_notes, started_at, completed_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                s.participant_id, s.speaker, s.sections_run, s.seed, s.status,
+                s.admin_notes, s.started_at, s.completed_at,
+            ),
         )
         self.conn.commit()
-        return cursor.lastrowid
+        return _last_row_id(cursor)
 
-    def complete_session(self, session_id: int, completed_at: str):
+    def finish_session(self, session_id: int, status: str, completed_at: str):
+        """Mark a session as finished with *status* ('completed' or 'aborted')."""
         self.conn.execute(
-            "UPDATE sessions SET completed_at = ? WHERE session_id = ?",
-            (completed_at, session_id),
+            "UPDATE sessions SET status = ?, completed_at = ? WHERE session_id = ?",
+            (status, completed_at, session_id),
         )
         self.conn.commit()
 
@@ -132,13 +180,14 @@ class Database:
             (
                 t.session_id, t.participant_id, t.section_type, t.speaker,
                 t.visual_syllable, t.audio_syllable, t.noise_condition, t.snr_db,
-                t.participant_response, t.correct_answer, int(t.is_correct),
+                t.participant_response, t.correct_answer,
+                None if t.is_correct is None else int(t.is_correct),
                 t.rt_from_video_end_ms, t.rt_from_options_shown_ms, t.trial_order,
                 t.ear_side, t.timestamp,
             ),
         )
         self.conn.commit()
-        return cursor.lastrowid
+        return _last_row_id(cursor)
 
     def get_trials_for_session(self, session_id: int) -> list[dict[str, Any]]:
         rows = self.conn.execute(
@@ -149,7 +198,8 @@ class Database:
 
     def get_all_trials(self) -> list[dict[str, Any]]:
         rows = self.conn.execute(
-            "SELECT t.*, p.name as participant_name, p.\"group\" as participant_group "
+            'SELECT t.*, p.participant_code AS participant_code, '
+            'p."group" AS participant_group '
             "FROM trials t "
             "JOIN participants p ON t.participant_id = p.participant_id "
             "ORDER BY t.timestamp"

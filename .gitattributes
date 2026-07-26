@@ -1,0 +1,12 @@
+# Normalise line endings.  The repository stores LF; without this a Windows
+# editor or script can rewrite a whole file to CRLF and bury a two-line change
+# in a several-hundred-line diff.
+* text=auto eol=lf
+
+# Binary assets — never normalise, never diff as text.
+*.mp4 binary
+*.mp3 binary
+*.wav binary
+*.docx binary
+*.sqlite binary
+*.db binary

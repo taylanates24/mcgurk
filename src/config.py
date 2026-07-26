@@ -5,7 +5,6 @@ from typing import Any
 
 import yaml
 
-
 _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
 
 
@@ -19,7 +18,7 @@ def load_config(path: Path | str | None = None) -> dict[str, Any]:
         Configuration dictionary.
     """
     config_path = Path(path) if path else _DEFAULT_CONFIG_PATH
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
     return config
 

@@ -10,9 +10,9 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
+from src.admin.panel import AdminPanel
 from src.config import load_config
 from src.data.database import Database
-from src.admin.panel import AdminPanel
 
 
 def main():

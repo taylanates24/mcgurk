@@ -58,7 +58,7 @@ def discover_speakers(assets_dir: Path) -> list[Speaker]:
 
     Looks for directories matching the pattern {gender}_speaker_{n}.
     """
-    speakers = []
+    speakers: list[Speaker] = []
     if not assets_dir.is_dir():
         return speakers
 

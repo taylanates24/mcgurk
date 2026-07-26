@@ -22,7 +22,7 @@ from scipy.io import wavfile
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.config import load_config, get_syllables
+from src.config import get_syllables, load_config
 from src.utils.assets import discover_speakers, get_assets_dir, get_congruent_videos
 
 

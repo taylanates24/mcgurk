@@ -1,9 +1,8 @@
 """Response collection and reaction time measurement."""
 
 from dataclasses import dataclass
-from typing import Any
 
-from psychopy import event, core
+from psychopy import core, event
 
 
 @dataclass

@@ -8,10 +8,11 @@ Copy the desired device name into config.yaml as:
 """
 
 from psychopy import prefs
+
 prefs.hardware["audioLib"] = ["ptb", "sounddevice", "pygame"]
 
-import traceback
 import sys
+import traceback
 
 print(f"Python: {sys.executable}\n")
 

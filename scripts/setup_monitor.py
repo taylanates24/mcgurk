@@ -20,4 +20,7 @@ mon.setWidth(WIDTH_CM)
 mon.setDistance(DISTANCE_CM)
 mon.save()
 
-print(f"Monitor '{MONITOR_NAME}' saved: {WIDTH_PX}x{HEIGHT_PX}, {WIDTH_CM}cm wide, {DISTANCE_CM}cm distance")
+print(
+    f"Monitor '{MONITOR_NAME}' saved: {WIDTH_PX}x{HEIGHT_PX}, "
+    f"{WIDTH_CM}cm wide, {DISTANCE_CM}cm distance"
+)

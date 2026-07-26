@@ -1,7 +1,18 @@
+# --- Stimuli ---
+# Stimulus media are large binaries and are distributed outside git.
+# See README.md for the expected assets/ layout.
 *.mp4
+*.wav
+*.mp3
 *Zone.Identifier
 
-# Python
+# --- Installers / large binaries ---
+# Nothing that ships an interpreter or toolchain belongs in the repository.
+*.exe
+*.msi
+*.zip
+
+# --- Python ---
 __pycache__/
 *.pyc
 *.pyo
@@ -10,15 +21,25 @@ venv/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Data
-data/*.db
-data/*.csv
+# --- Participant data (KVKK) ---
+# Never commit experiment data, backups or the code<->identity mapping.
+data/
+backups/
+logs/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.csv
 
-# IDE
+# --- IDE ---
 .vscode/
 .idea/
 
-# OS
+# --- OS ---
 .DS_Store
 Thumbs.db

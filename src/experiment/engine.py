@@ -1,16 +1,19 @@
 """Main experiment engine: runs the trial loop in a PsychoPy window."""
 
 import logging
+import random
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from psychopy import visual, core, event
+from psychopy import core, event, visual
 
-from ..config import get_syllables, get_response_key_map, get_key_to_syllable_map
+from ..config import get_key_to_syllable_map, get_response_key_map, get_syllables
 from ..data.database import Database
-from ..data.models import Session, Trial
+from ..data.models import SESSION_ABORTED, SESSION_COMPLETED, Session, Trial
 from ..dialogs.admin_setup import ExperimentSetup
+from ..utils.assets import get_assets_dir
+from .response import collect_response
 from .sections import build_trial_list
 from .stimuli import (
     create_fixation_cross,
@@ -19,18 +22,28 @@ from .stimuli import (
     present_fixation,
     present_response_screen,
     present_video,
+    require_ptb_backend,
 )
-from .response import collect_response
-from .trial import TrialResult
-from ..utils.assets import get_assets_dir
+from .trial import TrialResult, TrialSpec
 
 logger = logging.getLogger(__name__)
+
+# Sections whose trials have no single correct answer.  For McGurk the
+# stimulus is incongruent by construction, so "correct" is undefined; for
+# dichotic listening both ears carry a valid syllable.  Scoring these as
+# right/wrong would be a category error — the raw response is what counts.
+_SECTIONS_WITHOUT_CORRECT_ANSWER = frozenset({"mcgurk", "dichotic"})
+
+# Sections presented without a visible video frame.
+_AUDIO_PRESENTATION_SECTIONS = frozenset({"audio_only", "dichotic"})
 
 
 def _find_noise_file(noise_condition: str, config: dict[str, Any]) -> Path | None:
     """Return the noise file path for *noise_condition* from assets/noise/.
 
-    Tries common audio extensions in order.  Returns None if not found.
+    Raises FileNotFoundError when a noisy condition was requested but no
+    matching file exists.  Returning None there would silently downgrade the
+    trial to the clean condition and the data would look valid but be wrong.
     """
     if noise_condition == "clean":
         return None
@@ -39,8 +52,42 @@ def _find_noise_file(noise_condition: str, config: dict[str, Any]) -> Path | Non
         candidate = noise_dir / f"{noise_condition}_noise{ext}"
         if candidate.exists():
             return candidate
-    logger.warning("Gürültü dosyası bulunamadı: assets/noise/%s_noise.*", noise_condition)
-    return None
+    raise FileNotFoundError(
+        f"Gürültü dosyası bulunamadı: {noise_dir / (noise_condition + '_noise.*')}\n"
+        "Gürültülü koşul bu dosya olmadan sunulamaz."
+    )
+
+
+def _stimulus_path(trial_spec: TrialSpec) -> Path:
+    """Return the media file this trial is presented from.
+
+    Audio-only trials read from ``audio_path`` (the congruent video the audio
+    track is extracted from); every other section reads from ``video_path``.
+    """
+    path = (
+        trial_spec.audio_path
+        if trial_spec.section_type == "audio_only"
+        else trial_spec.video_path
+    )
+    if path is None:
+        raise RuntimeError(
+            f"'{trial_spec.section_type}' denemesinde uyaran dosyası yolu tanımsız "
+            f"(görsel={trial_spec.visual_syllable!r}, işitsel={trial_spec.audio_syllable!r})."
+        )
+    return path
+
+
+def resolve_seed(config: dict[str, Any]) -> int:
+    """Return the RNG seed for this session.
+
+    A fixed ``seed`` in the config reproduces an earlier session exactly;
+    otherwise a fresh seed is drawn and recorded with the session so the
+    trial order can be reconstructed later.
+    """
+    configured = config.get("seed")
+    if configured is not None:
+        return int(configured)
+    return random.randrange(2**31)
 
 
 def _show_instruction_screen(win: visual.Window, text: str):
@@ -51,16 +98,16 @@ def _show_instruction_screen(win: visual.Window, text: str):
     event.waitKeys(keyList=["space"])
 
 
-def _show_end_screen(win: visual.Window, results: list[TrialResult]):
-    """Show experiment completion screen with basic stats."""
-    total = len(results)
-    correct = sum(1 for r in results if r.is_correct)
-    pct = (correct / total * 100) if total > 0 else 0
+def _show_end_screen(win: visual.Window, n_trials: int):
+    """Show the experiment completion screen.
 
+    Deliberately reports no accuracy figure: most sections have no correct
+    answer, and giving participants performance feedback on a perception task
+    invites demand characteristics.
+    """
     text = (
         f"Deney tamamlandı!\n\n"
-        f"Toplam deneme: {total}\n"
-        f"Doğru cevap: {correct} / {total} ({pct:.0f}%)\n\n"
+        f"Tamamlanan deneme sayısı: {n_trials}\n\n"
         f"Katılımınız için teşekkür ederiz.\n\n"
         f"[SPACE] tuşuna basarak çıkabilirsiniz."
     )
@@ -84,24 +131,34 @@ def run_experiment(
         config: Experiment configuration dict.
         db: Database instance for saving results.
     """
-    # Create session
-    session = Session(
-        participant_id=participant_id,
-        speaker=setup.speaker.folder_name,
-        sections_run=",".join(setup.selected_sections),
-    )
-    session_id = db.add_session(session)
+    # Refuse to run on a backend that cannot schedule audio against the flip
+    # clock.  Checked before anything is written to the database.
+    require_ptb_backend()
 
-    # Build trial list
+    seed = resolve_seed(config)
+    logger.info("Oturum RNG seed: %d", seed)
+
+    # Build the trial list before creating the session row, so a configuration
+    # problem does not leave an empty session behind.
     trials = build_trial_list(
         speaker=setup.speaker,
         selected_sections=setup.selected_sections,
         config=config,
+        seed=seed,
         noisy_sections=setup.noisy_sections,
     )
 
     if not trials:
+        logger.warning("Seçilen bölümler için hiç deneme üretilmedi.")
         return
+
+    session = Session(
+        participant_id=participant_id,
+        speaker=setup.speaker.folder_name,
+        sections_run=",".join(setup.selected_sections),
+        seed=seed,
+    )
+    session_id = db.add_session(session)
 
     # Get config values
     syllables = get_syllables(config)
@@ -113,19 +170,29 @@ def run_experiment(
     fullscreen = config.get("fullscreen", True)
     monitor_name = config.get("monitor_name", "default")
 
-    # Create PsychoPy window
+    # Create PsychoPy window.  waitBlanking is explicit: without it flips do
+    # not block on the vertical retrace and frame timing is unmeasurable.
     win = visual.Window(
         fullscr=fullscreen,
         monitor=monitor_name,
         color=bg_color,
         units="height",
         allowGUI=False,
+        waitBlanking=True,
     )
+
+    status = SESSION_ABORTED
+    n_completed = 0
 
     try:
         # Create reusable stimuli
         fixation = create_fixation_cross(win, config)
         response_stims = create_response_screen(win, syllables, key_map)
+        # Full-screen rectangle that hides video frames in audio-only sections.
+        cover = visual.Rect(
+            win, width=2, height=2, pos=(0, 0),
+            fillColor=bg_color, lineColor=bg_color,
+        )
         clock = core.Clock()
 
         # Key mapping instruction
@@ -145,97 +212,88 @@ def run_experiment(
         aborted = False
 
         for trial_idx, trial_spec in enumerate(trials):
-            # --- Load video + audio BEFORE fixation so file I/O and
-            # ffmpeg extraction happen during the fixation period. ---
+            # --- Load video + audio before the fixation period so file I/O
+            # and ffmpeg extraction do not land inside the presentation. ---
             noise_file = _find_noise_file(trial_spec.noise_condition, config)
-            snr_db = trial_spec.snr_db
+            source = _stimulus_path(trial_spec)
 
             if trial_spec.section_type == "visual_only":
-                movie, audio = load_video_stimulus(win, trial_spec.video_path, with_audio=False)
-            elif trial_spec.section_type == "audio_only":
-                movie, audio = load_video_stimulus(
-                    win, trial_spec.audio_path, with_audio=True,
-                    noise_file=noise_file, snr_db=snr_db,
-                )
+                movie, audio = load_video_stimulus(win, source, with_audio=False)
             elif trial_spec.section_type == "dichotic":
-                movie, audio = load_video_stimulus(win, trial_spec.video_path, with_audio=True)
+                # Pre-mixed stereo file — noise is not applied to this section.
+                movie, audio = load_video_stimulus(win, source, with_audio=True)
             else:
-                # mcgurk, av_congruent
+                # mcgurk, av_congruent, audio_only
                 movie, audio = load_video_stimulus(
-                    win, trial_spec.video_path, with_audio=True,
-                    noise_file=noise_file, snr_db=snr_db,
+                    win, source, with_audio=True,
+                    noise_file=noise_file, snr_db=trial_spec.snr_db,
                 )
 
-            # Fixation (file is already loaded & parsed)
-            present_fixation(win, fixation, fixation_ms)
+            try:
+                # Fixation (file is already loaded & parsed)
+                present_fixation(win, fixation, fixation_ms)
 
-            clock.reset()
+                clock.reset()
 
-            # Present stimulus based on section type
-            if trial_spec.section_type == "visual_only":
-                video_end_time = present_video(win, movie, clock)
-            elif trial_spec.section_type == "audio_only":
-                # Play muted video (for timing) with cover hiding frames,
-                # audio via ptb backend for precise sync
-                cover = visual.Rect(
-                    win, width=2, height=2, pos=(0, 0),
-                    fillColor=bg_color, lineColor=bg_color,
-                )
-                movie.play()
-                if audio is not None:
-                    audio.play()
-                while not movie.isFinished:
-                    movie.draw()
-                    cover.draw()
-                    fixation.draw()
+                # Present stimulus based on section type
+                if trial_spec.section_type in _AUDIO_PRESENTATION_SECTIONS:
+                    # Play the muted video for timing while a cover hides its
+                    # frames; audio goes through the ptb backend.
+                    movie.setVolume(0)
+                    if audio is not None:
+                        audio.play(when=win.getFutureFlipTime(clock="ptb"))
+                    movie.play()
+                    while not movie.isFinished:
+                        movie.draw()
+                        cover.draw()
+                        fixation.draw()
+                        win.flip()
+                    movie.stop()
                     win.flip()
-                win.flip()
-                video_end_time = clock.getTime()
-                if audio is not None:
-                    audio.stop()
-            elif trial_spec.section_type == "dichotic":
-                # Stereo mp4: left ear = one syllable, right ear = another
-                cover = visual.Rect(
-                    win, width=2, height=2, pos=(0, 0),
-                    fillColor=bg_color, lineColor=bg_color,
+                    video_end_time = clock.getTime()
+                    if audio is not None:
+                        audio.stop()
+                elif trial_spec.section_type == "visual_only":
+                    video_end_time = present_video(win, movie, clock)
+                else:
+                    # McGurk and AV congruent: normal video+audio
+                    video_end_time = present_video(win, movie, clock, audio=audio)
+
+                # Show response options
+                options_shown_time = clock.getTime()
+                trial_info = f"{trial_idx + 1} / {len(trials)}"
+                present_response_screen(win, response_stims, trial_info=trial_info)
+
+                # Collect response
+                resp = collect_response(
+                    valid_keys=valid_keys,
+                    key_to_syllable=key_to_syl,
+                    video_end_time=video_end_time,
+                    options_shown_time=options_shown_time,
+                    clock=clock,
                 )
-                movie.play()
-                if audio is not None:
-                    audio.play()
-                while not movie.isFinished:
-                    movie.draw()
-                    cover.draw()
-                    fixation.draw()
-                    win.flip()
-                win.flip()
-                video_end_time = clock.getTime()
-                if audio is not None:
-                    audio.stop()
-            else:
-                # McGurk and AV congruent: normal video+audio
-                video_end_time = present_video(win, movie, clock, audio=audio)
-
-            # Show response options
-            options_shown_time = clock.getTime()
-            trial_info = f"{trial_idx + 1} / {len(trials)}"
-            present_response_screen(win, response_stims, trial_info=trial_info)
-
-            # Collect response
-            resp = collect_response(
-                valid_keys=valid_keys,
-                key_to_syllable=key_to_syl,
-                video_end_time=video_end_time,
-                options_shown_time=options_shown_time,
-                clock=clock,
-            )
+            finally:
+                # MovieStim holds a decoder and GPU textures; a session is
+                # hundreds of trials long, so releasing it is not optional.
+                movie.unload()
 
             if resp is None:
                 # Escape pressed — abort experiment
                 aborted = True
+                logger.info(
+                    "Oturum katılımcı/operatör tarafından kesildi (deneme %d).",
+                    trial_idx + 1,
+                )
                 break
 
-            # Determine correctness
-            # Dichotic has no single correct answer — record which ear matches
+            # Determine correctness.  Sections without a correct answer store
+            # NULL rather than a fabricated right/wrong verdict.
+            if trial_spec.section_type in _SECTIONS_WITHOUT_CORRECT_ANSWER:
+                is_correct = None
+            else:
+                is_correct = resp.syllable == trial_spec.correct_answer
+
+            # Dichotic: record which ear the reported syllable came from.
             if trial_spec.section_type == "dichotic":
                 left_syl, right_syl = trial_spec.correct_answer.split("|")
                 if resp.syllable == left_syl:
@@ -244,9 +302,6 @@ def run_experiment(
                     trial_spec.ear_side = "right"
                 else:
                     trial_spec.ear_side = "neither"
-                is_correct = True  # no wrong answer in dichotic
-            else:
-                is_correct = resp.syllable == trial_spec.correct_answer
 
             result = TrialResult(
                 spec=trial_spec,
@@ -277,13 +332,18 @@ def run_experiment(
                 ear_side=trial_spec.ear_side,
             )
             db.add_trial(trial_record)
+            n_completed = len(results)
 
-        # End screen
         if not aborted:
-            _show_end_screen(win, results)
-
-        # Complete session
-        db.complete_session(session_id, datetime.now().isoformat())
+            status = SESSION_COMPLETED
+            _show_end_screen(win, n_completed)
 
     finally:
+        # The session row is closed out in every exit path — normal finish,
+        # ESC, or an exception — so no session is ever left as 'running'.
+        db.finish_session(session_id, status, datetime.now().isoformat())
+        logger.info(
+            "Oturum %d kapatıldı: durum=%s, kaydedilen deneme=%d, seed=%d",
+            session_id, status, n_completed, seed,
+        )
         win.close()

@@ -1,6 +1,6 @@
 """Trial data model for experiment execution."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -15,9 +15,12 @@ class TrialSpec:
     audio_syllable: str
     noise_condition: str  # "clean", "white", "speech_shaped", "cocktail"
     snr_db: float | None
-    correct_answer: str  # always the audio syllable
+    # The audio syllable.  Only meaningful for congruent sections; for McGurk
+    # trials the stimulus is incongruent by design and there is no correct
+    # answer.  For dichotic trials this holds "<left>|<right>".
+    correct_answer: str
     speaker_name: str
-    ear_side: str | None = None  # for dichotic: "left" or "right" (which ear has correct answer)
+    ear_side: str | None = None  # for dichotic: which ear the response matched
 
 
 @dataclass
@@ -26,7 +29,7 @@ class TrialResult:
 
     spec: TrialSpec
     participant_response: str
-    is_correct: bool
+    is_correct: bool | None  # None when the section has no correct answer
     rt_from_video_end_ms: float
     rt_from_options_shown_ms: float
     trial_order: int

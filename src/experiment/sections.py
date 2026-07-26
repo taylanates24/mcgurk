@@ -2,8 +2,8 @@
 
 import logging
 import random
+from dataclasses import replace
 from itertools import permutations
-from pathlib import Path
 from typing import Any
 
 from ..utils.assets import (
@@ -160,6 +160,7 @@ def build_trial_list(
     speaker: Speaker,
     selected_sections: list[str],
     config: dict[str, Any],
+    seed: int,
     noisy_sections: list[str] | None = None,
 ) -> list[TrialSpec]:
     """Build the complete trial list for an experiment session.
@@ -168,6 +169,8 @@ def build_trial_list(
         speaker: Selected speaker.
         selected_sections: Sections to run in clean mode.
         config: Experiment config dict.
+        seed: RNG seed for the trial shuffle.  The same seed always yields
+            the same order, which is what makes a session reproducible.
         noisy_sections: Subset of sections that also run in noisy mode.
     """
     syllables = config.get("syllables", ["ba", "da", "ga"])
@@ -197,7 +200,16 @@ def build_trial_list(
     # Collect all sections to run (union of clean + noisy)
     all_sections = list(dict.fromkeys(list(selected_sections) + list(noisy_set)))
 
-    all_trials = []
+    def _repeat(specs: list[TrialSpec]) -> list[TrialSpec]:
+        """Return *specs* repeated ``repetitions`` times as distinct objects.
+
+        ``specs * repetitions`` would repeat the *same* objects, and TrialSpec
+        is mutable (the engine writes ``ear_side`` back into it), so repeated
+        trials would overwrite each other's data.
+        """
+        return [replace(spec) for _ in range(repetitions) for spec in specs]
+
+    all_trials: list[TrialSpec] = []
     for section in all_sections:
         gen = generators.get(section)
         if not gen:
@@ -205,12 +217,14 @@ def build_trial_list(
 
         # Clean trials (run if section is in selected_sections)
         if section in selected_sections:
-            all_trials.extend(gen("clean", None) * repetitions)
+            all_trials.extend(_repeat(gen("clean", None)))
 
         # Noisy trials — one set per noise type (white, cocktail, …)
         if section in noisy_set:
             for nt in noise_types:
-                all_trials.extend(gen(nt, snr_db) * repetitions)
+                all_trials.extend(_repeat(gen(nt, snr_db)))
 
-    random.shuffle(all_trials)
+    # Seeded RNG — a global random.shuffle() would make the trial order
+    # impossible to reconstruct from the stored session record.
+    random.Random(seed).shuffle(all_trials)
     return all_trials

@@ -23,31 +23,69 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from psychopy import visual, core, sound
+from psychopy import core, sound, visual
+
+logger = logging.getLogger(__name__)
 
 
 def _get_ffmpeg() -> str:
     """Return path to ffmpeg binary.
 
     Prefers the system ffmpeg (PATH), falls back to the binary bundled with
-    imageio-ffmpeg (installed as a PsychoPy dependency).
+    imageio-ffmpeg (a pinned dependency in requirements.txt).
     """
-    import shutil as _shutil
-    system_ffmpeg = _shutil.which("ffmpeg")
+    system_ffmpeg = shutil.which("ffmpeg")
     if system_ffmpeg:
         return system_ffmpeg
     try:
         import imageio_ffmpeg
-        return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception:
-        pass
-    raise RuntimeError(
-        "ffmpeg bulunamadı. Lütfen ffmpeg'in PATH'te olduğundan emin olun."
-    )
+    except ImportError as exc:
+        raise RuntimeError(
+            "ffmpeg bulunamadı ve imageio-ffmpeg kurulu değil.\n"
+            "Ya ffmpeg'i PATH'e ekleyin ya da 'pip install -r requirements.txt' çalıştırın."
+        ) from exc
+    ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+    logger.debug("Sistem ffmpeg'i yok, imageio-ffmpeg kullanılıyor: %s", ffmpeg_path)
+    return ffmpeg_path
 
-logger = logging.getLogger(__name__)
+
+def require_ptb_backend() -> None:
+    """Fail loudly unless the audio backend in use is Psychtoolbox.
+
+    Only the ptb backend can schedule playback against a future flip time
+    (``Sound.play(when=...)``).  Any other backend degrades A/V sync to
+    "whenever the call happens to return", and the resulting offset would be
+    invisible in the recorded data — see the method document §5.3.
+
+    API note: PsychoPy 2026.1 moved backend selection from
+    ``prefs.hardware['audioLib']`` / ``sound.audioLib`` to the class attribute
+    ``sound.Sound.backend``.  ``sound.audioLib`` no longer exists, so testing
+    that attribute would fail here on every run.
+    """
+    backend_name = getattr(sound.Sound, "backend", None)
+    if backend_name != "ptb":
+        raise RuntimeError(
+            f"Ses backend'i 'ptb' değil (seçili: {backend_name!r}).\n"
+            "Deney bu backend ile çalıştırılamaz (A/V senkronu garanti edilemez)."
+        )
+
+    # The name being right does not mean the module imports: psychtoolbox is a
+    # separate wheel and can be missing or broken.
+    try:
+        sound.Sound.getBackends()["ptb"].load()
+    except (KeyError, ImportError) as exc:
+        raise RuntimeError(
+            "Psychtoolbox ses backend'i yüklenemedi.\n"
+            "'pip install -r requirements.txt' ile kurun; kuruluysa ses "
+            "aygıtının başka bir uygulama tarafından kilitlenmediğinden emin "
+            "olun.\n"
+            f"Ayrıntı: {exc}"
+        ) from exc
+
+    logger.info("Ses backend'i doğrulandı: ptb")
+
 
 # Suppress the sdl2 A/V sync warning — we no longer use sdl2 for audio,
 # but MovieStim still logs the warning during initialisation.
@@ -61,7 +99,7 @@ _audio_cache: dict[str, Path] = {}
 _silent_video_cache: dict[str, Path] = {}
 _noise_wav_cache: dict[str, Path] = {}
 _mixed_wav_cache: dict[str, Path] = {}
-_temp_dir: Optional[Path] = None
+_temp_dir: Path | None = None
 
 _SR = 48000
 
@@ -120,7 +158,7 @@ def extract_audio(video_path: Path) -> Path:
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(
             f"ffmpeg ses çıkarma hatası ({video_path.name}): {exc.stderr.decode()}"
-        )
+        ) from exc
 
     _audio_cache[key] = wav_path
     return wav_path
@@ -152,7 +190,7 @@ def _get_noise_wav(noise_file: Path) -> Path:
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(
             f"ffmpeg gürültü dönüştürme hatası ({noise_file.name}): {exc.stderr.decode()}"
-        )
+        ) from exc
 
     _noise_wav_cache[key] = out_path
     return out_path
@@ -245,7 +283,7 @@ def extract_silent_video(video_path: Path) -> Path:
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(
             f"ffmpeg sessiz video hatası ({video_path.name}): {exc.stderr.decode()}"
-        )
+        ) from exc
 
     _silent_video_cache[key] = out_path
     return out_path
@@ -277,9 +315,9 @@ def load_video_stimulus(
     win: visual.Window,
     video_path: Path,
     with_audio: bool = True,
-    noise_file: Optional[Path] = None,
-    snr_db: Optional[float] = None,
-) -> tuple[visual.MovieStim, Optional[sound.Sound]]:
+    noise_file: Path | None = None,
+    snr_db: float | None = None,
+) -> tuple[visual.MovieStim, sound.Sound | None]:
     """Load a video stimulus and (optionally) its audio track.
 
     The video is **always** loaded with embedded audio disabled.  When
@@ -330,7 +368,7 @@ def present_video(
     win: visual.Window,
     movie: visual.MovieStim,
     clock: core.Clock,
-    audio: Optional[sound.Sound] = None,
+    audio: sound.Sound | None = None,
 ) -> float:
     """Present a video stimulus and return the timestamp when it ends.
 
@@ -346,12 +384,11 @@ def present_video(
     movie.setVolume(0)
 
     # Schedule audio to start on the exact next flip so video frame 1 and
-    # audio onset land on the same display refresh (ptb backend required).
+    # audio onset land on the same display refresh.  No fallback: if this
+    # cannot be scheduled the trial timing is invalid, so fail loudly rather
+    # than collect unusable data.
     if audio is not None:
-        try:
-            audio.play(when=win.getFutureFlipTime(clock="ptb"))
-        except Exception:
-            audio.play()  # fallback: non-ptb backend
+        audio.play(when=win.getFutureFlipTime(clock="ptb"))
 
     movie.play()
 
@@ -359,6 +396,7 @@ def present_video(
         movie.draw()
         win.flip()
 
+    movie.stop()
     win.flip()  # clear screen after video
     video_end_time = clock.getTime()
 

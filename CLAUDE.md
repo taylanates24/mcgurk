@@ -97,7 +97,7 @@ mcgurk/
 - Speaker folders follow pattern: `{gender}_speaker_{n}` (e.g., `female_speaker_1`, `male_speaker_1`)
 - **Auto-discovery**: speakers are detected at runtime by scanning `assets/` — adding a new folder like `female_speaker_2/` with the correct video files is enough, no code or config change needed
 - Syllables (Phase 1): `ba`, `da`, `ga`
-- Audio is embedded in video — no separate sync needed
+- Audio is embedded in the source video, but is **never played from it** — it is extracted to a separate wav and scheduled independently (see A/V sync strategy below)
 - `Zone.Identifier` files (Windows artifacts) should be gitignored
 - Noisy variants: `assets/noisy/{speaker_folder}/Vis-{visual}_Aud-{audio}_{noise_type}_{snr}dB.mp4`
 
@@ -115,20 +115,20 @@ Key configurable values:
 
 ## Data Model
 ### Participants Table
-- participant_id, name, age, gender, group (SSD-right, SSD-left, control), session_date, notes
+- participant_id, **participant_code** (anonymous — never a name, KVKK), age, gender, group (SSD-right, SSD-left, control), created_at, notes
 
 ### Trials Table
-- trial_id, participant_id, session_id, section_type, speaker, visual_syllable, audio_syllable, noise_condition, snr_db, participant_response, correct_answer, is_correct, rt_from_video_end_ms, rt_from_options_shown_ms, ear_side (for dichotic), trial_order, timestamp
+- trial_id, participant_id, session_id, section_type, speaker, visual_syllable, audio_syllable, noise_condition, snr_db, participant_response, correct_answer, is_correct (**NULL for mcgurk/dichotic**), rt_from_video_end_ms, rt_from_options_shown_ms, ear_side (for dichotic), trial_order, timestamp
 
 ### Sessions Table
-- session_id, participant_id, sections_run, speaker, started_at, completed_at, admin_notes
+- session_id, participant_id, sections_run, speaker, **seed**, **status** (running/completed/aborted), started_at, completed_at, admin_notes
 
 ## Key Design Decisions
 1. **Experiment accuracy > UI aesthetics** — PsychoPy chosen for psychophysics-grade timing
 2. **Two separate apps**: PsychoPy for experiment (main.py), PySide6 for admin (admin.py) — avoids event loop conflicts
-3. **Correct answer = audio** (not visual) for McGurk and AV sections
+3. **Incongruent trials have no correct answer.** For `mcgurk` and `dichotic`, `is_correct` is stored as NULL and excluded from accuracy figures. Scoring an incongruent trial against the audio syllable is a category error: Vis-/ga/ + Aud-/ba/ → "DA" is classic fusion, not a mistake. Only the congruent sections (`av_congruent`, `audio_only`, `visual_only`) are scored.
 4. **Reaction time**: both `rt_from_video_end` and `rt_from_options_shown` are always recorded; config selects primary
-5. **Video randomization**: trials within each section are randomized per participant
+5. **Video randomization**: trials are shuffled with a **seeded** RNG and the seed is stored on the session, so any session's trial order can be reproduced
 6. **Noisy stimuli**: pre-generated and saved to `assets/noisy/` (not mixed at runtime) to avoid latency
 7. **Speaker thumbnails**: extracted from first frame of a congruent video for speaker selection
 8. **Phase 2 ready**: word-level stimuli support planned in asset/config structure but not implemented in Phase 1
@@ -145,12 +145,13 @@ Key configurable values:
 - Language: Turkish UI, English code/comments
 
 ## Known Issues & Notes
-- **A/V sync stratejisi**: `MovieStim` (ffpyplayer) ses çalmak için SDL2 kullanır ve bu Windows'ta belirgin gecikme yaratır. Çözüm olarak `MovieStim` her zaman `noAudio=True` ile oluşturulur; ses ffmpeg ile ayrı wav dosyasına çıkarılıp PsychoPy `sound.Sound` (ptb backend) üzerinden çalınır. Bu sayede SDL2 bypass edilir ve sub-ms A/V sync sağlanır. Çıkarılan wav'lar process boyunca cache'lenir, çıkışta temizlenir.
+- **A/V sync stratejisi**: `MovieStim` (ffpyplayer) ses çalmak için SDL2 kullanır ve bu Windows'ta belirgin gecikme yaratır. Çözüm olarak videodan ffmpeg ile sesi tamamen sökülmüş bir kopya üretilir ve `MovieStim`'e o verilir (`noAudio=True` ve `setVolume(0)` bazı ffpyplayer derlemelerinde yok sayılıyor); ses ayrı wav olarak çıkarılıp `sound.Sound` (ptb backend) ile `play(when=win.getFutureFlipTime(clock="ptb"))` üzerinden flip saatine karşı zamanlanır. Çıkarılan wav'lar ve sessiz videolar process boyunca cache'lenir, çıkışta temizlenir.
+- **Ses backend API'si (PsychoPy 2026.1)**: Backend seçimi `prefs.hardware['audioLib']`'ten `sound.Sound.backend` sınıf niteliğine taşındı; `sound.audioLib` **artık yok**. `src/experiment/stimuli.py:require_ptb_backend()` doğru niteliği kontrol eder, modülün gerçekten yüklendiğini doğrular ve ptb değilse programı durdurur — sessiz geri düşüş yasak.
 - **Windows audio backend**: `main.py`'de `SDL_AUDIODRIVER=wasapi` ortam değişkeni ayarlanır (MovieStim init sırasında SDL2'ye hâlâ dokunulduğu için). Video dosyaları fixation öncesinde yüklenerek dosya I/O gecikmesi playback'ten ayrıştırılır.
 - **WSL2 OpenGL**: WSL2'de `LIBGL_ALWAYS_SOFTWARE=1` gerekir. Gerçek deneyde native Windows kullanılacak.
 - **PsychoPy gui.Dlg vs DlgFromDict**: `gui.Dlg` field parsing'de sorun çıkarıyor, `gui.DlgFromDict` kullanılıyor.
 - **Dichotic Listening**: Runtime'da congruent videolardan ffmpeg ile ses çıkarılıp stereo (L/R) numpy array olarak PsychoPy sound.Sound ile çalınıyor. ffmpeg sistemde kurulu olmalı.
-- **Noisy stimuli generation**: `scripts/generate_noisy_stimuli.py` henüz yazılmadı.
+- **Noisy stimuli**: `scripts/generate_noisy_stimuli.py` mevcut, ancak çalışma anındaki karıştırma yolu (`stimuli.mix_noise_into_audio`) kullanılıyor. SNR hesabı şu an tüm dosya RMS'i üzerinden yapılıyor; konuşma-aktif RMS'e geçirilmesi Adım 2'de.
 - **Admin panel**: `admin.py` PySide6 ile ayrı process olarak çalışır, PsychoPy ile aynı process'te çalıştırılamaz.
 
 ## Git Workflow
@@ -160,7 +161,11 @@ Key configurable values:
 
 ## Don'ts
 - Don't hardcode syllables, speaker names, or trial counts — everything from config
-- Don't mix audio at runtime for noisy conditions — use pre-generated files
+- Don't collect or store participant names — anonymous code only (KVKK)
+- Don't score incongruent trials as right/wrong — store the raw response, derive the category
+- Don't add a silent fallback for the audio backend — if ptb is unavailable, stop
+- Don't call `random.shuffle` unseeded — the trial order must be reproducible from the stored seed
+- Don't mix audio at runtime for noisy conditions — use pre-generated files. *(Current code still mixes at runtime with a cache; moving this offline is Adım 2.)*
 - Don't mix PsychoPy and PySide6 in the same process — separate entry points
 - Don't store experiment data in git (data/ is gitignored)
 - Don't use PsychoPy Builder GUI — all code is hand-written Coder style

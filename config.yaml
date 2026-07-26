@@ -1,5 +1,10 @@
 # McGurk Experiment Configuration
 
+# RNG seed for trial randomisation.
+# null  -> a fresh seed is drawn each session and stored in sessions.seed
+# <int> -> reproduces the trial order of the session that used that seed
+seed: null
+
 # Syllables used in the experiment (Phase 1: phonemes only)
 syllables:
   - ba
@@ -11,8 +16,9 @@ fixation_duration_ms: 3000
 
 # Noise settings
 noise:
-  type: speech_shaped  # white | speech_shaped | cocktail
-  snr_db: 5            # signal-to-noise ratio in dB
+  type: white  # white | speech_shaped | cocktail
+               # dosya: assets/noise/{type}_noise.{mp3|wav|...}
+  snr_db: 5   # signal-to-noise ratio in dB
 
 # Reaction time measurement mode (both are always recorded)
 # "from_video_end" or "from_options_shown"

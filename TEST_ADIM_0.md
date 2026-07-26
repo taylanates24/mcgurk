@@ -1,0 +1,361 @@
+# Adım 0 Manuel Test
+
+Bu adım bir **baseline düzeltmesidir**: mevcut kodun hataları giderildi,
+mimari değiştirilmedi. Testlerin amacı düzeltilen davranışların gerçekten
+düzeldiğini ve hiçbir şeyin bozulmadığını doğrulamaktır.
+
+Tahmini süre: ekransız testler ~5 dakika, ekran/ses testleri ~20 dakika.
+
+## Ön koşullar
+
+- [ ] `conda activate mcgurk` (Python 3.10)
+- [ ] `pip install -r requirements.txt -r requirements-dev.txt` temiz tamamlandı
+- [ ] `assets/` yerinde: `female_speaker_1/`, `male_speaker_1/`,
+      `dichotic/`, `noise/`
+- [ ] Kulaklık takılı ve ses çıkışı çalışıyor
+- [ ] Depo kökündesiniz (`C:\Users\tayla\projects\mcgurk`)
+
+---
+
+## Test 1: Otomatik testler
+
+**Komut:**
+```bash
+pytest
+```
+
+**Beklenen çıktı:** son satır
+```
+43 passed
+```
+
+**Kontrol edilecek:** Hiç `FAILED` veya `ERROR` satırı olmamalı.
+
+**Başarısızsa:** Çıktıyı olduğu gibi paylaşın; hangi testin düştüğü hangi
+düzeltmenin bozulduğunu gösterir.
+
+---
+
+## Test 2: Lint ve tip denetimi
+
+**Komut:**
+```bash
+ruff check .
+```
+
+**Beklenen çıktı:**
+```
+All checks passed!
+```
+
+**Komut:**
+```bash
+mypy
+```
+
+**Beklenen çıktı:**
+```
+Success: no issues found in 27 source files
+```
+
+**Kontrol edilecek:** İkisi de temiz olmalı.
+
+---
+
+## Test 3: Yardım çıktısı doğru parser'dan geliyor
+
+PsychoPy kendi argüman ayrıştırıcısını çalıştırır ve daha önce `--help`'i
+ele geçiriyordu.
+
+**Komut:**
+```bash
+python main.py --help
+```
+
+**Beklenen çıktı:**
+```
+usage: mcgurk [-h] [--config CONFIG] [--log-level {DEBUG,INFO,WARNING,ERROR}]
+
+McGurk deney yürütücüsü
+```
+
+**Kontrol edilecek:** Başlık `mcgurk` olmalı. `usage: PsychoPy Preferences`
+görüyorsanız düzeltme çalışmamıştır.
+
+**Başarısızsa:** Bildirin — argüman ayrıştırma PsychoPy import'undan önce
+yapılmalı.
+
+---
+
+## Test 4: Eski veritabanı reddediliyor (KVKK)
+
+Ad-soyad sütunu içeren eski bir DB sessizce kullanılmamalı.
+
+**Komut:**
+```bash
+python -c "import sqlite3; c=sqlite3.connect('data/eski_test.db'); c.execute('CREATE TABLE participants (participant_id INTEGER PRIMARY KEY, name TEXT, age INTEGER)'); c.commit(); c.close(); print('sahte eski DB olusturuldu')"
+```
+
+**Komut:**
+```bash
+python main.py --config config.yaml
+```
+> Not: bu test için `config.yaml` içindeki `database_path` değerini geçici
+> olarak `data/eski_test.db` yapın.
+
+**Beklenen çıktı:**
+```
+ERROR    'data/eski_test.db' eski şemayı kullanıyor (participants.name).
+Bu şema katılımcı adı içerdiği için artık desteklenmiyor (KVKK).
+Dosyayı backups/ altına yedekleyip silin, sonra tekrar çalıştırın.
+```
+
+**Kontrol edilecek:** Program hata verip **çıkmalı**, hiçbir pencere
+açmamalı. Çıkış kodu 1 olmalı.
+
+**Temizlik:** `config.yaml`'ı eski hâline getirin, `data/eski_test.db` dosyasını
+silin.
+
+---
+
+## Test 5: Katılımcı kodu doğrulaması
+
+**Komut:**
+```bash
+python main.py
+```
+
+Açılan **Katılımcı Bilgileri** penceresinde sırayla deneyin:
+
+| Girdi | Beklenen |
+|---|---|
+| Kodu boş bırakıp OK | "Katılımcı kodu boş olamaz" hatası, form tekrar açılır |
+| Yaş = `15` | "Yaş 18 ile 60 arasında olmalıdır" hatası, form tekrar açılır |
+| Kod = `ssd-r-007`, Yaş = `34` | Kabul edilir, admin ayarları penceresine geçer |
+
+**Kontrol edilecek:**
+- Formda **Ad Soyad alanı olmamalı** — yalnızca Katılımcı Kodu.
+- Hatalı girişte program çökmemeli, formu yeniden göstermeli.
+- İptal (X) edilince temiz çıkmalı: `Deney iptal edildi (katılımcı girişi).`
+
+**Başarısızsa:** Hangi girdide ne olduğunu not edin.
+
+---
+
+## Ekran/ses gerektiren testler
+
+Bunlar tam ekran PsychoPy penceresi açar ve ses çalar. Sessiz bir odada,
+kulaklıkla yapın.
+
+### Test 6: Ses backend'i gerçekten ptb
+
+**Komut:**
+```bash
+python -c "import sys; sys.path.insert(0,'.'); from src.experiment.stimuli import require_ptb_backend; require_ptb_backend(); print('BACKEND OK')"
+```
+
+**Beklenen çıktı:**
+```
+INFO     Ses backend'i doğrulandı: ptb
+BACKEND OK
+```
+
+**Kontrol edilecek:** `BACKEND OK` yazmalı. Hata alıyorsanız deney
+başlatılamaz — bu kasıtlıdır, sessiz geri düşüş yasak.
+
+---
+
+### Test 7: Tam oturum — McGurk + AV uyumlu
+
+**Komut:**
+```bash
+python main.py
+```
+
+Ayarlar:
+- Katılımcı Kodu: `TEST-001`, Yaş: `30`
+- Konuşmacı: herhangi biri
+- Bölümler: **McGurk (Uyumsuz)** ve **AV Uyumlu** işaretli
+- Gürültülü koşul: işaretsiz
+
+**Kontrol edilecek — sırayla:**
+
+1. **Talimat ekranı** toplam deneme sayısını gösteriyor (9 olmalı: 6 uyumsuz +
+   3 uyumlu).
+2. Her denemede sabitleme haçı → video → yanıt ekranı sırası izleniyor.
+3. **Video oynarken ses ile görüntü senkron** — dudak hareketi ile sesin
+   birbirinden kaymadığını dinleyin.
+4. **Yanıt ekranında video görünmüyor ve ses duyulmuyor.** (Eskiden video
+   yanıt penceresine taşabiliyordu.)
+5. Yanıt ekranının sağ altında `[ESC] Testi Bitir` ipucu var.
+6. Tüm denemeleri tamamlayın.
+7. **Bitiş ekranı yalnızca deneme sayısını gösteriyor — başarı yüzdesi
+   GÖSTERMİYOR.** Bu kasıtlıdır: algı görevinde performans geri bildirimi
+   talep karakteristiği yaratır.
+
+**Başarısızsa:** Hangi maddede takıldığını ve ekranda ne gördüğünüzü yazın.
+
+---
+
+### Test 8: ESC ile kesme ve veri korunması
+
+**Komut:**
+```bash
+python main.py
+```
+
+Katılımcı Kodu `TEST-002`, McGurk bölümü seçili. **3–4 deneme yanıtlayın,
+sonra yanıt ekranında `ESC`'e basın.**
+
+**Kontrol edilecek:**
+- Program çökmeden kapanıyor.
+- Konsolda `Oturum katılımcı/operatör tarafından kesildi (deneme N).` satırı var.
+- Bitiş ekranı **gösterilmiyor**.
+
+Sonra durumu doğrulayın:
+
+**Komut:**
+```bash
+python -c "import sqlite3; c=sqlite3.connect('data/mcgurk.db'); c.row_factory=sqlite3.Row; [print(dict(r)) for r in c.execute('SELECT session_id, status, seed, completed_at FROM sessions ORDER BY session_id DESC LIMIT 2')]"
+```
+
+**Beklenen çıktı:** En son oturum satırında
+```
+'status': 'aborted'
+```
+ve `seed` alanı dolu, `completed_at` dolu.
+
+**Kontrol edilecek:**
+- Kesilen oturum `aborted`, tamamlanan oturum `completed`.
+- Yanıtladığınız denemeler veritabanında duruyor:
+
+**Komut:**
+```bash
+python -c "import sqlite3; c=sqlite3.connect('data/mcgurk.db'); print('kaydedilen deneme:', c.execute('SELECT COUNT(*) FROM trials WHERE session_id=(SELECT MAX(session_id) FROM sessions)').fetchone()[0])"
+```
+
+Sayı, ESC'ye basmadan önce yanıtladığınız deneme sayısıyla eşleşmeli.
+
+---
+
+### Test 9: McGurk denemelerinde doğru/yanlış yok
+
+**Komut:**
+```bash
+python -c "import sqlite3; c=sqlite3.connect('data/mcgurk.db'); c.row_factory=sqlite3.Row; [print(dict(r)) for r in c.execute('SELECT section_type, COUNT(*) n, SUM(is_correct IS NULL) nulls FROM trials GROUP BY section_type')]"
+```
+
+**Beklenen çıktı:** `mcgurk` ve `dichotic` satırlarında `n` ile `nulls` **eşit**;
+`av_congruent`, `audio_only`, `visual_only` satırlarında `nulls` = 0.
+
+**Kontrol edilecek:** McGurk denemelerinin hiçbirinde 0/1 doğruluk değeri
+olmamalı.
+
+---
+
+### Test 10: Anonimlik ve seed kaydı
+
+**Komut:**
+```bash
+python -c "import sqlite3; c=sqlite3.connect('data/mcgurk.db'); print('participants sutunlari:', [r[1] for r in c.execute('PRAGMA table_info(participants)')])"
+```
+
+**Beklenen çıktı:**
+```
+participants sutunlari: ['participant_id', 'participant_code', 'age', 'gender', 'group', 'notes', 'created_at']
+```
+
+**Kontrol edilecek:** `name` sütunu **olmamalı**.
+
+---
+
+### Test 11: Gürültülü koşul ve eksik dosya davranışı
+
+**Komut:**
+```bash
+python main.py
+```
+
+Katılımcı `TEST-003`, McGurk seçili, **"Gürültülü koşul ekle" işaretli**, açılan
+ikinci pencerede McGurk işaretli.
+
+**Kontrol edilecek:**
+- Deneme sayısı üçe katlanıyor (temiz + white + cocktail).
+- Gürültülü denemelerde gürültü **duyuluyor**.
+
+Sonra eksik dosya davranışını sınayın: `config.yaml` içinde
+`noise.type` değerini `speech_shaped` yapın (bu dosya `assets/noise/` içinde
+yok) ve `assets/noise/` klasörünü geçici olarak başka bir yere taşıyın.
+
+**Beklenen:** Program **açık hata** vermeli:
+```
+ERROR    Gürültü dosyası bulunamadı: ...
+Gürültülü koşul bu dosya olmadan sunulamaz.
+```
+
+**Kontrol edilecek:** Gürültülü koşul **sessizce temiz koşula dönüşmemeli**.
+Eskiden yalnızca bir uyarı verip devam ediyordu; veri geçerli görünüp yanlış
+oluyordu.
+
+**Temizlik:** `assets/noise/` klasörünü geri koyun, `config.yaml`'ı eski hâline
+getirin.
+
+---
+
+### Test 12: Admin paneli
+
+**Komut:**
+```bash
+python admin.py
+```
+
+**Kontrol edilecek:**
+- **Katılımcılar** sekmesinde ikinci sütun başlığı **"Katılımcı Kodu"**
+  (eskiden "Ad Soyad"), değerler `TEST-001` gibi.
+- **Denemeler** sekmesinde özet satırı üç sayı gösteriyor:
+  `Toplam: N | Puanlanabilir: M | Doğru: K (%)`.
+- McGurk satırlarında "Doğru?" sütunu **`—`** (tire), `+`/`-` değil.
+- Katılımcı filtresini seçip **Yenile**'ye basın: filtre **sıfırlanmamalı**.
+- "Denemeleri CSV Olarak Dışa Aktar" çalışıyor ve çıkan dosyada `name` değil
+  `participant_code` sütunu var.
+
+---
+
+## Test verilerinin temizlenmesi
+
+Manuel testler bittiğinde test kayıtlarını silin:
+
+```bash
+python -c "import pathlib; p=pathlib.Path('data/mcgurk.db'); p.unlink(missing_ok=True); print('test DB silindi')"
+```
+
+---
+
+## Kabul kriterleri
+
+- [ ] `pytest` yeşil (43 test)
+- [ ] `ruff check .` ve `mypy` temiz
+- [ ] Katılımcı formunda ad-soyad alanı yok; boş/geçersiz girdi reddediliyor
+- [ ] `participants` tablosunda `name` sütunu yok
+- [ ] Eski şemalı DB açık hatayla reddediliyor
+- [ ] Tam oturum baştan sona çalışıyor, A/V senkron duyulabilir şekilde doğru
+- [ ] Yanıt ekranında video görünmüyor, ses duyulmuyor
+- [ ] Bitiş ekranı başarı yüzdesi göstermiyor
+- [ ] ESC her aşamada çalışıyor; oturum `aborted` işaretleniyor, veri korunuyor
+- [ ] `mcgurk` ve `dichotic` denemelerinde `is_correct` NULL
+- [ ] Oturum kaydında `seed` dolu
+- [ ] Gürültü dosyası eksikken program açık hata veriyor
+- [ ] Admin panelinde kod gösteriliyor, McGurk satırları `—` ile işaretli
+- [ ] `python main.py --help` bizim yardım metnimizi gösteriyor
+
+## Bu adımda test EDİLMEYENLER
+
+Aşağıdakiler bilinçli olarak kapsam dışıdır ve `README.md` → *Bilinen sınırlar*
+bölümünde listelenmiştir:
+
+- Mutlak A/V gecikmesi (`system_av_offset_ms`) — fotodiyot ölçümü, tüm kod
+  bittikten sonra (`docs/01_av_gecikme_olcumu.md`)
+- Ses seviyesi kalibrasyonu (`docs/02_kalibrasyon.md`)
+- Düşen kare / gerçekleşen onset kaydı — Adım 3
+- SOA manipülasyonu ve uzamsal lateralizasyon — Adım 3
+- Uyaran kalitesi (fps, örnekleme hızı, patlama hizalaması) — Adım 2

@@ -1,6 +1,22 @@
-psychopy>=2024.1.0,<2026.2
-pyyaml>=6.0
-numpy>=1.24
-scipy>=1.10
-PySide6>=6.6
-pandas>=2.0
+# Exact pins.  A psychophysics study runs for months across several machines;
+# a silent minor-version bump in PsychoPy or its audio/video stack can shift
+# timing without producing any visible error.  The versions below are the ones
+# verified on the development machine (Python 3.10, Windows 11) — see README.md.
+
+# --- Experiment engine ---
+psychopy==2026.1.2
+psychtoolbox==3.0.19.14     # ptb audio backend — required, no fallback allowed
+sounddevice==0.5.5          # audio device enumeration in the admin dialog
+ffpyplayer==4.5.3           # MovieStim video decoding
+pyglet==1.4.11              # PsychoPy window backend
+pillow==11.3.0              # image handling
+imageio-ffmpeg==0.6.0       # bundled ffmpeg when none is on PATH
+
+# --- Config & data ---
+pyyaml==6.0.3
+numpy==2.2.6
+scipy==1.14.1
+pandas==2.3.3
+
+# --- Admin panel ---
+PySide6==6.11.0

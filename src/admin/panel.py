@@ -1,28 +1,24 @@
 """Admin panel for browsing experiment results (PySide6-based)."""
 
-import sys
-from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
+    QComboBox,
+    QFileDialog,
     QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMainWindow,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
-    QPushButton,
-    QLabel,
-    QFileDialog,
-    QHeaderView,
-    QComboBox,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt
 
-from ..config import load_config
 from ..data.database import Database
-from ..data.export import export_trials_csv, export_participants_csv
+from ..data.export import export_participants_csv, export_trials_csv
 
 
 class AdminPanel(QMainWindow):
@@ -76,7 +72,7 @@ class AdminPanel(QMainWindow):
         self.participants_table = QTableWidget()
         self.participants_table.setColumnCount(7)
         self.participants_table.setHorizontalHeaderLabels(
-            ["ID", "Ad Soyad", "Yaş", "Cinsiyet", "Grup", "Tarih", "Notlar"]
+            ["ID", "Katılımcı Kodu", "Yaş", "Cinsiyet", "Grup", "Tarih", "Notlar"]
         )
         self.participants_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch
@@ -140,21 +136,25 @@ class AdminPanel(QMainWindow):
         participants = self.db.get_all_participants()
         self.participants_table.setRowCount(len(participants))
 
-        # Update filter combo
+        # Rebuild the filter combo, restoring the operator's current selection
+        # afterwards so pressing "Yenile" does not reset the view.
         current_filter = self.participant_filter.currentData()
         self.participant_filter.blockSignals(True)
         self.participant_filter.clear()
         self.participant_filter.addItem("Tümü", None)
         for p in participants:
             self.participant_filter.addItem(
-                f"{p['name']} (ID:{p['participant_id']})",
+                f"{p['participant_code']} (ID:{p['participant_id']})",
                 p["participant_id"],
             )
+        restored_index = self.participant_filter.findData(current_filter)
+        if restored_index != -1:
+            self.participant_filter.setCurrentIndex(restored_index)
         self.participant_filter.blockSignals(False)
 
         for row, p in enumerate(participants):
             self.participants_table.setItem(row, 0, QTableWidgetItem(str(p["participant_id"])))
-            self.participants_table.setItem(row, 1, QTableWidgetItem(p["name"]))
+            self.participants_table.setItem(row, 1, QTableWidgetItem(p["participant_code"]))
             self.participants_table.setItem(row, 2, QTableWidgetItem(str(p["age"])))
             self.participants_table.setItem(row, 3, QTableWidgetItem(p["gender"]))
             self.participants_table.setItem(row, 4, QTableWidgetItem(p["group"]))
@@ -173,18 +173,23 @@ class AdminPanel(QMainWindow):
         if section_filter is not None:
             trials = [t for t in trials if t["section_type"] == section_filter]
 
-        # Summary
+        # Summary.  Trials from sections without a correct answer (McGurk,
+        # dichotic) store NULL and are excluded from the accuracy figure —
+        # counting them as errors would misrepresent the data.
         total = len(trials)
-        correct = sum(1 for t in trials if t["is_correct"])
-        pct = (correct / total * 100) if total > 0 else 0
+        scored = [t for t in trials if t["is_correct"] is not None]
+        correct = sum(1 for t in scored if t["is_correct"])
+        pct = (correct / len(scored) * 100) if scored else 0
         self.summary_label.setText(
-            f"Toplam: {total} deneme  |  Doğru: {correct} ({pct:.1f}%)"
+            f"Toplam: {total} deneme  |  "
+            f"Puanlanabilir: {len(scored)}  |  "
+            f"Doğru: {correct} ({pct:.1f}%)"
         )
 
         self.trials_table.setRowCount(total)
         for row, t in enumerate(trials):
             self.trials_table.setItem(row, 0, QTableWidgetItem(str(t["trial_id"])))
-            self.trials_table.setItem(row, 1, QTableWidgetItem(t.get("participant_name", "")))
+            self.trials_table.setItem(row, 1, QTableWidgetItem(t.get("participant_code", "")))
             self.trials_table.setItem(row, 2, QTableWidgetItem(t["section_type"]))
             self.trials_table.setItem(row, 3, QTableWidgetItem(t["speaker"]))
             self.trials_table.setItem(row, 4, QTableWidgetItem(t["visual_syllable"]))
@@ -194,12 +199,20 @@ class AdminPanel(QMainWindow):
             self.trials_table.setItem(row, 8, QTableWidgetItem(t["participant_response"]))
             self.trials_table.setItem(row, 9, QTableWidgetItem(t["correct_answer"]))
 
-            correct_item = QTableWidgetItem("+" if t["is_correct"] else "-")
+            if t["is_correct"] is None:
+                correct_marker = "—"  # section has no correct answer
+            else:
+                correct_marker = "+" if t["is_correct"] else "-"
+            correct_item = QTableWidgetItem(correct_marker)
             correct_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.trials_table.setItem(row, 10, correct_item)
 
-            self.trials_table.setItem(row, 11, QTableWidgetItem(f"{t['rt_from_video_end_ms']:.1f}"))
-            self.trials_table.setItem(row, 12, QTableWidgetItem(f"{t['rt_from_options_shown_ms']:.1f}"))
+            self.trials_table.setItem(
+                row, 11, QTableWidgetItem(f"{t['rt_from_video_end_ms']:.1f}")
+            )
+            self.trials_table.setItem(
+                row, 12, QTableWidgetItem(f"{t['rt_from_options_shown_ms']:.1f}")
+            )
 
     def _export_trials(self):
         path, _ = QFileDialog.getSaveFileName(

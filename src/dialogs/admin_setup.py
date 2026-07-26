@@ -1,13 +1,13 @@
 """Admin setup dialog: speaker and section selection using PsychoPy GUI."""
 
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Any
 
 from psychopy import gui
 
 from ..config import get_active_sections
 from ..utils.assets import Speaker, discover_speakers, get_assets_dir
-
 
 # Sections that support noise (visual_only and dichotic are excluded)
 _NOISE_COMPATIBLE = {"mcgurk", "av_congruent", "audio_only"}
@@ -40,8 +40,8 @@ def show_admin_setup_dialog(config: dict) -> ExperimentSetup | None:
     speakers = discover_speakers(assets_dir)
 
     if not speakers:
-        info = {"Hata": f"'{assets_dir}' klasöründe konuşmacı bulunamadı!"}
-        gui.DlgFromDict(info, title="Hata")
+        error_info = {"Hata": f"'{assets_dir}' klasöründe konuşmacı bulunamadı!"}
+        gui.DlgFromDict(error_info, title="Hata")
         return None
 
     speaker_choices = [s.display_name for s in speakers]
@@ -65,7 +65,9 @@ def show_admin_setup_dialog(config: dict) -> ExperimentSetup | None:
     # ------------------------------------------------------------------
     # Dialog 1: speaker, audio device, sections, noise toggle
     # ------------------------------------------------------------------
-    info = OrderedDict()
+    # Mixed field types (choice lists, checkboxes) by design — DlgFromDict
+    # replaces each value with what the operator picked.
+    info: OrderedDict[str, Any] = OrderedDict()
     info["Konuşmacı"] = speaker_choices
     info["Ses Çıkış Cihazı"] = audio_device_choices
     for section_key in available_sections:
