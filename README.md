@@ -41,6 +41,17 @@ aralığını destekler; 3.12 ve üstünde pip bu sürümü bulamaz ve sessizce
 conda create -n mcgurk python=3.10
 ```
 
+`conda activate` bir shell fonksiyonudur ve kabuk başına bir kez
+başlatılmalıdır. Daha önce yapmadıysanız (PowerShell için; Git Bash'te
+`conda init bash`):
+
+```bash
+conda init powershell
+```
+
+**Ardından terminali kapatıp yeniden açın.** Bu adım atlanırsa `conda
+activate` hata vermeden hiçbir şey yapmaz ve kurulum base ortamına gider.
+
 ```bash
 conda activate mcgurk
 ```

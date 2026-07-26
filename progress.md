@@ -141,7 +141,13 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
     `conda activate mcgurk` onu bulamaz. Başlangıçta `anaconda3\envs\mcgurk`
     altında boş bir kabuk ortam da vardı ve ismi o kapıyordu; kullanıcı onu
     sildi (2026-07-26), ancak isim çözümlemesi hâlâ arama yoluna bağlı.
-    Kalıcı çözüm: `conda config --append envs_dirs C:\Users\tayla\miniconda3\envs`.
+    Kalıcı çözüm: `conda config --append envs_dirs C:\Users\tayla\miniconda3\envs`
+    (2026-07-26'da uygulandı, `.condarc` oluşturuldu).
+    İkinci engel: `conda init powershell` hiç çalıştırılmamıştı, bu yüzden
+    `conda activate` shell fonksiyonu yüklenmiyor ve komut **hata vermeden**
+    hiçbir şey yapmıyordu; `python` base'de kalıyordu. 2026-07-26'da çalıştırıldı,
+    profil `OneDrive\Belgeler\WindowsPowerShell\profile.ps1` olarak oluştu.
+    Etkili olması için terminalin yeniden açılması gerekir.
     Tam yolla aktivasyon her koşulda çalışır.
     Aktivasyon tutmazsa pip base ortamda (Python 3.13.9) çalışır ve
     `No matching distribution found for psychopy==2026.1.2` verir

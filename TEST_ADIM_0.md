@@ -18,16 +18,29 @@ görünür. Tek seferlik olarak arama yoluna ekleyin:
 conda config --append envs_dirs C:\Users\tayla\miniconda3\envs
 ```
 
-Sonra normal şekilde aktive edebilirsiniz:
+`conda activate` bir shell fonksiyonudur; kabuğunuz için bir kez
+başlatılmalıdır. VS Code'un PowerShell terminalinde:
+
+```bash
+conda init powershell
+```
+
+(Git Bash kullanıyorsanız `conda init bash`.) **Ardından terminali kapatıp
+yeniden açın** — profil yalnızca yeni oturumlarda yüklenir. Bu adım
+atlanırsa `conda activate mcgurk` hata vermeden hiçbir şey yapmaz ve
+`python` base ortamda (3.13) kalır.
+
+Sonra normal şekilde aktive edin:
 
 ```bash
 conda activate mcgurk
 ```
 
-Bunu yapmak istemezseniz tam yolla aktivasyon her koşulda çalışır:
+Aktivasyonla hiç uğraşmak istemezseniz komutları tam yolla da
+çalıştırabilirsiniz, örneğin `python` yerine:
 
 ```bash
-conda activate C:\Users\tayla\miniconda3\envs\mcgurk
+C:\Users\tayla\miniconda3\envs\mcgurk\python.exe -m pytest
 ```
 
 Doğrulayın — çıktıda `3.10.20`, bir PsychoPy sürümü ve `miniconda3` yolu
