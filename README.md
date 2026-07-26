@@ -379,6 +379,9 @@ Bunlar bilinçli olarak Adım 0 kapsamı dışında bırakıldı; her biri
   yapılırsa deneme sayısı hesabı açık hata verir (§F.2, Adım 5).
 - Dikotik ve GIN modülleri **yöntem dokümanında tanımlı değil** — config ve
   veritabanı yerleri açıldı, ancak protokole eklenmeden veri toplanmamalı.
+  Dikotik için taslak bölüm hazır: `docs/EK_DIKOTIK_DINLEME.docx` (yöntem
+  dokümanına 6.5 olarak eklenecek, danışman onayı bekliyor). GIN için henüz
+  taslak yok.
 
 **Ortam:**
 - `ffmpeg` PATH'te yoksa `imageio-ffmpeg` ile gelen ikili kullanılır. `ffprobe`

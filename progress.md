@@ -1,14 +1,14 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-26
-Aktif adım: 1 (TESTTE — kullanıcı manuel testleri bekleniyor)
+Aktif adım: 2 (Adım 1 tamamlandı)
 
 ## Durum tablosu
 
 | Adım | Başlık | Durum | Tarih | Commit |
 |---|---|---|---|---|
 | 0 | Baseline düzeltme | TAMAMLANDI | 2026-07-26 | `f45eeda`…`618ef1c` |
-| 1 | Proje iskeleti | TESTTE | | `0fb3d3f` |
+| 1 | Proje iskeleti | TAMAMLANDI | 2026-07-26 | `0fb3d3f`…`9dbedee` |
 | 2 | Uyaran hazırlama | BEKLİYOR | | |
 | 3 | A/V senkron çekirdeği | BEKLİYOR | | |
 | 4 | Modül 1: McGurk | BEKLİYOR | | |
@@ -203,11 +203,14 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
     araçları kurulu ffmpeg gerektirecek.
 
 ### Adım 1 — Proje iskeleti
-- **Durum:** TESTTE
-- **Tamamlanma:** — (otomatik testler yeşil: 209 test, ruff + mypy temiz;
-  `TEST_ADIM_1.md` kullanıcıda. TAMAMLANDI'ya çevrilmesi manuel testlerin —
-  özellikle push sonrası CI koşumunun — onayına bağlı.)
-- **Commit:** `0fb3d3f`
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-26. Otomatik testler yeşil (209 test, ruff + mypy
+  temiz), `TEST_ADIM_1.md` manuel testleri kullanıcı tarafından yürütüldü ve
+  geçti.
+- **Commit:**
+  - `0fb3d3f` — mcgurk/ paketi: config, veritabanı, yedekleme, loglama, CI
+  - `213b4ca` — progress kaydı
+  - `9dbedee` — oddball 300'e geri alındı (kullanıcı)
 
 - **Ne yapıldı:**
   - **Yeni paket `mcgurk/`**, `src/` yanına kuruldu (A0-1 kararı). Alt paketler:
@@ -288,11 +291,13 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
     ayrışamıyor. V-only hücreleri gürültü ve kulakla çaprazlanmıyor (§C Adım 5).
   - **Varsayılan deneme sayıları minimuma çekildi (kullanıcı, 2026-07-26).**
     §G'nin örnek değerleri 1167 deneme / ~99.5 dakika veriyordu; config artık
-    697 deneme / ~56.1 dakika ile geliyor. Her modülde ölçtüğü şeyi hâlâ
+    797 deneme / ~58.8 dakika ile geliyor. Her modülde ölçtüğü şeyi hâlâ
     verebilen en küçük sayı seçildi (gerekçeler config yorumlarında ve
     `TEST_ADIM_1.md` K1 tablosunda). Azaltılmayanlar: gürültü × kulak
-    çaprazlaması (SSD hipotezi), GIN (normlu klinik test — 4/6 eşik kuralı ve
-    normlarla karşılaştırılabilirlik bozulur), `practice_trials`.
+    çaprazlaması (SSD hipotezi), **oddball 300** (dikkat kontrol görevi —
+    zayıf kontrol, grup farkını dikkat farkından ayıramaz; kullanıcı kararı),
+    GIN (normlu klinik test — 4/6 eşik kuralı ve normlarla
+    karşılaştırılabilirlik bozulur), `practice_trials`.
 
 - **Bilinen sınırlar:**
   - Yeni paket henüz hiçbir deney çalıştırmıyor; `main.py` Adım 8'e kadar
@@ -461,22 +466,32 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
 
 ## Kullanıcıya bekleyen aksiyonlar
 
-- **Dikotik dinleme VE GIN görevlerinin yöntem dokümanına eklenmesi.** İkisi de
-  `946383_YONTEM (3).docx` içinde tanımlı değil. Kullanıcı dikotiğin
-  kullanılacağını (2026-07-26), ardından GIN'in de ekleneceğini bildirdi.
-  Danışmanla görüşülüp dokümana eklenmeli (ölçülen değişkenler, gerekçe, kaç
-  deneme, GIN için kulak seçimi kuralı) — aksi hâlde toplanan veri protokol
-  dışı kalır. **Adım 1'de kod tarafı hazırlandı, bu aksiyon hâlâ açık.**
+- **Dikotik dinleme — taslak bölüm hazır, danışman onayı bekliyor.**
+  `docs/EK_DIKOTIK_DINLEME.docx`, yöntem dokümanının 6.4'ünden sonra **6.5**
+  olarak eklenmek üzere yazıldı (2026-07-26): gerekçe, uyaranlar, tasarım
+  tablosu, yordam, ölçülen değişkenler (kulak avantajı indeksi), analiz,
+  yazılım karşılığı tablosu ve §7'ye eklenmesi önerilen değişken. Belgenin
+  sonunda danışmanın karara bağlaması gereken beş madde listelendi (deneme
+  sayısı, görevin SSD grubuna uygulanıp uygulanmayacağı, indeksin birincil mi
+  kalite kontrol ölçütü mü olduğu, yönerge biçimi, kovaryat kullanımı).
+  Kaynak numaraları mevcut kaynakçaya göre yeniden numaralandırılmalı.
+- **GIN görevinin yöntem dokümanına eklenmesi — hâlâ tamamen açık.**
+  `946383_YONTEM (3).docx` içinde tanımlı değil ve henüz taslak bölüm yazılmadı.
+  Dikotik için yazılan belgeyle aynı yapıda bir bölüm gerekiyor (gerekçe,
+  uyaranlar, boşluk süreleri, eşik tanımı, **kulak seçimi kuralı**, ölçülen
+  değişkenler). Kodda olup protokolde olmayan ölçüm etik kurul ve yayın
+  açısından sorun yaratır.
 - **Adım 1 manuel testleri** (`TEST_ADIM_1.md`): tasarım özeti, config kapısı
   ve push sonrası GitHub Actions.
 - **Yaş aralığı kısıtı (K4).** `participants.age` için `CHECK (18–60)` kondu.
   Prova/pilot bu aralık dışında biriyle yapılacaksa gevşetilmeli.
-- **§F.1 — deneme sayıları.** Config **minimumlarla** geliyor: 697 deneme /
-  ~56 dakika (§G örnek değerleri 1167 / ~99.5 dakika veriyordu). Bunlar karar
+- **§F.1 — deneme sayıları.** Config **minimumlarla** geliyor: 797 deneme /
+  ~58.8 dakika (§G örnek değerleri 1167 / ~99.5 dakika veriyordu). Bunlar karar
   değil, başlangıç noktası — danışman her sayıyı config'ten yükseltebilir.
   Ayrıntılı tablo ve gerekçeler `TEST_ADIM_1.md` → K1. Adım 4'ten önce
   netleşmeli.
-  - Not: oddball 300→200 indirildi ama bu toplamdan yalnızca ~1.7 dakika
-    kazandırıyor ve bir dikkat **kontrol** görevini zayıflatıyor. Danışmanın
-    ilk geri alacağı kesinti muhtemelen bu olmalı.
+  - Süre tahmini **alt sınırdır**: `practice` (12) ve `cross_hearing` (20)
+    deneme sayısına giriyor ama süreye katılmıyor; yönerge ekranları, kulaklık
+    yerleşimi ve modüller arası geçiş hiç sayılmıyor. Gerçek oturumu ~75–80
+    dakika olarak planlayın.
 - §F.2 (kelime listesi) Adım 5'ten önce; §F.3 (kulaklık tipi) Adım 8'den önce.

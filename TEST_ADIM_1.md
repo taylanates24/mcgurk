@@ -93,16 +93,16 @@ practice              12               —
 mcgurk               140         14.0 dk
 avsr                 135         15.8 dk
 tbw                  130         10.8 dk
-oddball              200          3.5 dk
+oddball              300          5.2 dk
 dichotic              30          2.5 dk
 gin                   30          4.0 dk
 cross_hearing         20               —
 ----------------------------------------
-TOPLAM               697         56.1 dk
+TOPLAM               797         58.8 dk
 ```
 
-**Kontrol edilecek:** Türkçe karakterler düzgün görünüyor mu; toplam 697
-deneme / ~56 dakika.
+**Kontrol edilecek:** Türkçe karakterler düzgün görünüyor mu; toplam 797
+deneme / ~59 dakika.
 
 **Başarısızsa:** Türkçe karakterler bozuksa `chcp 65001` çalıştırıp tekrar
 deneyin (kozmetik sorun, koda ait değil).
@@ -185,29 +185,27 @@ Bunlar kod tarafında bitti ama **senin ve danışmanının kararını bekliyor.
 Config **minimumlarla** geliyor: her modül için ölçtüğü şeyi hâlâ verebilen en
 küçük sayı. §G'nin örnek değerleriyle karşılaştırma:
 
-| Modül | §G örneği | Şimdiki minimum | Gerekçe |
+| Modül | §G örneği | Şimdiki | Gerekçe |
 |---|---|---|---|
 | mcgurk | 280 | **140** | Kritik uyumsuz çiftler hücre başına 20→10 (oranda 10 puan çözünürlük, binom SE ~%16); uyumlu kontroller 10→5 |
 | avsr | 270 | **135** | Hece başına 10→5 tekrar; hücre başına 15 deneme, doğruluk üç hece üzerinden havuzlanıyor |
 | tbw | 195 | **130** | SOA noktası başına 15→10. **SOA ızgarası kısaltılmadı** — TBW çözünürlüğünü o belirliyor |
-| oddball | 300 | **200** | 36 hedef, d′ için taban |
+| oddball | 300 | **300** | Azaltılmadı (aşağıya bak) |
 | dichotic | 60 | **30** | Kulak avantajı indeksi 30 gözlem üzerinden |
-| gin | 30 | **30** | Değişmedi (aşağıya bak) |
-| **TOPLAM** | **1167 / 99.5 dk** | **697 / 56.1 dk** | |
+| gin | 30 | **30** | Azaltılmadı (aşağıya bak) |
+| **TOPLAM** | **1167 / 99.5 dk** | **797 / 58.8 dk** | |
 
-**Kasten azaltılmayan üç şey:**
+**Kasten azaltılmayan dört şey:**
 - `noise_conditions` × `ears` çaprazlaması — SSD hipotezini taşıyan değişken bu.
   Kesilirse çalışmanın sorusu kalmıyor.
+- **Oddball (300)** — bu bir dikkat **kontrol** görevi. Kontrol zayıfsa diğer
+  modüllerdeki grup farkını "dikkat farkı olabilir" açıklamasından ayıramazsın.
+  200'e indirmek 59 dakikalık oturumdan yalnızca 1.7 dakika kazandırıyordu.
+  (Kullanıcı kararı, 2026-07-26.)
 - **GIN** — normlu klinik bir test. `reps_per_gap` 6'nın altına inince 4/6 eşik
   kuralı ve onunla birlikte yayımlanmış normlarla karşılaştırılabilirlik gider.
   Zaten 4 dakika.
 - `practice_trials: 12` — altı modül için modül başına iki deneme, zaten asgarî.
-
-**Bir itirazım var:** oddball'ı 300→200 indirmek toplam süreden yalnızca ~1.7
-dakika kazandırıyor, buna karşılık bir **dikkat kontrol** görevini zayıflatıyor.
-Kontrol görevi zayıfsa SSD gruplarındaki farkı "dikkat farkı olabilir"
-açıklamasından ayıramazsın. Tasarruf listesindeki en verimsiz kesinti bu;
-danışman 300'e döndürmek isterse tek satır.
 
 Karar Adım 4'ten önce gerekli. Seçenekler `docs/04_kod_disi_isler.md` §1'de.
 Değiştireceğin alanlar: `av_pairs[].reps`, `stimulus_sets[].reps`,

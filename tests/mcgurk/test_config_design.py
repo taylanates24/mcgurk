@@ -58,9 +58,12 @@ def test_tbw_count(write_config, config_dict) -> None:
 
 
 def test_oddball_counts(write_config, config_dict) -> None:
+    # Kept at 300 on purpose while the other modules were cut to their minimum:
+    # this is the attention *control* task, and an underpowered control cannot
+    # rule attention out as the explanation for a group difference.
     config = _load(write_config, config_dict)
-    assert config.modules.oddball.total_trials() == 200
-    assert config.modules.oddball.n_targets() == 36
+    assert config.modules.oddball.total_trials() == 300
+    assert config.modules.oddball.n_targets() == 54
 
 
 def test_dichotic_count(write_config, config_dict) -> None:
