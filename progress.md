@@ -27,6 +27,28 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
 İkisi de Adım 8'den önce bitmeli, çünkü Adım 8 modülleri oturuma bağlıyor.
 `steps.md` §C'ye karşılık gelen iki bölümün yazılması gerekiyor.
 
+## Dal politikası — master'a ne zaman merge edilir
+
+**Karar (2026-07-26, kullanıcı):** `master` yalnızca **iki dönüm noktasında**
+güncellenir. Geliştirme `develop` üzerinde sürer.
+
+| Ne zaman | Neden orası | Yapılacak |
+|---|---|---|
+| **Adım 8 sonu** | Yeni paketin ilk kez baştan sona bir oturum koşabildiği nokta. O ana kadar `python main.py` eski `src/` yolunu kullanıyor, yani master'a alınacak "çalışan platform" yok. | `develop` → `master` merge + `git tag adim-8-oturum-akisi` |
+| **Adım 9 sonu** | `steps.md` §C: "Bu adım bittiğinde kod tarafı tamamlanmış olur." Prova oturumu kapısı da orada. | `develop` → `master` merge + `git tag v1.0.0` |
+
+Ara adımlarda merge edilmez: `master` ile `develop` birebir aynı olduğunda iki
+dal ayrımı anlamını yitirir ve "master ne zaman güncellenir?" sorusunun cevabı
+kalmaz (depo iş akışı: `master` = stable releases).
+
+**2026-07-26 itibarıyla `master` hâlâ GitHub'ın attığı "Initial commit"te**
+(`2398acd`, yalnızca `LICENSE` + tek satırlık `README.md`), 26 commit geride ve
+0 commit ileride — yani merge sırası geldiğinde **fast-forward** olacak,
+çakışma riski yok. Bunun tek yan etkisi, `origin/HEAD → master` olduğu için
+depoyu klonlayan veya GitHub'da açan birinin boş bir depo görmesi. Gerekirse
+merge beklemeden GitHub'da varsayılan dal `develop` yapılabilir (Settings →
+Branches); bu, master'ın "sürüm" anlamını korur.
+
 ## Adım kayıtları
 
 ### Adım 0 — Baseline: mevcut kodun düzeltilmesi ve doğrulanması
@@ -726,6 +748,8 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
 - **Durum:** BEKLİYOR
 - **Tamamlanma:** —
 - **Commit:** —
+- **Kapanışta ayrıca:** `develop` → `master` merge + `git tag
+  adim-8-oturum-akisi` (bkz. *Dal politikası*).
 - **Ne yapıldı:**
 - **Alınan kararlar:**
 - **Bilinen sınırlar:**
@@ -735,6 +759,8 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
 - **Durum:** BEKLİYOR
 - **Tamamlanma:** —
 - **Commit:** —
+- **Kapanışta ayrıca:** `develop` → `master` merge + `git tag v1.0.0`
+  (bkz. *Dal politikası*). Prova oturumu kapısı geçilmeden yapılmaz.
 - **Ne yapıldı:**
 - **Alınan kararlar:**
 - **Bilinen sınırlar:**
@@ -819,6 +845,10 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
 - **Fotodiyot ölçümü (`01_av_gecikme_olcumu.md`) hâlâ bekliyor** — tasarım
   gereği tüm kod bittikten sonra. O ana kadar `timing.system_av_offset_ms`
   `null` ve motor 0 kabul edip uyarı basıyor.
+- **`baseline-original` tag'i origin'e push edilmedi** (yalnızca bu makinede).
+  İşaret ettiği commit (`867939c`) develop geçmişinden erişilebilir, yani
+  kaybolmaz; ama Adım 0'ın "tarih kaybolmasın diye tag at" gerekçesi etiket
+  uzakta yokken yarım kalıyor: `git push origin baseline-original`.
 - **Adım 1 manuel testleri** (`TEST_ADIM_1.md`): tasarım özeti, config kapısı
   ve push sonrası GitHub Actions.
 - **Yaş aralığı kısıtı (K4).** `participants.age` için `CHECK (18–60)` kondu.
