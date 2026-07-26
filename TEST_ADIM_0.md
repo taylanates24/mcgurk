@@ -1,5 +1,17 @@
 # Adım 0 Manuel Test
 
+> **Durum: TAMAMLANDI — 2026-07-26.** Tüm testler kullanıcı tarafından
+> yürütüldü ve geçti. Bu tur sırasında dört sorun bulunup düzeltildi
+> (ayrıntı `progress.md` → Adım 0):
+>
+> - `ESC` yalnızca yanıt ekranında çalışıyordu → artık her aşamada
+> - Kesilen oturumda "Deney başarıyla tamamlandı" yazıyordu → durum raporlanıyor
+> - Her tam ekran çalıştırmasında `[800 600]` uyarısı → `window_size` eklendi
+> - `MovieStim`'in SDL2 uyarısı konsolu dolduruyordu → bastırıldı
+>
+> Aşağıdaki adımlar, Adım 1 sonrası regresyon kontrolü için olduğu gibi
+> saklanmaktadır.
+
 Bu adım bir **baseline düzeltmesidir**: mevcut kodun hataları giderildi,
 mimari değiştirilmedi. Testlerin amacı düzeltilen davranışların gerçekten
 düzeldiğini ve hiçbir şeyin bozulmadığını doğrulamaktır.
@@ -54,12 +66,12 @@ python -c "import sys, psychopy; print(sys.version.split()[0], psychopy.__versio
 `pip install` çalıştırmayın — base ortamda Python 3.13 olduğu için
 `No matching distribution found for psychopy==2026.1.2` hatası alırsınız.
 
-- [ ] Yukarıdaki doğrulama komutu `3.10.20 2026.1.2 ...\miniconda3\envs\mcgurk\python.exe` veriyor
-- [ ] Bu ortamda paketler **zaten kurulu** — `pip install` adımına gerek yok
-- [ ] `assets/` yerinde: `female_speaker_1/`, `male_speaker_1/`,
+- [x] Yukarıdaki doğrulama komutu `3.10.20 2026.1.2 ...\miniconda3\envs\mcgurk\python.exe` veriyor
+- [x] Bu ortamda paketler **zaten kurulu** — `pip install` adımına gerek yok
+- [x] `assets/` yerinde: `female_speaker_1/`, `male_speaker_1/`,
       `dichotic/`, `noise/`
-- [ ] Kulaklık takılı ve ses çıkışı çalışıyor
-- [ ] Depo kökündesiniz (`C:\Users\tayla\projects\mcgurk`)
+- [x] Kulaklık takılı ve ses çıkışı çalışıyor
+- [x] Depo kökündesiniz (`C:\Users\tayla\projects\mcgurk`)
 
 ---
 
@@ -455,25 +467,25 @@ python -c "import pathlib; p=pathlib.Path('data/mcgurk.db'); p.unlink(missing_ok
 
 ## Kabul kriterleri
 
-- [ ] `pytest` yeşil (58 test)
-- [ ] `ruff check .` ve `mypy` temiz
-- [ ] Katılımcı formunda ad-soyad alanı yok; boş/geçersiz girdi reddediliyor
-- [ ] `participants` tablosunda `name` sütunu yok
-- [ ] Eski şemalı DB açık hatayla reddediliyor
-- [ ] Tam oturum baştan sona çalışıyor, A/V senkron duyulabilir şekilde doğru
-- [ ] Yanıt ekranında video görünmüyor, ses duyulmuyor
-- [ ] Bitiş ekranı başarı yüzdesi göstermiyor
-- [ ] ESC talimat ekranında, sabitleme haçında, uyaran sunumunda ve yanıt
+- [x] `pytest` yeşil (58 test)
+- [x] `ruff check .` ve `mypy` temiz
+- [x] Katılımcı formunda ad-soyad alanı yok; boş/geçersiz girdi reddediliyor
+- [x] `participants` tablosunda `name` sütunu yok
+- [x] Eski şemalı DB açık hatayla reddediliyor
+- [x] Tam oturum baştan sona çalışıyor, A/V senkron duyulabilir şekilde doğru
+- [x] Yanıt ekranında video görünmüyor, ses duyulmuyor
+- [x] Bitiş ekranı başarı yüzdesi göstermiyor
+- [x] ESC talimat ekranında, sabitleme haçında, uyaran sunumunda ve yanıt
       ekranında çalışıyor; oturum `aborted` işaretleniyor, veri korunuyor
-- [ ] Kesilen oturumda konsol "başarıyla tamamlandı" demiyor
-- [ ] Tam ekranda `User requested fullscreen with size [800 600]` uyarısı yok
-- [ ] Konsolda `Using \`sdl2\` for audio playback` uyarısı görünmüyor
-- [ ] `mcgurk` ve `dichotic` denemelerinde `is_correct` NULL
-- [ ] Oturum kaydında `seed` dolu
-- [ ] Gürültü dosyası eksikken program açık hata veriyor
-- [ ] Admin panelinde kod gösteriliyor, McGurk satırları `—` ile işaretli
-- [ ] `python main.py --help` bizim yardım metnimizi gösteriyor
-- [ ] Dikotik bölümde ekranda yalnızca sabitleme haçı var, her kulakta farklı
+- [x] Kesilen oturumda konsol "başarıyla tamamlandı" demiyor
+- [x] Tam ekranda `User requested fullscreen with size [800 600]` uyarısı yok
+- [x] Konsolda `Using \`sdl2\` for audio playback` uyarısı görünmüyor
+- [x] `mcgurk` ve `dichotic` denemelerinde `is_correct` NULL
+- [x] Oturum kaydında `seed` dolu
+- [x] Gürültü dosyası eksikken program açık hata veriyor
+- [x] Admin panelinde kod gösteriliyor, McGurk satırları `—` ile işaretli
+- [x] `python main.py --help` bizim yardım metnimizi gösteriyor
+- [x] Dikotik bölümde ekranda yalnızca sabitleme haçı var, her kulakta farklı
       hece duyuluyor
 
 ## Bu adımda test EDİLMEYENLER

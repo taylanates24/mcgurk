@@ -1,13 +1,13 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-26
-Aktif adım: 0
+Aktif adım: 1 (Adım 0 tamamlandı)
 
 ## Durum tablosu
 
 | Adım | Başlık | Durum | Tarih | Commit |
 |---|---|---|---|---|
-| 0 | Baseline düzeltme | TESTTE | 2026-07-26 | `f45eeda` |
+| 0 | Baseline düzeltme | TAMAMLANDI | 2026-07-26 | `f45eeda`…`618ef1c` |
 | 1 | Proje iskeleti | BEKLİYOR | | |
 | 2 | Uyaran hazırlama | BEKLİYOR | | |
 | 3 | A/V senkron çekirdeği | BEKLİYOR | | |
@@ -23,10 +23,17 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
 ## Adım kayıtları
 
 ### Adım 0 — Baseline: mevcut kodun düzeltilmesi ve doğrulanması
-- **Durum:** TESTTE (otomatik testler yeşil; manuel test onayı bekleniyor —
-  `TEST_ADIM_0.md`)
-- **Tamamlanma:** —
-- **Commit:** `f45eeda`
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-26. Otomatik testler yeşil (58 test, ruff + mypy
+  temiz); `TEST_ADIM_0.md` içindeki 13 manuel testin tamamı kullanıcı
+  tarafından yürütüldü ve geçti.
+- **Commit:**
+  - `f45eeda` — KVKK anonimleştirme, veri bozan bug'lar, §A ihlalleri
+  - `e8bc700` — progress kaydı
+  - `cd2cc0d` — dikotik ve audio-only videosuz sunuma taşındı
+  - `0e7c053`, `e8f69bb`, `ab49050` — conda ortam tuzağı belgelendi
+  - `039c5c2` — ESC her aşamada, kesilen oturum doğru raporlanıyor
+  - `618ef1c` — MovieStim SDL2 uyarısı bastırıldı
 
 - **Ne yapıldı:**
   - `git tag baseline-original` → `867939c`; `data/mcgurk.db` `VACUUM INTO` ile
@@ -310,12 +317,12 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
 
 ## Kullanıcıya bekleyen aksiyonlar
 
-- **`TEST_ADIM_0.md` manuel testlerinin yapılması (§B.2 kapısı).** Otomatik testler
-  yeşil (45 test, ruff + mypy temiz), ancak ekran ve ses gerektiren testler
-  yapılmadan Adım 0 TAMAMLANDI işaretlenmeyecek.
 - **Dikotik dinleme görevinin yöntem dokümanına eklenmesi.** Kullanıcı bu bölümün
   çalışmada kullanılacağını bildirdi, ancak `946383_YONTEM (3).docx` içinde
   tanımlı değil. Danışmanla görüşülüp dokümana eklenmeli (ölçülen değişkenler,
   gerekçe, kaç deneme) — aksi hâlde toplanan veri protokol dışı kalır.
+- **Adım 1 planının onaylanması (§B.1 kapısı).** Plan sunulduğunda.
+- §F.1 (deneme sayıları) Adım 4'ten önce netleşmeli; §F.2 (kelime listesi)
+  Adım 5'ten önce; §F.3 (kulaklık tipi) Adım 8'den önce.
 - Adım 1'e geçmeden önce §F.1 (deneme sayıları) kararı henüz gerekmiyor; Adım 4'ten
   önce netleşmeli.
