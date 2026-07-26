@@ -193,19 +193,22 @@ Açılan **Katılımcı Bilgileri** penceresinde sırayla deneyin:
 Bunlar tam ekran PsychoPy penceresi açar ve ses çalar. Sessiz bir odada,
 kulaklıkla yapın.
 
-> **Beklenen uyarı — endişelenmeyin.** Video içeren her denemede konsolda şu
-> satır çıkar:
->
-> ```
-> WARNING  Using `sdl2` for audio playback via `ffpyplayer`. This is not
-> recommended for applications requiring precise audio-visual synchronization.
-> ```
->
-> Bu uyarı bastırılamaz: PsychoPy 2026.1'de `MovieStim` `noAudio=True`
+> **SDL2 uyarısı hakkında.** PsychoPy 2026.1'de `MovieStim` `noAudio=True`
 > argümanını yok sayar ve ffpyplayer'ı her durumda SDL2'ye bağlar (başka bir
-> `audioLib` vermek istisna fırlatır). Zararsızdır, çünkü `MovieStim`'e verilen
-> dosyada **ses akışı yoktur** — ffmpeg ile sökülmüştür, `pytest`
-> (`test_silent_video.py`) bunu her koşuda doğrular. Sesi `ptb` çalar.
+> `audioLib` vermek istisna fırlatır), bu yüzden her video yüklemesinde
+> `Using \`sdl2\` for audio playback…` uyarısı üretilir. Uyarı zararsızdır —
+> `MovieStim`'e verilen dosyada **ses akışı yoktur**, ffmpeg ile sökülmüştür ve
+> sesi `ptb` çalar.
+>
+> Bu uyarı artık yalnızca `MovieStim` oluşturulurken bastırılıyor; **konsolda
+> görmemelisiniz.** Bastırma dar tutuldu: sunum sırasındaki düşen kare
+> uyarıları gibi gerçekten önemli mesajlar etkilenmez. Oturum başında bir kez
+> şu bilgi satırı görünür:
+>
+> ```
+> INFO     Video oynatma sessiz kopyalar üzerinden yapılıyor; MovieStim'in
+> SDL2 uyarısı bastırılıyor (dosyalarda ses akışı yok).
+> ```
 
 ### Test 6: Ses backend'i gerçekten ptb
 
@@ -452,7 +455,7 @@ python -c "import pathlib; p=pathlib.Path('data/mcgurk.db'); p.unlink(missing_ok
 
 ## Kabul kriterleri
 
-- [ ] `pytest` yeşil (55 test)
+- [ ] `pytest` yeşil (58 test)
 - [ ] `ruff check .` ve `mypy` temiz
 - [ ] Katılımcı formunda ad-soyad alanı yok; boş/geçersiz girdi reddediliyor
 - [ ] `participants` tablosunda `name` sütunu yok
@@ -464,6 +467,7 @@ python -c "import pathlib; p=pathlib.Path('data/mcgurk.db'); p.unlink(missing_ok
       ekranında çalışıyor; oturum `aborted` işaretleniyor, veri korunuyor
 - [ ] Kesilen oturumda konsol "başarıyla tamamlandı" demiyor
 - [ ] Tam ekranda `User requested fullscreen with size [800 600]` uyarısı yok
+- [ ] Konsolda `Using \`sdl2\` for audio playback` uyarısı görünmüyor
 - [ ] `mcgurk` ve `dichotic` denemelerinde `is_correct` NULL
 - [ ] Oturum kaydında `seed` dolu
 - [ ] Gürültü dosyası eksikken program açık hata veriyor

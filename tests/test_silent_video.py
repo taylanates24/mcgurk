@@ -12,8 +12,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from psychopy import logging as psychopy_logging
 
-from src.experiment.stimuli import _get_ffmpeg, extract_silent_video
+from src.experiment.stimuli import _get_ffmpeg, _quiet_movie_init, extract_silent_video
 
 SOURCE_VIDEO = Path("assets/female_speaker_1/Vis-ba_Aud-ba.mp4")
 
@@ -68,3 +69,33 @@ def test_silent_copy_is_cached():
     second = extract_silent_video(SOURCE_VIDEO)
 
     assert first == second
+
+
+def test_quiet_movie_init_raises_console_level():
+    """The unavoidable SDL2 warning is suppressed while MovieStim is built."""
+    with _quiet_movie_init():
+        assert psychopy_logging.console.level == psychopy_logging.ERROR
+
+
+def test_quiet_movie_init_restores_console_level():
+    """Suppression must be temporary — later warnings still matter.
+
+    Dropped-frame warnings during presentation are diagnostic; leaving the
+    console muted after construction would hide them.
+    """
+    before = psychopy_logging.console.level
+
+    with _quiet_movie_init():
+        pass
+
+    assert psychopy_logging.console.level == before
+
+
+def test_quiet_movie_init_restores_level_on_error():
+    before = psychopy_logging.console.level
+
+    with pytest.raises(ValueError):
+        with _quiet_movie_init():
+            raise ValueError("boom")
+
+    assert psychopy_logging.console.level == before

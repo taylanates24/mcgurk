@@ -39,10 +39,13 @@ import logging
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from psychopy import core, event, sound, visual
+from psychopy import logging as psychopy_logging
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +117,32 @@ def require_ptb_backend() -> None:
         ) from exc
 
     logger.info("Ses backend'i doğrulandı: ptb")
+    logger.info(
+        "Video oynatma sessiz kopyalar üzerinden yapılıyor; MovieStim'in "
+        "SDL2 uyarısı bastırılıyor (dosyalarda ses akışı yok)."
+    )
 
 
-# Suppress the sdl2 A/V sync warning — we no longer use sdl2 for audio,
-# but MovieStim still logs the warning during initialisation.
-logging.getLogger("psychopy.visual.movies").setLevel(logging.ERROR)
+@contextmanager
+def _quiet_movie_init() -> Iterator[None]:
+    """Silence PsychoPy's console during MovieStim construction.
+
+    MovieStim always warns that it is using SDL2 for audio (see the module
+    docstring — it cannot be turned off).  The warning is emitted through
+    PsychoPy's own logging, not the stdlib one, so a stdlib logger level has
+    no effect on it; only ``psychopy.logging.console`` does.
+
+    The window is deliberately narrow — one constructor call — so that later
+    warnings that *do* matter, such as dropped frames during presentation,
+    still reach the operator.  Errors are unaffected: they raise rather than
+    log.
+    """
+    original_level = psychopy_logging.console.level
+    psychopy_logging.console.setLevel(psychopy_logging.ERROR)
+    try:
+        yield
+    finally:
+        psychopy_logging.console.setLevel(original_level)
 
 # ---------------------------------------------------------------------------
 # Audio extraction cache
@@ -386,17 +410,18 @@ def load_video_stimulus(
     Returns:
         ``(movie, audio)`` — *audio* is ``None`` when *with_audio* is False.
     """
-    # Always give MovieStim a silent video — noAudio=True and setVolume(0)
-    # are both ignored by some ffpyplayer builds on Windows, causing SDL2
-    # audio to leak through alongside the ptb sound.Sound track.
+    # Always give MovieStim a silent video: PsychoPy overwrites the noAudio
+    # argument and hard-wires ffpyplayer to SDL2 (see module docstring), so a
+    # file with no audio stream is the only thing that keeps SDL2 quiet.
     silent_path = extract_silent_video(video_path)
 
-    movie = visual.MovieStim(
-        win,
-        str(silent_path),
-        noAudio=True,
-        loop=False,
-    )
+    with _quiet_movie_init():
+        movie = visual.MovieStim(
+            win,
+            str(silent_path),
+            noAudio=True,
+            loop=False,
+        )
     audio_obj = None
     if with_audio:
         wav_path = extract_audio(video_path)

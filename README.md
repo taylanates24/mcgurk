@@ -153,10 +153,12 @@ uyaran sunumu ve yanıt ekranı dahil. Kesilen oturum veritabanında `aborted`
 işaretlenir, o ana kadar yanıtlanan denemeler korunur ve program çıkış kodu
 `1` ile döner ("başarıyla tamamlandı" demez).
 
-> **Beklenen konsol uyarısı.** Video içeren denemelerde PsychoPy
-> `Using \`sdl2\` for audio playback via \`ffpyplayer\`` uyarısı basar. Bu
-> bastırılamaz (aşağıya bakın) ve zararsızdır: `MovieStim`'e verilen dosyada
-> ses akışı yoktur.
+> **SDL2 uyarısı.** `MovieStim` her oluşturulduğunda PsychoPy
+> `Using \`sdl2\` for audio playback via \`ffpyplayer\`` uyarısı üretir
+> (sebebi aşağıda). Uyarı zararsızdır — verilen dosyada ses akışı yoktur — ve
+> yalnızca oluşturma anında bastırılır. Bastırma dar tutulmuştur: sunum
+> sırasındaki düşen kare uyarıları gibi tanısal mesajlar operatöre ulaşmaya
+> devam eder.
 
 ---
 

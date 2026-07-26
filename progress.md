@@ -131,7 +131,13 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
       derlemelerinde yok sayılıyor" teşhisi yanlıştı — sorun derlemede değil,
       PsychoPy'nin kendi kodunda. Mevcut sessiz-video yaklaşımı tek çalışan
       çözüm; `tests/test_silent_video.py` sessiz kopyalarda ses akışı
-      olmadığını her koşuda doğruluyor.
+      olmadığını her koşuda doğruluyor. Uyarı `_quiet_movie_init()` ile
+      yalnızca constructor çağrısı boyunca bastırılıyor (PsychoPy kendi
+      `psychopy.logging.console`'unu kullandığı için stdlib logger seviyesi
+      etkisizdi — önceki `logging.getLogger("psychopy.visual.movies")`
+      denemesi hiç işe yaramıyordu). Pencere dar tutuldu ki sunum sırasındaki
+      düşen kare uyarıları operatöre ulaşmaya devam etsin; canlı MovieStim ile
+      bastırmalı/bastırmasız karşılaştırılarak doğrulandı.
 
 - **Sonraki adıma not:**
   - **Dikotik bölümü yöntem dokümanında YOK.** Yöntem dokümanı §6'da üç modül
