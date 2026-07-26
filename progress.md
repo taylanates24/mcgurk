@@ -211,6 +211,7 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
   - `0fb3d3f` — mcgurk/ paketi: config, veritabanı, yedekleme, loglama, CI
   - `213b4ca` — progress kaydı
   - `9dbedee` — oddball 300'e geri alındı (kullanıcı)
+  - `109426a` — oddball testi hizalandı, dikotik taslak bölümü eklendi
 
 - **Ne yapıldı:**
   - **Yeni paket `mcgurk/`**, `src/` yanına kuruldu (A0-1 kararı). Alt paketler:
