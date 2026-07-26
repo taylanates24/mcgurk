@@ -33,12 +33,13 @@ def stimulus_tree(tmp_path: Path) -> Path:
         for audio in SYLLABLES:
             (speaker_dir / f"Vis-{visual}_Aud-{audio}.mp4").touch()
 
+    # Dichotic stimuli are stereo WAVs — these trials carry no video.
     dichotic_dir = assets / "dichotic" / "female_speaker_1"
     dichotic_dir.mkdir(parents=True)
     for left in SYLLABLES:
         for right in SYLLABLES:
             if left != right:
-                (dichotic_dir / f"Left-{left}_Right-{right}.mp4").touch()
+                (dichotic_dir / f"Left-{left}_Right-{right}.wav").touch()
 
     noise_dir = assets / "noise"
     noise_dir.mkdir(parents=True)

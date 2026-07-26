@@ -100,6 +100,7 @@ mcgurk/
 - Audio is embedded in the source video, but is **never played from it** — it is extracted to a separate wav and scheduled independently (see A/V sync strategy below)
 - `Zone.Identifier` files (Windows artifacts) should be gitignored
 - Noisy variants: `assets/noisy/{speaker_folder}/Vis-{visual}_Aud-{audio}_{noise_type}_{snr}dB.mp4`
+- Dichotic stimuli: `assets/dichotic/{speaker_folder}/Left-{left}_Right-{right}.wav` — 48 kHz stereo PCM, **not** a video container
 
 ## Config Parameters (config.yaml)
 Key configurable values:
@@ -133,7 +134,7 @@ Key configurable values:
 7. **Speaker thumbnails**: extracted from first frame of a congruent video for speaker selection
 8. **Phase 2 ready**: word-level stimuli support planned in asset/config structure but not implemented in Phase 1
 9. **Admin can allow re-runs**: same participant can repeat experiments at admin's discretion
-10. **Dichotic audio**: stereo files with isolated L/R channels, generated from mono syllable recordings
+10. **Dichotic audio**: stereo WAVs with isolated L/R channels, pre-generated from the congruent recordings — no video container, no run-time conversion
 
 ## Development Environment
 - Primary OS: Linux (WSL2), must also work on Windows
@@ -150,7 +151,8 @@ Key configurable values:
 - **Windows audio backend**: `main.py`'de `SDL_AUDIODRIVER=wasapi` ortam değişkeni ayarlanır (MovieStim init sırasında SDL2'ye hâlâ dokunulduğu için). Video dosyaları fixation öncesinde yüklenerek dosya I/O gecikmesi playback'ten ayrıştırılır.
 - **WSL2 OpenGL**: WSL2'de `LIBGL_ALWAYS_SOFTWARE=1` gerekir. Gerçek deneyde native Windows kullanılacak.
 - **PsychoPy gui.Dlg vs DlgFromDict**: `gui.Dlg` field parsing'de sorun çıkarıyor, `gui.DlgFromDict` kullanılıyor.
-- **Dichotic Listening**: Runtime'da congruent videolardan ffmpeg ile ses çıkarılıp stereo (L/R) numpy array olarak PsychoPy sound.Sound ile çalınıyor. ffmpeg sistemde kurulu olmalı.
+- **Dichotic Listening**: `scripts/generate_dichotic_stimuli.py` uyumlu videolardan **48 kHz stereo PCM WAV** üretir (`assets/dichotic/{konuşmacı}/Left-{l}_Right-{r}.wav`). Çalışma anında dönüştürme yok. Kanal izolasyonu ölçüldü: kanallar arası sızıntı yok.
+- **Videosuz ses sunumu**: `audio_only` ve `dichotic` bölümleri `MovieStim` **oluşturmaz**; `present_audio_only()` ekranda sabitleme haçı bırakır ve deneme sesin kendi süresi kadar sürer. Eskiden bu bölümler sesi 64×64/1 fps siyah bir videonun içinde taşıyordu ve deneme bitiş anı o akışın kare ızgarasına bağlıydı.
 - **Noisy stimuli**: `scripts/generate_noisy_stimuli.py` mevcut, ancak çalışma anındaki karıştırma yolu (`stimuli.mix_noise_into_audio`) kullanılıyor. SNR hesabı şu an tüm dosya RMS'i üzerinden yapılıyor; konuşma-aktif RMS'e geçirilmesi Adım 2'de.
 - **Admin panel**: `admin.py` PySide6 ile ayrı process olarak çalışır, PsychoPy ile aynı process'te çalıştırılamaz.
 

@@ -311,6 +311,31 @@ def create_fixation_cross(win: visual.Window, config: dict[str, Any]) -> visual.
     )
 
 
+def load_audio_stimulus(
+    audio_path: Path,
+    noise_file: Path | None = None,
+    snr_db: float | None = None,
+) -> sound.Sound:
+    """Load a standalone audio stimulus — no video, no MovieStim.
+
+    Used by the sections that present sound with nothing to look at
+    (``audio_only``, ``dichotic``).  Wrapping those in a hidden movie would tie
+    the trial's end time to a video stream's frame grid; here the sound is the
+    only thing being timed.
+
+    A ``.wav`` is used as-is.  Any other container (an mp4 the audio has to be
+    lifted out of) goes through the cached ffmpeg extraction path.
+    """
+    wav_path = (
+        audio_path
+        if audio_path.suffix.lower() == ".wav"
+        else extract_audio(audio_path)
+    )
+    if noise_file is not None and snr_db is not None:
+        wav_path = mix_noise_into_audio(wav_path, noise_file, snr_db)
+    return sound.Sound(str(wav_path))
+
+
 def load_video_stimulus(
     win: visual.Window,
     video_path: Path,
@@ -362,6 +387,35 @@ def present_fixation(
     fixation.draw()
     win.flip()
     core.wait(duration_sec)
+
+
+def present_audio_only(
+    win: visual.Window,
+    audio: sound.Sound,
+    fixation: visual.ShapeStim,
+    clock: core.Clock,
+) -> float:
+    """Play *audio* with only the fixation cross on screen.
+
+    Nothing is drawn beyond the fixation cross, so there is no frame loop to
+    run: playback is scheduled against the next flip and the trial lasts
+    exactly as long as the sound file.
+
+    Returns:
+        Time (on the provided clock) when playback finished.
+    """
+    fixation.draw()
+    # Schedule first, flip second — getFutureFlipTime targets the flip that
+    # the following call performs, and that is the onset the sound is aligned
+    # to.  No fallback: an unschedulable onset means invalid trial timing.
+    audio.play(when=win.getFutureFlipTime(clock="ptb"))
+    win.flip()
+
+    core.wait(audio.getDuration())
+    audio.stop()
+
+    win.flip()  # clear the fixation cross before the response screen
+    return clock.getTime()
 
 
 def present_video(

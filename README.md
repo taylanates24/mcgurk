@@ -66,12 +66,18 @@ olmalıdır:
 assets/
 ├── female_speaker_1/          Vis-{hece}_Aud-{hece}.mp4
 ├── male_speaker_1/
-├── dichotic/{konuşmacı}/      Left-{hece}_Right-{hece}.mp4
+├── dichotic/{konuşmacı}/      Left-{hece}_Right-{hece}.wav
 └── noise/                     {tür}_noise.mp3
 ```
 
 Konuşmacılar çalışma anında `{cinsiyet}_speaker_{n}` desenine göre taranır —
 yeni bir klasör eklemek yeterlidir, kod veya config değişikliği gerekmez.
+
+Dikotik uyaranlar uyumlu videolardan türetilir ve depoya dâhil değildir:
+
+```bash
+python scripts/generate_dichotic_stimuli.py
+```
 
 ### Monitör profili (ilk kurulumda bir kez)
 
@@ -154,6 +160,12 @@ etkilemez. Bu yüzden:
 3. Backend gerçekten `ptb` değilse program **başlamaz** — sessiz geri düşüş
    yoktur.
 
+**Gösterilecek bir şeyin olmadığı bölümlerde video hiç oluşturulmaz.**
+`audio_only` ve `dichotic` denemelerinde ekranda yalnızca sabitleme haçı kalır
+ve deneme sesin kendi süresi kadar sürer. Bu bölümler eskiden sesi gizlenmiş
+bir videonun içinde taşıyordu; bu, denemenin bitiş anını — yani RT
+referanslarından birini — video akışının kare ızgarasına bağlıyordu.
+
 > PsychoPy 2026.1 backend seçimini `prefs.hardware['audioLib']` yerine
 > `sound.Sound.backend` sınıf niteliğine taşıdı; `sound.audioLib` artık
 > mevcut değil. Kod her ikisini de ayarlar ve sonucu çalışma öncesinde
@@ -202,8 +214,9 @@ Bunlar bilinçli olarak Adım 0 kapsamı dışında bırakıldı; her biri
   kullanılmalı (dosyaların önemli bir bölümü sessizlik).
 - Gürültü dosyaları kayıplı MP3 ve 44.1 kHz. Konuşma şekilli gürültü korpusun
   LTAS'ından üretilmiş değil.
-- `assets/dichotic/` dosyaları 64×64 piksel, 1 fps sahte videolardır; kare
-  döngüsü bunların bitmesini beklemek zorunda kalıyor.
+- Dikotik uyaranlar 48 kHz stereo PCM'e taşındı, ancak kaynakları hâlâ AAC
+  videolar olduğu için sinyal tek bir kayıplı turdan geçmiş durumda. Adım 2'de
+  ham kayıtlardan yeniden üretilecek.
 
 **Zamanlama (Adım 3):**
 - Gerçekleşen zamanlama kaydedilmiyor: onset zamanları, düşen kare sayısı,

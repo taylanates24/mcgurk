@@ -18,7 +18,9 @@ from .sections import build_trial_list
 from .stimuli import (
     create_fixation_cross,
     create_response_screen,
+    load_audio_stimulus,
     load_video_stimulus,
+    present_audio_only,
     present_fixation,
     present_response_screen,
     present_video,
@@ -61,12 +63,13 @@ def _find_noise_file(noise_condition: str, config: dict[str, Any]) -> Path | Non
 def _stimulus_path(trial_spec: TrialSpec) -> Path:
     """Return the media file this trial is presented from.
 
-    Audio-only trials read from ``audio_path`` (the congruent video the audio
-    track is extracted from); every other section reads from ``video_path``.
+    Sections presented without a picture read from ``audio_path`` — a stereo
+    WAV for dichotic trials, the congruent video the track is lifted out of
+    for audio-only.  Every other section reads from ``video_path``.
     """
     path = (
         trial_spec.audio_path
-        if trial_spec.section_type == "audio_only"
+        if trial_spec.section_type in _AUDIO_PRESENTATION_SECTIONS
         else trial_spec.video_path
     )
     if path is None:
@@ -188,11 +191,6 @@ def run_experiment(
         # Create reusable stimuli
         fixation = create_fixation_cross(win, config)
         response_stims = create_response_screen(win, syllables, key_map)
-        # Full-screen rectangle that hides video frames in audio-only sections.
-        cover = visual.Rect(
-            win, width=2, height=2, pos=(0, 0),
-            fillColor=bg_color, lineColor=bg_color,
-        )
         clock = core.Clock()
 
         # Key mapping instruction
@@ -217,13 +215,19 @@ def run_experiment(
             noise_file = _find_noise_file(trial_spec.noise_condition, config)
             source = _stimulus_path(trial_spec)
 
-            if trial_spec.section_type == "visual_only":
+            movie = None
+            if trial_spec.section_type in _AUDIO_PRESENTATION_SECTIONS:
+                # Nothing to display — no MovieStim is created at all.
+                # Dichotic files are pre-mixed stereo; noise is not applied.
+                audio = load_audio_stimulus(
+                    source,
+                    noise_file=None if trial_spec.section_type == "dichotic" else noise_file,
+                    snr_db=None if trial_spec.section_type == "dichotic" else trial_spec.snr_db,
+                )
+            elif trial_spec.section_type == "visual_only":
                 movie, audio = load_video_stimulus(win, source, with_audio=False)
-            elif trial_spec.section_type == "dichotic":
-                # Pre-mixed stereo file — noise is not applied to this section.
-                movie, audio = load_video_stimulus(win, source, with_audio=True)
             else:
-                # mcgurk, av_congruent, audio_only
+                # mcgurk, av_congruent
                 movie, audio = load_video_stimulus(
                     win, source, with_audio=True,
                     noise_file=noise_file, snr_db=trial_spec.snr_db,
@@ -236,23 +240,8 @@ def run_experiment(
                 clock.reset()
 
                 # Present stimulus based on section type
-                if trial_spec.section_type in _AUDIO_PRESENTATION_SECTIONS:
-                    # Play the muted video for timing while a cover hides its
-                    # frames; audio goes through the ptb backend.
-                    movie.setVolume(0)
-                    if audio is not None:
-                        audio.play(when=win.getFutureFlipTime(clock="ptb"))
-                    movie.play()
-                    while not movie.isFinished:
-                        movie.draw()
-                        cover.draw()
-                        fixation.draw()
-                        win.flip()
-                    movie.stop()
-                    win.flip()
-                    video_end_time = clock.getTime()
-                    if audio is not None:
-                        audio.stop()
+                if movie is None:
+                    video_end_time = present_audio_only(win, audio, fixation, clock)
                 elif trial_spec.section_type == "visual_only":
                     video_end_time = present_video(win, movie, clock)
                 else:
@@ -275,7 +264,8 @@ def run_experiment(
             finally:
                 # MovieStim holds a decoder and GPU textures; a session is
                 # hundreds of trials long, so releasing it is not optional.
-                movie.unload()
+                if movie is not None:
+                    movie.unload()
 
             if resp is None:
                 # Escape pressed — abort experiment

@@ -4,7 +4,7 @@ Bu adım bir **baseline düzeltmesidir**: mevcut kodun hataları giderildi,
 mimari değiştirilmedi. Testlerin amacı düzeltilen davranışların gerçekten
 düzeldiğini ve hiçbir şeyin bozulmadığını doğrulamaktır.
 
-Tahmini süre: ekransız testler ~5 dakika, ekran/ses testleri ~20 dakika.
+Tahmini süre: ekransız testler ~5 dakika, ekran/ses testleri ~25 dakika.
 
 ## Ön koşullar
 
@@ -302,7 +302,51 @@ getirin.
 
 ---
 
-### Test 12: Admin paneli
+### Test 12: Dikotik dinleme — kanal ayrımı ve videosuz sunum
+
+Bu bölüm artık video kullanmıyor; stereo WAV doğrudan çalınıyor.
+
+**Ön koşul:** Uyaranlar üretilmiş olmalı:
+```bash
+python scripts/generate_dichotic_stimuli.py
+```
+
+**Komut:**
+```bash
+python main.py
+```
+
+Katılımcı `TEST-004`, yalnızca **Dikotik Dinleme** işaretli.
+
+**Kontrol edilecek — kulaklığı doğru takın (L sol kulakta, R sağ kulakta):**
+
+1. Deneme sırasında ekranda **yalnızca sabitleme haçı** var — siyah kare
+   yanıp sönmüyor, görüntü titremiyor.
+2. **Her kulakta farklı hece duyuluyor.** Kulaklığı ters çevirdiğinizde
+   heceler yer değiştirmeli.
+3. Ses ile yanıt ekranı arasında donma veya gecikme yok.
+4. 6 deneme tamamlanıyor (3 hecenin ikili permütasyonu).
+
+**Kanal ayrımını sayısal doğrulama:**
+```bash
+python -c "import numpy as np; from scipy.io import wavfile; sr,d=wavfile.read('assets/dichotic/female_speaker_1/Left-ba_Right-da.wav'); x=d.astype(float)/32768; print('ornekleme:',sr,'Hz  kanal:',d.shape[1]); print('L-R korelasyonu:',round(float(np.corrcoef(x[:,0],x[:,1])[0,1]),3))"
+```
+
+**Beklenen çıktı:**
+```
+ornekleme: 48000 Hz  kanal: 2
+L-R korelasyonu: 0.008
+```
+
+**Kontrol edilecek:** Örnekleme 48000, kanal sayısı 2, korelasyon sıfıra yakın
+(farklı heceler). Korelasyon 0.5'in üzerindeyse kanallar karışmış demektir.
+
+**Başarısızsa:** `assets/dichotic/` içinde `.wav` dosyaları var mı bakın. Yalnızca
+eski `.mp4` dosyaları varsa bölüm hiç deneme üretmez — üretim script'ini çalıştırın.
+
+---
+
+### Test 13: Admin paneli
 
 **Komut:**
 ```bash
@@ -333,7 +377,7 @@ python -c "import pathlib; p=pathlib.Path('data/mcgurk.db'); p.unlink(missing_ok
 
 ## Kabul kriterleri
 
-- [ ] `pytest` yeşil (43 test)
+- [ ] `pytest` yeşil (45 test)
 - [ ] `ruff check .` ve `mypy` temiz
 - [ ] Katılımcı formunda ad-soyad alanı yok; boş/geçersiz girdi reddediliyor
 - [ ] `participants` tablosunda `name` sütunu yok
@@ -347,6 +391,8 @@ python -c "import pathlib; p=pathlib.Path('data/mcgurk.db'); p.unlink(missing_ok
 - [ ] Gürültü dosyası eksikken program açık hata veriyor
 - [ ] Admin panelinde kod gösteriliyor, McGurk satırları `—` ile işaretli
 - [ ] `python main.py --help` bizim yardım metnimizi gösteriyor
+- [ ] Dikotik bölümde ekranda yalnızca sabitleme haçı var, her kulakta farklı
+      hece duyuluyor
 
 ## Bu adımda test EDİLMEYENLER
 

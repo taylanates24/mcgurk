@@ -128,22 +128,25 @@ def generate_dichotic_trials(
 ) -> list[TrialSpec]:
     """Generate dichotic listening trials.
 
-    Uses pre-generated stereo mp4 files from assets/dichotic/{speaker}/.
-    Each file has one syllable per ear. Run scripts/generate_dichotic_stimuli.py first.
+    Uses pre-generated stereo WAV files from assets/dichotic/{speaker}/, one
+    syllable per ear.  Run scripts/generate_dichotic_stimuli.py first.
+
+    These trials carry no video: the stimulus is presented through the
+    audio-only path, so the file is stored as ``audio_path``.
     """
     dichotic_dir = speaker.path.parent / "dichotic" / speaker.folder_name
 
     trials = []
     pairs = list(permutations(syllables, 2))
     for left_syl, right_syl in pairs:
-        mp4_path = dichotic_dir / f"Left-{left_syl}_Right-{right_syl}.mp4"
-        if not mp4_path.exists():
+        wav_path = dichotic_dir / f"Left-{left_syl}_Right-{right_syl}.wav"
+        if not wav_path.exists():
             continue
         trials.append(
             TrialSpec(
                 section_type="dichotic",
-                video_path=mp4_path,
-                audio_path=None,
+                video_path=None,
+                audio_path=wav_path,
                 visual_syllable="",
                 audio_syllable=f"{left_syl}_L_{right_syl}_R",
                 noise_condition="clean",

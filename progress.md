@@ -69,6 +69,27 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
   - `.gitignore` genişletildi (`*.exe`, `data/`, `backups/`, `logs/`, `*.sqlite`);
     `asd.py` silindi.
   - `README.md` yeniden yazıldı; `CLAUDE.md`'deki yanlış bilgiler düzeltildi.
+  - **Dikotik uyaranlar ve videosuz ses sunumu (kullanıcı isteği üzerine ek iş):**
+    - `generate_dichotic_stimuli.py` artık mp4 değil **48 kHz stereo PCM WAV**
+      üretiyor. Script zaten stereo WAV üretip ona `color=c=black:s=64x64:r=1`
+      ile siyah dolgu video ekliyor ve WAV'ı siliyordu; video hiçbir işlev
+      taşımıyordu. Script ayrıca `ffmpeg`'i PATH'ten çağırdığı için bu makinede
+      hiç çalışmıyordu — `_get_ffmpeg()` kullanacak şekilde düzeltildi.
+    - `stimuli.load_audio_stimulus()` ve `present_audio_only()` eklendi:
+      `audio_only` ve `dichotic` bölümleri artık `MovieStim` **oluşturmuyor**,
+      ekranda sabitleme haçı kalıyor, deneme sesin kendi süresi kadar sürüyor.
+      Önceden deneme bitiş anı — yani RT referanslarından biri — 1 fps'lik bir
+      video akışının bitmesine bağlıydı.
+    - `sections.generate_dichotic_trials` `.wav` arıyor ve dosyayı `audio_path`
+      alanında taşıyor (`video_path` artık `None`). Eski `.mp4` dosyaları
+      yok sayılıyor; bunu doğrulayan test eklendi.
+    - **Ölçüm — AAC kanal sızıntısı yoktu:** kontrollü test (sol kanal konuşma,
+      sağ kanal mutlak sessizlik, script'in kendi AAC ayarları) sağ kanalda
+      −200 dB, tepe değeri tam 0 verdi. Yani uyaranların dikotik içeriği
+      zaten sağlamdı; sorun yalnızca gereksiz video ve kayıplı turdu.
+    - Üretilen WAV'lar doğrulandı: 48 kHz stereo, `Left-ba_Right-da` dosyasının
+      sol kanalı ile `Left-da_Right-ba` dosyasının sağ kanalı **birebir aynı**
+      (korelasyon +1.0000), kanallar arası korelasyon 0.008–0.048.
 
 - **Alınan kararlar:**
   - `src/` yerinde düzeltildi, `legacy/` altına taşınmadı (A0-1). `steps.md`
@@ -88,6 +109,19 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
   taşınacak metinler ve oturum akışı Adım 8'de.
 
 - **Sonraki adıma not:**
+  - **Dikotik bölümü yöntem dokümanında YOK.** Yöntem dokümanı §6'da üç modül
+    (McGurk, AVSR, TBW) + §6.4 oddball tanımlıyor; `steps.md` de aynı dördü
+    sayıyor. Dikotik dinleme ikisinde de geçmiyor; §7'de bunun yerine
+    "işitsel uyaranın uzamsal yönü" bir **bağımsız değişken** olarak var.
+    Kullanıcı bölümün kullanılacağını bildirdi (2026-07-26) → **yöntem
+    dokümanına eklenmesi gerekiyor**; kodda olup dokümanda olmayan bir ölçüm
+    etik kurul ve yayın açısından sorun yaratır. Aşağıdaki bekleyen aksiyona
+    işlendi.
+  - `assets/dichotic/` altındaki 12 eski `.mp4` dosyası silinmedi; artık
+    kullanılmıyorlar. Üretim script'i çalıştırıldığında uyarı basıyor.
+  - `present_audio_only()` sesin bitişini `core.wait()` ile bekliyor. Ekranda
+    değişen bir şey olmadığı için bu baseline'da yeterli; Adım 3'te gerçekleşen
+    onset ve bitiş `ptb` saatinden okunup `TimingRecord`'a yazılacak.
   - **PsychoPy 2026.1.2 ses API'si değişmiş:** backend seçimi
     `prefs.hardware['audioLib']` yerine `sound.Sound.backend` sınıf niteliğinde;
     `sound.audioLib` **artık yok**. İlk yazdığım doğrulama bu kaldırılmış
@@ -228,7 +262,11 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
 ## Kullanıcıya bekleyen aksiyonlar
 
 - **`TEST_ADIM_0.md` manuel testlerinin yapılması (§B.2 kapısı).** Otomatik testler
-  yeşil (43 test, ruff + mypy temiz), ancak ekran ve ses gerektiren testler
+  yeşil (45 test, ruff + mypy temiz), ancak ekran ve ses gerektiren testler
   yapılmadan Adım 0 TAMAMLANDI işaretlenmeyecek.
+- **Dikotik dinleme görevinin yöntem dokümanına eklenmesi.** Kullanıcı bu bölümün
+  çalışmada kullanılacağını bildirdi, ancak `946383_YONTEM (3).docx` içinde
+  tanımlı değil. Danışmanla görüşülüp dokümana eklenmeli (ölçülen değişkenler,
+  gerekçe, kaç deneme) — aksi hâlde toplanan veri protokol dışı kalır.
 - Adım 1'e geçmeden önce §F.1 (deneme sayıları) kararı henüz gerekmiyor; Adım 4'ten
   önce netleşmeli.

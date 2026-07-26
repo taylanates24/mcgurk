@@ -82,6 +82,33 @@ def test_visual_only_is_never_noisy(speaker: Speaker, config: dict):
     assert {t.noise_condition for t in trials} == {"clean"}
 
 
+def test_dichotic_trials_carry_audio_not_video(speaker: Speaker, config: dict):
+    """Dichotic trials have nothing to show.
+
+    They used to point at a 64x64, 1 fps black mp4 that existed only so the
+    engine could reuse its MovieStim path, which tied the trial's end time —
+    an RT reference — to a video stream's frame grid.
+    """
+    trials = build_trial_list(speaker, ["dichotic"], config, seed=11)
+
+    assert trials
+    for trial in trials:
+        assert trial.video_path is None
+        assert trial.audio_path is not None
+        assert trial.audio_path.suffix == ".wav"
+
+
+def test_dichotic_ignores_leftover_mp4_stimuli(speaker: Speaker, stimulus_tree: Path,
+                                               config: dict):
+    """Stale .mp4 files from the old pipeline must not be picked up."""
+    dichotic_dir = stimulus_tree / "dichotic" / "female_speaker_1"
+    for wav in list(dichotic_dir.glob("*.wav")):
+        wav.unlink()
+        wav.with_suffix(".mp4").touch()
+
+    assert build_trial_list(speaker, ["dichotic"], config, seed=11) == []
+
+
 def test_missing_speaker_videos_yield_no_trials(tmp_path: Path, config: dict):
     empty_dir = tmp_path / "assets" / "male_speaker_9"
     empty_dir.mkdir(parents=True)
