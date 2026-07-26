@@ -18,6 +18,7 @@ pydantic==2.13.4            # config schema validation (mcgurk/config)
 numpy==2.2.6
 scipy==1.14.1
 pandas==2.3.3
+soundfile==0.13.1           # 24-bit PCM WAV I/O (scipy can only do 16/32-bit)
 
 # --- Admin panel ---
 PySide6==6.11.0

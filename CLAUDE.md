@@ -45,10 +45,11 @@ Each section has **clean** and **noisy** variants. Noise type and SNR level are 
 new platform, built next to it and retired `src/` in Adım 8. They use separate
 config files and separate database files — the schemas are incompatible.
 
-**Hard rule: `mcgurk/config` and `mcgurk/db` must not import PsychoPy.** CI has
-no PsychoPy installed and an analysis machine need not either;
-`tests/mcgurk/test_package_boundaries.py` enforces this with an AST check.
-`engine/`, `modules/` and `ui/` are exempt — that is where PsychoPy belongs.
+**Hard rule: `mcgurk/config`, `mcgurk/db` and `mcgurk/stimuli` must not import
+PsychoPy.** CI has no PsychoPy installed and an analysis machine need not
+either; `tests/mcgurk/test_package_boundaries.py` enforces this with an AST
+check. `engine/`, `modules/` and `ui/` are exempt — that is where PsychoPy
+belongs.
 
 ```
 mcgurk/                          # new platform (Adım 1→)
@@ -63,6 +64,13 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── design.py                # trials.design_extra validation per module
 │   ├── models.py                # row dataclasses
 │   └── backup.py                # VACUUM INTO — never a file copy
+├── stimuli/                     # Adım 2 — offline preparation, no PsychoPy
+│   ├── ffmpeg.py                # binary discovery, probe, silent re-encode
+│   ├── wavfile.py               # 24-bit PCM I/O via soundfile
+│   ├── dsp.py                   # burst, active level, LTAS/SSN, SNR, GIN gaps
+│   ├── manifest.py              # manifest.json models + lookups
+│   ├── prepare.py               # the pipeline
+│   └── verify.py                # re-measure from disk, report
 ├── engine/                      # Adım 3 (empty)
 ├── modules/                     # Adım 4–7c (empty)
 ├── analysis/                    # Adım 9 (empty)
@@ -70,9 +78,44 @@ mcgurk/                          # new platform (Adım 1→)
 ├── logging_setup.py
 └── provenance.py                # git commit, OS, package versions
 config/experiment.yaml           # new single source of truth (§G)
+stimuli/                         # prepared set + manifest.json (gitignored)
 tools/verify_backup.py           # an untested backup is not a backup
+tools/prepare_stimuli.py         # assets/ -> stimuli/
+tools/verify_stimuli.py          # audit stimuli/ against manifest + design
 .github/workflows/ci.yml         # ruff + mypy, pytest -m "not psychopy"
 ```
+
+### Prepared stimuli (`stimuli/`, from Adım 2)
+
+`assets/` is the raw recording and is never presented by the new package.
+`tools/prepare_stimuli.py` reads only the **congruent** takes
+(`Vis-<t>_Aud-<t>.mp4`) and writes:
+
+```
+stimuli/manifest.json
+stimuli/video/speaker_<id>/Vis-<t>.mp4                  silent, CFR 30 fps, all-intra
+stimuli/audio/speaker_<id>/Vis-<v>_Aud-<a>.wav          48 kHz 24-bit, burst-aligned
+stimuli/audio_noisy/speaker_<id>/…_ssn<snr>dB_<n>.wav   n noise instances per cell
+stimuli/dichotic/speaker_<id>/Left-<l>_Right-<r>.wav    both ears on one burst time
+stimuli/gin/segment_<nn>.wav                            gaps cut offline
+stimuli/noise/speech_shaped_noise.wav                   from the corpus LTAS
+```
+
+Key points that are easy to get wrong:
+- **Alignment target is per video, not global.** Audio token Y mounted on
+  video X sits at X's own acoustic burst time, because the source recording
+  was already in sync. The corpus spread is up to ~250 ms between tokens of
+  one speaker, so this is not a rounding detail.
+- The 29.97 → 30 fps conversion compresses the visual timeline by 0.1%, so the
+  alignment target is scaled by `source_fps / target_fps` too.
+- Levels are equalised on **speech-active** RMS, never whole-file RMS.
+- "Silence" for trimming purposes is measured against each take's own noise
+  floor: these recordings sit only ~30 dB below the speech peak.
+- Frames that are exactly zero are alignment padding, not a quiet part of the
+  recording — the floor estimate excludes them, or the first sample of real
+  hiss reads as an onset.
+- LTAS analysis uses `n_fft = 4096`; at 1024 the 125 Hz third-octave band
+  contains no FFT bin and reads as 20 dB of silence.
 
 ### Legacy Structure (src/, Adım 0)
 ```
@@ -163,6 +206,12 @@ Validated by `mcgurk/config/schema.py`; **unknown fields are an error**.
 - Categorisation maps (`fusion_map`, `combination_map`) live here, not in code
   (§A.9). Their keys must name a real `av_pairs` entry and their values must be
   in `response_set`; both are checked at load.
+- `stimulus_prep.*`: everything `tools/prepare_stimuli.py` needs — the seed,
+  the `speaker_id` → source-folder map, the token list, and the video/audio/
+  burst/noise/GIN parameters. The SNRs to prepare are **derived** from the
+  enabled modules' `noise_conditions`, never listed a second time. Load-time
+  checks: every `modules.*.speaker_id` names a declared speaker, and every
+  token the design uses is in `stimulus_prep.tokens`.
 
 ## Data Model (new package — data/mcgurk.sqlite)
 Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
@@ -213,6 +262,8 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Run admin panel: `python admin.py`
 - Monitor setup (ilk kurulumda bir kez): `python scripts/setup_monitor.py`
 - Validate config + design cost: `python -m mcgurk.config`
+- Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
+- Verify stimuli: `python tools/verify_stimuli.py [--quick]`
 - Verify a backup: `python tools/verify_backup.py <yedek> --compare-with data/mcgurk.sqlite`
 - Tests: `pytest` locally; `pytest -m "not psychopy"` is what CI runs (no
   PsychoPy installed there — see `requirements-ci.txt`)
@@ -245,7 +296,9 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't mix PsychoPy and PySide6 in the same process — separate entry points
 - Don't store experiment data in git (data/ is gitignored)
 - Don't use PsychoPy Builder GUI — all code is hand-written Coder style
-- Don't import PsychoPy from `mcgurk/config` or `mcgurk/db` — CI has none, and a test enforces it
+- Don't import PsychoPy from `mcgurk/config`, `mcgurk/db` or `mcgurk/stimuli` — CI has none, and a test enforces it
+- Don't present anything from `assets/` in the new package — it is raw material; the prepared set under `stimuli/` is what a session uses
+- Don't let stimulus preparation continue past a tolerance violation; there is no partially-prepared set worth having
 - Don't back up SQLite by copying the file — use `VACUUM INTO`; a WAL-mode copy is silently inconsistent
 - Don't commit inside a trial (§A.5) — `add_trial`/`add_response` defer, `finish_block` commits
 - Don't add a module to `modules.*` without also adding it to `blocks.module`'s CHECK list and `design.py`

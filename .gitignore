@@ -6,9 +6,10 @@
 *.mp3
 *Zone.Identifier
 # Raw camera/audio recordings and the prepared stimulus tree that
-# tools/prepare_stimuli.py writes (Adım 2).
+# tools/prepare_stimuli.py writes (Adım 2).  Anchored to the repository root:
+# an unanchored "stimuli/" also matches the mcgurk/stimuli/ source package.
 raw_recordings/
-stimuli/
+/stimuli/
 
 # --- Installers / large binaries ---
 # Nothing that ships an interpreter or toolchain belongs in the repository.

@@ -33,5 +33,6 @@ jobs:
       - run: pip install -r requirements-ci.txt
       # Tests needing a screen or an audio device are marked `psychopy` and
       # skip themselves when the import is unavailable; they run on the
-      # development machine instead.
+      # development machine instead.  The `ffmpeg`-marked stimulus tests use
+      # the ffmpeg on the runner image and skip themselves if it is gone.
       - run: pytest -m "not psychopy"

@@ -561,6 +561,124 @@ class CrossHearingCheck(StrictModel):
     n_trials: int = Field(gt=0)
 
 
+# --------------------------------------------------------- stimulus preparation
+
+
+class SpeakerSource(StrictModel):
+    """One speaker: the id the modules reference and its raw recording folder.
+
+    The mapping used to be implicit — ``modules.*.speaker_id: 1`` with nothing
+    saying which of the ``assets/`` folders that is.  Writing it down means
+    adding a speaker cannot silently renumber the existing ones.
+    """
+
+    id: int = Field(ge=1)
+    source: Path
+
+
+class VideoPrep(StrictModel):
+    #: The sources are 29.97 fps (30000/1001), which is 2.002 refreshes per
+    #: frame at 60 Hz and therefore a periodic frame repeat.  30 makes it two.
+    target_fps: float = Field(gt=0)
+    crf: int = Field(ge=0, le=51)
+    #: Every frame an I-frame: decoding one frame never depends on another, so
+    #: playback cannot stall on a long GOP.  Costs disk, which is free here.
+    all_intra: bool = True
+
+
+class AudioPrep(StrictModel):
+    bit_depth: Literal[16, 24]
+    #: Active-speech level every token is normalised to.  Well below 0 dBFS so
+    #: adding noise at the configured SNR cannot clip.
+    target_level_dbfs: float = Field(lt=0)
+    #: A frame counts as speech when its energy is within this many dB of the
+    #: loudest frame.  Whole-file RMS is wrong here: the tokens are ~43%
+    #: silence and the silent fraction differs between them.
+    active_speech_threshold_db: float = Field(gt=0)
+    #: Fade at the start and end of every written speech file.  Alignment
+    #: trims up to ~250 ms off the front of some tokens, which leaves the file
+    #: beginning mid-hiss; without a fade, some trials would start with a step
+    #: and others with digital silence.
+    edge_ramp_ms: float = Field(gt=0)
+
+
+class BurstPrep(StrictModel):
+    #: Envelope rise over the pre-burst floor that counts as the burst.
+    threshold_db: float = Field(gt=0)
+    #: …and how long it has to stay up, so a single sample of noise is not it.
+    min_duration_ms: float = Field(gt=0)
+    #: QC gate: after alignment the burst is measured again and must land this
+    #: close to its target, otherwise preparation fails.
+    alignment_tolerance_ms: float = Field(gt=0)
+
+
+class NoisePrep(StrictModel):
+    type: Literal["speech_shaped"]
+    #: Distinct noise waveforms per (token, SNR).  With 10 repetitions per cell
+    #: a single waveform would be heard ten times and could be learned.
+    instances: int = Field(ge=1)
+    ltas_tolerance_db: float = Field(gt=0)
+    ramp_ms: float = Field(ge=0)
+
+
+class GinPrep(StrictModel):
+    #: Gap edges are ramped: an instantaneous cut produces a click whose
+    #: spectral splatter is audible independently of the gap itself.
+    gap_ramp_ms: float = Field(gt=0)
+    #: Fade at the start and end of a whole segment.  Separate from
+    #: ``noise.ramp_ms``, which shapes the noise mixed into a 2.5 s speech
+    #: token and therefore has to be short: a six-second noise burst that
+    #: arrives in 50 ms is startling, and startle is not what GIN measures.
+    segment_ramp_ms: float = Field(gt=0)
+    bandwidth_hz: tuple[float, float]
+
+
+class StimulusPrep(StrictModel):
+    """Everything ``tools/prepare_stimuli.py`` needs (steps.md §C Adım 2).
+
+    Preparation is offline by design (§A.12): nothing here is read during a
+    trial.  It is in the experiment config rather than a separate file because
+    the prepared set and the design have to be validated against each other —
+    a token in ``av_pairs`` with no recording is a config error, not a run-time
+    surprise.
+    """
+
+    seed: int
+    speakers: list[SpeakerSource] = Field(min_length=1)
+    tokens: list[str] = Field(min_length=1)
+    video: VideoPrep
+    audio: AudioPrep
+    burst: BurstPrep
+    noise: NoisePrep
+    gin: GinPrep
+
+    def speaker_ids(self) -> list[int]:
+        return [speaker.id for speaker in self.speakers]
+
+    def source_for(self, speaker_id: int) -> Path:
+        for speaker in self.speakers:
+            if speaker.id == speaker_id:
+                return speaker.source
+        raise KeyError(f"stimulus_prep.speakers içinde id {speaker_id} yok")
+
+    @model_validator(mode="after")
+    def _no_duplicates(self) -> StimulusPrep:
+        ids = self.speaker_ids()
+        if len(set(ids)) != len(ids):
+            raise ValueError("stimulus_prep.speakers tekrarlı id içeriyor")
+        sources = [str(s.source) for s in self.speakers]
+        if len(set(sources)) != len(sources):
+            raise ValueError("stimulus_prep.speakers tekrarlı kaynak klasörü içeriyor")
+        if len(set(self.tokens)) != len(self.tokens):
+            raise ValueError("stimulus_prep.tokens tekrarlı değer içeriyor")
+        low, high = self.gin.bandwidth_hz
+        if low <= 0 or high <= low:
+            raise ValueError(
+                "stimulus_prep.gin.bandwidth_hz [alt, üst] ve 0 < alt < üst olmalı"
+            )
+        return self
+
+
 # ---------------------------------------------------------------------- root
 
 
@@ -576,6 +694,59 @@ class ExperimentConfig(StrictModel):
     modules: ModulesConfig
     speaker_selection: SpeakerSelection
     cross_hearing_check: CrossHearingCheck
+    stimulus_prep: StimulusPrep
+
+    # -- what the stimulus set has to contain ------------------------------
+
+    def required_snrs(self) -> list[float]:
+        """SNRs the enabled modules ask for, in dB.
+
+        Derived rather than configured twice: a separate list under
+        ``stimulus_prep`` could disagree with ``noise_conditions`` and the
+        mismatch would only show up as a missing file mid-session.
+        """
+        snrs: set[float] = set()
+        for module in (self.modules.mcgurk, self.modules.avsr):
+            if not module.enabled:
+                continue
+            snrs.update(snr for snr in module.noise_conditions if snr is not None)
+        return sorted(snrs)
+
+    def required_speaker_ids(self) -> list[int]:
+        ids: set[int] = set()
+        for module in (
+            self.modules.mcgurk,
+            self.modules.avsr,
+            self.modules.tbw,
+            self.modules.dichotic,
+        ):
+            if module.enabled:
+                ids.add(module.speaker_id)
+        if self.speaker_selection.fixed_id is not None:
+            ids.add(self.speaker_selection.fixed_id)
+        return sorted(ids)
+
+    def required_tokens(self) -> dict[str, list[str]]:
+        """Tokens each enabled module needs, keyed by module name."""
+        needed: dict[str, list[str]] = {}
+        if self.modules.mcgurk.enabled:
+            needed["mcgurk"] = sorted(
+                {t for p in self.modules.mcgurk.av_pairs for t in (p.visual, p.audio)}
+            )
+        if self.modules.avsr.enabled:
+            tokens: set[str] = set()
+            for stimulus_set in self.modules.avsr.stimulus_sets:
+                if stimulus_set.enabled and stimulus_set.type == "syllable":
+                    tokens.update(stimulus_set.tokens or [])
+            needed["avsr"] = sorted(tokens)
+        if self.modules.tbw.enabled:
+            stimulus = self.modules.tbw.stimulus
+            needed["tbw"] = sorted({stimulus.visual, stimulus.audio})
+        if self.modules.dichotic.enabled:
+            needed["dichotic"] = sorted(
+                {t for p in self.modules.dichotic.pairs for t in (p.left, p.right)}
+            )
+        return needed
 
     # -- design summary ---------------------------------------------------
 
@@ -638,6 +809,53 @@ class ExperimentConfig(StrictModel):
                 f"Etkin ama module_order'da olmayan modüller: {sorted(missing)}. "
                 "Etkin her modül oturum sırasında yer almalı, aksi hâlde sessizce "
                 "hiç koşmaz"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _design_matches_the_stimulus_set(self) -> ExperimentConfig:
+        """Every speaker and token the design uses must be preparable.
+
+        Without this, a typo in ``av_pairs`` or a ``speaker_id`` with no
+        recording folder surfaces as a missing file — either when the stimuli
+        are prepared, or worse, halfway through a session.
+        """
+        problems: list[str] = []
+
+        known_ids = set(self.stimulus_prep.speaker_ids())
+        unknown_ids = [i for i in self.required_speaker_ids() if i not in known_ids]
+        if unknown_ids:
+            problems.append(
+                f"stimulus_prep.speakers içinde olmayan speaker_id: {unknown_ids} "
+                f"(tanımlı: {sorted(known_ids)})"
+            )
+
+        known_tokens = set(self.stimulus_prep.tokens)
+        for module_name, tokens in self.required_tokens().items():
+            unknown = [t for t in tokens if t not in known_tokens]
+            if unknown:
+                problems.append(
+                    f"modules.{module_name} stimulus_prep.tokens içinde olmayan "
+                    f"token kullanıyor: {unknown} (tanımlı: {sorted(known_tokens)})"
+                )
+
+        # A gap inside the segment's own fade would be presented at a lower
+        # level than the ones outside it, so its detectability — the whole
+        # measurement — would depend on where it happened to land.
+        if self.modules.gin.enabled:
+            ramp_s = self.stimulus_prep.gin.segment_ramp_ms / 1000.0
+            if ramp_s > self.modules.gin.min_gap_separation_s:
+                problems.append(
+                    f"stimulus_prep.gin.segment_ramp_ms ({ramp_s * 1000:.0f} ms) "
+                    f"modules.gin.min_gap_separation_s "
+                    f"({self.modules.gin.min_gap_separation_s * 1000:.0f} ms) "
+                    "değerini aşıyor — boşluk segmentin kendi rampasının içine "
+                    "düşebilir"
+                )
+
+        if problems:
+            raise ValueError(
+                "Tasarım ile uyaran seti uyuşmuyor:\n  - " + "\n  - ".join(problems)
             )
         return self
 

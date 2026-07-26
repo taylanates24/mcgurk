@@ -209,3 +209,77 @@ speaker_selection:
 cross_hearing_check:
   enabled: true
   n_trials: 20
+
+# ---- Stimulus preparation (tools/prepare_stimuli.py, Adım 2) ----
+# Offline only (§A.12): nothing below is read during a trial.  It lives in this
+# file rather than a separate one because the prepared set and the design have
+# to be checked against each other — a token in av_pairs with no recording is a
+# config error, and the schema now says so at load time.
+stimulus_prep:
+  # Seeds the speech-shaped noise, the noise instances and the GIN gap
+  # placement.  Changing it produces a different (equally valid) stimulus set;
+  # keeping it fixed means the set can be rebuilt byte-identically.
+  seed: 20260726
+
+  # The id↔folder mapping modules.*.speaker_id refers to.  Only the three
+  # congruent recordings of each speaker are used as sources: they are the
+  # natural takes.  The six incongruent mp4s are an older re-mux of the same
+  # tokens and are ignored.
+  speakers:
+    - {id: 1, source: assets/female_speaker_1}
+    - {id: 2, source: assets/male_speaker_1}
+  tokens: [ba, da, ga]
+
+  video:
+    # 29.97 → 30.  At 60 Hz the source needs 2.002 refreshes per frame, which
+    # repeats a frame roughly once a second.  A 2.58 s clip has 77 frames and
+    # keeps all 77 after the conversion — only the timestamps move, by at most
+    # 2.6 ms at the end of the clip.  QC fails if a frame is added or dropped.
+    target_fps: 30
+    crf: 16          # visually lossless; the sources are already AAC/H.264
+    all_intra: true
+
+  audio:
+    # The sources are 44.1 kHz AAC, so 24 bits add no source precision.  They
+    # keep normalisation and noise mixing from stacking quantisation noise;
+    # the manifest records what the source actually was.
+    bit_depth: 24
+    target_level_dbfs: -23.0
+    active_speech_threshold_db: 30.0
+    # Alignment trims up to ~250 ms off the front of some tokens, so those
+    # files would otherwise begin in the middle of the recording's hiss while
+    # the others begin in digital silence — an audible step, and an
+    # inconsistent one between trials.  Far below the shortest lead-in
+    # (~590 ms after alignment), so it can never touch the speech.
+    edge_ramp_ms: 10.0
+
+  burst:
+    threshold_db: 12.0
+    min_duration_ms: 10.0
+    alignment_tolerance_ms: 5.0
+
+  noise:
+    type: speech_shaped        # from the corpus LTAS, not white noise
+    # Distinct noise waveforms per cell.  They are meant to sound identical —
+    # speech-shaped noise is stationary — but a repeated *waveform* can be
+    # learned across the 10 repetitions of a cell, and these are not repeated.
+    instances: 3
+    ltas_tolerance_db: 3.0
+    # Fade on the noise mixed into a speech token.  50 ms made the noise
+    # arrive rather than start.  Bounded above by the token's own lead-in:
+    # the fade has to finish before the speech does, or the early part of the
+    # token would sit at a higher SNR than the nominal one.  The shortest
+    # lead-in in this corpus is ~740 ms (speaker 2, /ga/), and preparation
+    # fails rather than guesses if a future recording is tighter than that.
+    ramp_ms: 250.0
+
+  gin:
+    gap_ramp_ms: 1.0
+    # Segment edges, not gap edges.  A six-second noise burst reaching full
+    # level in 50 ms arrives rather than starts.  Must not exceed
+    # modules.gin.min_gap_separation_s, or a gap could land inside the fade
+    # and be quieter than the others — the schema checks this.
+    segment_ramp_ms: 200.0
+    # Musiek et al. (2005) use broadband noise; the upper edge is bounded so
+    # the stimulus does not depend on the headphone response above 8 kHz.
+    bandwidth_hz: [100.0, 8000.0]

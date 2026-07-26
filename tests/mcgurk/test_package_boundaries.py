@@ -72,5 +72,11 @@ def test_config_and_db_import_without_psychopy_installed(monkeypatch) -> None:
         "mcgurk.db.design",
         "mcgurk.logging_setup",
         "mcgurk.provenance",
+        "mcgurk.stimuli.dsp",
+        "mcgurk.stimuli.ffmpeg",
+        "mcgurk.stimuli.manifest",
+        "mcgurk.stimuli.prepare",
+        "mcgurk.stimuli.verify",
+        "mcgurk.stimuli.wavfile",
     ):
         importlib.reload(importlib.import_module(module))

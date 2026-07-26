@@ -134,6 +134,34 @@ Dikotik uyaranlar uyumlu videolardan türetilir ve depoya dâhil değildir:
 python scripts/generate_dichotic_stimuli.py
 ```
 
+### Hazırlanmış uyaran seti (`stimuli/`, yeni paket)
+
+`assets/` ham kayıttır ve doğrudan sunulmaz. Yeni paket `stimuli/` altındaki
+**hazırlanmış** seti kullanır: sessiz sabit kare hızlı video, patlama anına
+hizalanmış ve eşit seviyeye getirilmiş 48 kHz 24-bit ses, konuşma şekilli
+gürültü, gürültülü türevler, dikotik çiftler ve GIN gürültü segmentleri.
+Hepsi **çevrimdışı** üretilir (§A.12: çalışma anında DSP yok).
+
+```bash
+python tools/prepare_stimuli.py            # ilk üretim
+python tools/prepare_stimuli.py --force    # mevcut setin üzerine yaz
+python tools/verify_stimuli.py             # denetle (çıkış kodu 0/1)
+```
+
+Üretim `config/experiment.yaml` → `stimulus_prep` bölümünden okunur; hangi
+klasörün hangi `speaker_id` olduğu orada yazılıdır. Çıktının yanında
+`stimuli/manifest.json` durur: her dosyanın sağlama toplamı, süresi, ölçülen
+patlama anı, seviyesi ve kaynağı. Adım 3 sesi ekranın flip saatine karşı bu
+patlama anına göre planlayacak, Adım 8'in kontrol listesi de setin eksiksiz
+olduğunu buradan doğrulayacak.
+
+Tolerans dışı her durum **hata verip çıkar** — yarım hazırlanmış bir set
+dışarıdan tam görünür. `verify_stimuli.py` diskteki dosyaları manifest'e
+*yeniden ölçerek* karşılaştırır; setin makineler arasında kopyalanması veya
+elle düzenlenmesi bu yüzden yakalanır.
+
+Uyaran seti ve `assets/` depoya dâhil değildir (`.gitignore`).
+
 ### Monitör profili (ilk kurulumda bir kez)
 
 ```bash
@@ -315,7 +343,14 @@ pytest -m "not psychopy"
 
 Bu, GitHub Actions'ın koştuğu komuttur — CI'da PsychoPy hiç kurulu değildir.
 `tests/mcgurk/test_package_boundaries.py` bunun bozulmadığını doğrular:
-`mcgurk/config` ve `mcgurk/db` altında PsychoPy import'u testle yasaklıdır.
+`mcgurk/config`, `mcgurk/db` ve `mcgurk/stimuli` altında PsychoPy import'u
+testle yasaklıdır.
+
+ffmpeg ikilisi gerektiren uyaran testleri `ffmpeg` işaretini taşır ve ikili
+yoksa kendilerini atlar. Ölçüm fonksiyonlarının kendisi (patlama tespiti,
+seviye, SNR, GIN boşluk yerleşimi) sentetik sinyallerle test edilir ve her
+yerde koşar — gerçek korpusa karşı test etmek yalnızca korpusun kendisiyle
+tutarlı olduğunu söylerdi.
 
 ### Tasarımın maliyetini görmek
 
@@ -337,18 +372,33 @@ gösterilen metinler Türkçedir.
 Bunlar bilinçli olarak Adım 0 kapsamı dışında bırakıldı; her biri
 `docs/steps.md` içinde bir adıma bağlıdır.
 
-**Uyaranlar (Adım 2):**
+**Uyaranlar — `src/` yolunda hâlâ geçerli, `stimuli/` altında çözüldü:**
+
+`src/` doğrudan `assets/` içindeki ham mp4'leri sunar ve aşağıdaki sınırların
+tamamını taşımaya devam eder. Adım 2'nin ürettiği `stimuli/` seti bunları
+çözer; yeni paket Adım 8'de devralana kadar ikisi yan yana durur.
+
 - Videolar 29.97 fps — 60 Hz ekranda kare başına 2.002 yenileme, periyodik kare
-  tekrarı oluşur.
-- Ses AAC ile sıkıştırılmış ve 44.1 kHz; hedef 48 kHz 24-bit PCM.
+  tekrarı. *(`stimuli/`: 30 fps, sabit kare hızı.)*
+- Ses AAC ile sıkıştırılmış ve 44.1 kHz. *(`stimuli/`: 48 kHz 24-bit PCM.)*
 - Token'ların akustik patlama anları hizalanmamış, seviyeleri eşitlenmemiş.
-- SNR karışımı tüm dosya RMS'i üzerinden hesaplanıyor; konuşma-aktif RMS
-  kullanılmalı (dosyaların önemli bir bölümü sessizlik).
-- Gürültü dosyaları kayıplı MP3 ve 44.1 kHz. Konuşma şekilli gürültü korpusun
-  LTAS'ından üretilmiş değil.
-- Dikotik uyaranlar 48 kHz stereo PCM'e taşındı, ancak kaynakları hâlâ AAC
-  videolar olduğu için sinyal tek bir kayıplı turdan geçmiş durumda. Adım 2'de
-  ham kayıtlardan yeniden üretilecek.
+  *(`stimuli/`: her ses, birlikte sunulacağı videonun kendi patlama anına
+  hizalanır; ölçülen sapma 1 ms'in altında. Seviyeler ortak bir
+  konuşma-aktif RMS hedefine getirilir.)*
+- SNR karışımı tüm dosya RMS'i üzerinden hesaplanıyor; dosyaların önemli bir
+  bölümü sessizlik olduğu için etkin SNR token'a göre değişiyor.
+  *(`stimuli/`: konuşma-aktif seviye üzerinden, çevrimdışı.)*
+- Gürültü dosyaları kayıplı MP3 ve 44.1 kHz, konuşma şekilli değil.
+  *(`stimuli/`: korpusun LTAS'ından üretilen SSN.)*
+- Dikotik uyaranlar 48 kHz stereo PCM ama kaynakları AAC.
+  *(`stimuli/`: aynı kaynaktan, ama normalize edilmiş ve iki kulak ortak bir
+  patlama anına hizalanmış hâlde.)*
+
+**Hazırlanmış sette kalan sınır:** kaynaklar kayıpsız değil. Depoda ham kayıt
+yok (A0-3), bu yüzden `stimuli/` 44.1 kHz AAC'den türetiliyor; 48 kHz ve
+24 bit kaynağa hassasiyet eklemez, yalnızca sonraki işlemlerin kuantalama
+gürültüsü biriktirmesini engeller. Manifest her dosyanın kaynak codec'ini ve
+örnekleme hızını kaydeder.
 
 **Zamanlama (Adım 3):**
 - Gerçekleşen zamanlama kaydedilmiyor: onset zamanları, düşen kare sayısı,
@@ -370,9 +420,11 @@ Bunlar bilinçli olarak Adım 0 kapsamı dışında bırakıldı; her biri
   kontrolü yok.
 - Kesilen oturuma kaldığı yerden devam etme yok.
 
-**Adım 1'de gelmeyenler:**
+**Adım 1–2'de gelmeyenler:**
 - `mcgurk/` paketinin `engine/`, `modules/`, `ui/`, `analysis/` alt paketleri
   boş — sırasıyla Adım 3, 4–7, 8 ve 9.
+- Oddball tonları henüz üretilmiyor: `steps.md` onları Adım 7'ye koyuyor. Orada
+  da çevrimdışı üretilecek (§A.12).
 - Yeni config ve veritabanı henüz hiçbir deneyi çalıştırmıyor; `main.py` Adım
   8'e kadar `src/` yolunu kullanmaya devam ediyor.
 - AVSR kelime seti (`type: word`) yalnızca şema düzeyinde var; `enabled: true`
@@ -385,8 +437,8 @@ Bunlar bilinçli olarak Adım 0 kapsamı dışında bırakıldı; her biri
 
 **Ortam:**
 - `ffmpeg` PATH'te yoksa `imageio-ffmpeg` ile gelen ikili kullanılır. `ffprobe`
-  bu pakette **yoktur**; uyaran doğrulama araçları (Adım 2) sistemde kurulu
-  ffmpeg gerektirecek.
+  bu pakette **yoktur**; uyaran araçları bu yüzden `ffprobe` kullanmaz, akış
+  bilgisini `ffmpeg -i` çıktısından okur. Ayrı bir kurulum gerekmez.
 
 ---
 

@@ -3,6 +3,7 @@ testpaths = ["tests"]
 addopts = "-v"
 markers = [
     "psychopy: PsychoPy (ekran/ses aygıtı) gerektiren testler; CI'da atlanır",
+    "ffmpeg: ffmpeg ikilisi gerektiren testler; ikili yoksa atlanır",
 ]
 
 [tool.ruff]

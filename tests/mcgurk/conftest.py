@@ -18,6 +18,23 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_CONFIG = PROJECT_ROOT / "config" / "experiment.yaml"
 
+
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    """Skip ``ffmpeg``-marked tests where no ffmpeg binary exists.
+
+    Stimulus preparation is not something CI has to be able to run — it is an
+    offline step done once per corpus — but the DSP it is built on is, so only
+    the tests that actually shell out are skipped.
+    """
+    if "ffmpeg" not in item.keywords:
+        return
+    from mcgurk.stimuli.ffmpeg import FFmpegError, find_ffmpeg
+
+    try:
+        find_ffmpeg()
+    except FFmpegError as exc:
+        pytest.skip(str(exc))
+
 #: Exactly the shape ``kalibrasyon.py hesap`` writes (02_kalibrasyon.md).
 CALIBRATION_JSON: dict[str, Any] = {
     "tarih": "2026-07-20T14:30:00",

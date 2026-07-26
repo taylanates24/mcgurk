@@ -10,6 +10,13 @@
 pydantic==2.13.4
 pyyaml==6.0.3
 
+# mcgurk/stimuli — the DSP that decides burst times, levels, SNR and GIN gap
+# placement is tested against synthetic signals, which needs no ffmpeg and no
+# audio device.  The tests that do shell out to ffmpeg are marked `ffmpeg`.
+numpy==2.2.6
+scipy==1.14.1
+soundfile==0.13.1
+
 pytest==9.1.1
 ruff==0.16.0
 mypy==2.3.0
