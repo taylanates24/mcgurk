@@ -8,7 +8,7 @@ Aktif adım: 1 (TESTTE — kullanıcı manuel testleri bekleniyor)
 | Adım | Başlık | Durum | Tarih | Commit |
 |---|---|---|---|---|
 | 0 | Baseline düzeltme | TAMAMLANDI | 2026-07-26 | `f45eeda`…`618ef1c` |
-| 1 | Proje iskeleti | TESTTE | | |
+| 1 | Proje iskeleti | TESTTE | | `0fb3d3f` |
 | 2 | Uyaran hazırlama | BEKLİYOR | | |
 | 3 | A/V senkron çekirdeği | BEKLİYOR | | |
 | 4 | Modül 1: McGurk | BEKLİYOR | | |
@@ -204,9 +204,10 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
 
 ### Adım 1 — Proje iskeleti
 - **Durum:** TESTTE
-- **Tamamlanma:** — (otomatik testler yeşil: 208 test, ruff + mypy temiz;
-  `TEST_ADIM_1.md` kullanıcıda)
-- **Commit:** —
+- **Tamamlanma:** — (otomatik testler yeşil: 209 test, ruff + mypy temiz;
+  `TEST_ADIM_1.md` kullanıcıda. TAMAMLANDI'ya çevrilmesi manuel testlerin —
+  özellikle push sonrası CI koşumunun — onayına bağlı.)
+- **Commit:** `0fb3d3f`
 
 - **Ne yapıldı:**
   - **Yeni paket `mcgurk/`**, `src/` yanına kuruldu (A0-1 kararı). Alt paketler:
