@@ -19,7 +19,7 @@ klinik çalışma. Katılımcılar: 20 sağ SSD + 20 sol SSD + 20 kontrol.
 | | `src/` (Adım 0) | `mcgurk/` (Adım 1→) |
 |---|---|---|
 | Durum | Çalışan baseline deney | Yeni platform, inşa hâlinde |
-| Giriş | `python main.py` | Henüz yok (Adım 8) |
+| Giriş | `python main.py` | Henüz yok (Adım 8); `tools/timing_selftest.py` çalışır |
 | Config | `config.yaml` | `config/experiment.yaml` |
 | Veritabanı | `data/mcgurk.db` | `data/mcgurk.sqlite` |
 | PsychoPy | Zorunlu | `config/` ve `db/` katmanlarında **yasak** |
@@ -310,6 +310,53 @@ referanslarından birini — video akışının kare ızgarasına bağlıyordu.
 > mevcut değil. Kod her ikisini de ayarlar ve sonucu çalışma öncesinde
 > doğrular.
 
+### Yeni paketin sunum motoru (`mcgurk/engine/`, Adım 3)
+
+`src/` yukarıdaki stratejiyi çalışma anında ffmpeg çağırarak uyguluyor. Yeni
+pakette sessiz video ve hizalanmış WAV zaten `stimuli/` altında hazır
+(Adım 2), bu yüzden motorun işi yalnızca zamanlama:
+
+| Katman | İş | PsychoPy |
+|---|---|---|
+| `scheduling.py` | Pay hesabı, ses planlama anı, gerçekleşen SOA, kare istatistiği | **Hayır** — CI'da test edilir |
+| `audio.py` | Lateralizasyon, kalibrasyon trim'i, PTB kapısı, aygıt açma | Yalnızca `Sound` için |
+| `window.py` | Pencere, ölçülen yenileme hızı, kare aralığı kaydı | Evet |
+| `av_presenter.py` | `TrialSpec` → sunum → `TimingRecord` | Evet |
+
+**Pay (lead) denemeye göre hesaplanır.** Video yalnızca yenileme ızgarasında
+başlayabilir, ses örnek hassasiyetinde planlanır; bu yüzden **tüm SOA
+manipülasyonu ses tarafındadır** ve flip hedefi yalnızca yer açmak için
+ileri itilir. Config'in `lead_frames: 6` değeri 60 Hz'de 100 ms eder ve
+TBW'nin −300 ms'i için yetmez, o yüzden taban değerdir: gereken pay her
+denemede `|SOA − D|` üzerinden yeniden hesaplanır. Hesaplanan pay 1 saniyeyi
+aşarsa deneme **hata verir** — sessizce uzatılmaz.
+
+**`trials.actual_soa_ms` katılımcının yaşadığı SOA'dır**, yani yazılımda
+ölçülen fark artı uygulanan `system_av_offset_ms` telafisi. Böylece nominal
+ile doğrudan karşılaştırılabilir; ham yazılım farkı
+`actual_soa_ms − sessions.system_av_offset_ms` ile geri hesaplanır. Fark iki
+akışın **akustik patlama anları** arasında ölçülür, dosya başlangıçları
+arasında değil — hazırlanmış dosyalardaki kalıntı hizalama hatası (< 1 ms)
+böylece varsayılmak yerine kayda giriyor.
+
+**Ses onset'i "ölçülmüyor", bildiriliyor.** PsychPortAudio'nun `StartTime`
+alanı bu makinede (WASAPI, gecikme sınıfı 3) istenen zamanın **birebir
+aynısıdır** — aygıt çıkış damgası vermediği için PTB'nin bildirecek başka bir
+şeyi yok. Kayda giren değer budur ve `TimingRecord.audio_onset_reported` bunun
+bir ölçüm olmadığını söyler. Onset'i gerçekten doğrulayan şey fiziksel
+ölçümdür: `tools/timing_selftest.py --level 2` (jitter) ve fotodiyot (mutlak
+gecikme).
+
+> PsychoPy 2026.1'de `prefs.hardware['audioLatencyMode']` **tercih şemasından
+> kaldırıldı**; gecikme sınıfı artık `SpeakerDevice(latencyClass=...)`
+> argümanı ve varsayılanı 1. Config'teki `timing.audio_latency_mode` bu yüzden
+> `audio.open_speaker()` içinde uygulanıyor. Eski tercih anahtarını yazmak
+> hata vermez, sessizce yok sayılırdı.
+
+Aygıtın akış hızı `audio.sample_rate` ile karşılaştırılır ve tutmazsa program
+durur: PsychoPy aksi hâlde her uyaranı yükleme anında yeniden örnekler ve
+setin 48 kHz'de hazırlanmış olması anlamını yitirirdi.
+
 ### Yeniden üretilebilirlik
 
 Deneme sırası tohumlanmış bir RNG ile karıştırılır ve tohum oturum kaydına
@@ -361,6 +408,43 @@ python -m mcgurk.config
 ```
 
 Deneme sayısı kararı (`docs/steps.md` §F.1) bu çıktıya bakılarak verilecek.
+
+### Zamanlamayı doğrulamak
+
+Önce çıkış aygıtını seçin. `audio.device: null` bırakılırsa PTB **bulduğu ilk
+aygıtı** kullanır; bu, hiçbir şeyin bağlı olmadığı bir SPDIF portu da olabilir
+(sessizlik), monitörün hoparlörü de (sessizlik değil, daha kötüsü):
+
+```bash
+python tools/timing_selftest.py --devices
+```
+
+Yazılım tarafı (backend, yenileme ızgarası, ses planlama) — her makinede
+koşar, donanım gerektirmez:
+
+```bash
+python tools/timing_selftest.py --level 1
+```
+
+Hazırlanmış uyaranlarla altı gerçek deneme sunar ve gerçekleşen zamanlamayı
+basar (AV, ±200 ms SOA, A-only, V-only, lateralize):
+
+```bash
+python tools/timing_selftest.py --demo
+```
+
+Loopback jitter ölçümü (bir kablo gerektirir) ve fotodiyot yönergesi:
+
+```bash
+python tools/timing_selftest.py --level 2 --play
+```
+
+```bash
+python tools/timing_selftest.py --level 3
+```
+
+Kademe 3 bu araçta gerçeklenmez; `docs/01_av_gecikme_olcumu.md` scriptleriyle,
+**tüm kod bittikten sonra** bir kez yapılır.
 
 Kod, değişken adları ve docstring'ler İngilizce; katılımcıya ve operatöre
 gösterilen metinler Türkçedir.

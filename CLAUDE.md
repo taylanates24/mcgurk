@@ -71,7 +71,13 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── manifest.py              # manifest.json models + lookups
 │   ├── prepare.py               # the pipeline
 │   └── verify.py                # re-measure from disk, report
-├── engine/                      # Adım 3 (empty)
+├── engine/                      # Adım 3 — A/V synchronisation core
+│   ├── scheduling.py            # pure timing arithmetic, no PsychoPy
+│   ├── audio.py                 # lateralisation, calibration trim, PTB gate
+│   ├── window.py                # window, measured refresh, frame stats
+│   ├── av_presenter.py          # TrialSpec -> presentation -> TimingRecord
+│   ├── loopback.py              # level-2 jitter analysis (pure numpy)
+│   └── psychopy_prefs.py        # must run before psychopy.sound is imported
 ├── modules/                     # Adım 4–7c (empty)
 ├── analysis/                    # Adım 9 (empty)
 ├── ui/                          # Adım 8 (empty)
@@ -82,6 +88,7 @@ stimuli/                         # prepared set + manifest.json (gitignored)
 tools/verify_backup.py           # an untested backup is not a backup
 tools/prepare_stimuli.py         # assets/ -> stimuli/
 tools/verify_stimuli.py          # audit stimuli/ against manifest + design
+tools/timing_selftest.py         # --level 1|2|3, --demo
 .github/workflows/ci.yml         # ruff + mypy, pytest -m "not psychopy"
 ```
 
@@ -116,6 +123,38 @@ Key points that are easy to get wrong:
   hiss reads as an onset.
 - LTAS analysis uses `n_fft = 4096`; at 1024 the 125 Hz third-octave band
   contains no FFT bin and reads as 20 dB of silence.
+
+### Presentation engine (`mcgurk/engine/`, from Adım 3)
+
+The timing arithmetic is deliberately PsychoPy-free (`scheduling.py`) so the
+part that decides when a sound starts is testable in CI. Things that are easy
+to get wrong:
+
+- **The lead is per trial, not a constant.** `timing.lead_frames` is a floor.
+  A negative SOA needs the flip target pushed far enough ahead that the audio
+  can still start before it — TBW's −300 ms needs ~19 frames at 60 Hz, not 6.
+  Above `max_lead_s` (1 s) the trial fails rather than quietly stretching.
+- **`trials.actual_soa_ms` is the *experienced* SOA**: measured software
+  difference **plus** the applied `system_av_offset_ms`. It is directly
+  comparable with `nominal_soa_ms`; the raw difference is recoverable as
+  `actual_soa_ms − sessions.system_av_offset_ms`. The difference is taken
+  between the two acoustic **burst** times, not the file onsets.
+- **PsychoPy 2026.1 removed `prefs.hardware['audioLatencyMode']`** from the
+  preference spec. Latency class is now `SpeakerDevice(latencyClass=...)` and
+  defaults to 1, so `timing.audio_latency_mode` is applied in
+  `audio.open_speaker()`. Writing the old preference key is silently ignored.
+- **`SoundPTB.statusDetailed['StartTime']` is not a measurement.** On WASAPI
+  with no output timestamping it comes back bit-identical to the requested
+  time. It is recorded, and `TimingRecord.audio_onset_reported` says what it
+  is. The onset is verified physically or not at all (selftest level 2,
+  photodiode).
+- `TimeFailed` / `XRuns` from the same status dict *are* real: either one
+  during a trial means the sound did not come out when it was asked for.
+- **`MovieStim.frameIndex` always returns 0** in this version — use `pts`
+  to find out which frame was actually shown. `movie.stop()` reloads the file
+  from disk, so it must never be called between trials; `pause()`/`unload()`.
+- The device's stream rate is checked against `audio.sample_rate`: PsychoPy
+  resamples at load time otherwise, undoing the 48 kHz the set was prepared at.
 
 ### Legacy Structure (src/, Adım 0)
 ```
@@ -262,6 +301,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Run admin panel: `python admin.py`
 - Monitor setup (ilk kurulumda bir kez): `python scripts/setup_monitor.py`
 - Validate config + design cost: `python -m mcgurk.config`
+- Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
 - Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
 - Verify stimuli: `python tools/verify_stimuli.py [--quick]`
 - Verify a backup: `python tools/verify_backup.py <yedek> --compare-with data/mcgurk.sqlite`
@@ -297,6 +337,9 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't store experiment data in git (data/ is gitignored)
 - Don't use PsychoPy Builder GUI — all code is hand-written Coder style
 - Don't import PsychoPy from `mcgurk/config`, `mcgurk/db` or `mcgurk/stimuli` — CI has none, and a test enforces it
+- Don't put timing arithmetic in `av_presenter.py` — it belongs in `scheduling.py`, where it can be tested without hardware
+- Don't call `configure_psychopy()` after anything has imported `psychopy.sound` — backend selection is frozen at import
+- Don't treat a scheduled audio time as a measured onset; only a physical measurement verifies it
 - Don't present anything from `assets/` in the new package — it is raw material; the prepared set under `stimuli/` is what a session uses
 - Don't let stimulus preparation continue past a tolerance violation; there is no partially-prepared set worth having
 - Don't back up SQLite by copying the file — use `VACUUM INTO`; a WAL-mode copy is silently inconsistent

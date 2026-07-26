@@ -15,8 +15,21 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = PROJECT_ROOT / "mcgurk"
 
-#: Adım 3 onwards, engine/ and ui/ will legitimately import PsychoPy.
+#: engine/, ui/ and modules/ legitimately use PsychoPy.
 PSYCHOPY_ALLOWED = {"engine", "ui", "modules"}
+
+#: Engine modules that must still *import* without PsychoPy installed.  They
+#: may use it — but only inside a function, so that the timing arithmetic, the
+#: audio preparation and the loopback analysis stay testable on a machine with
+#: no screen and no sound card, which is where CI runs.
+ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY = (
+    "mcgurk.engine.scheduling",
+    "mcgurk.engine.audio",
+    "mcgurk.engine.loopback",
+    "mcgurk.engine.window",
+    "mcgurk.engine.av_presenter",
+    "mcgurk.engine.psychopy_prefs",
+)
 
 
 def _module_files() -> list[Path]:
@@ -49,6 +62,28 @@ def test_no_psychopy_import_in_the_pure_layers(path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("module_name", ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY)
+def test_engine_defers_its_psychopy_imports(module_name: str) -> None:
+    """PsychoPy may be used inside functions, never at module level.
+
+    This is what lets ``scheduling``, ``audio`` and ``loopback`` — the parts
+    that decide when a sound starts, where it goes and whether it arrived — be
+    tested in CI, where PsychoPy does not exist.
+    """
+    path = PACKAGE_ROOT / Path(*module_name.split(".")[1:]).with_suffix(".py")
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+
+    top_level_roots: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            top_level_roots.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            top_level_roots.add(node.module.split(".")[0])
+
+    assert "psychopy" not in top_level_roots
+    assert "psychtoolbox" not in top_level_roots
+
+
 def test_config_and_db_import_without_psychopy_installed(monkeypatch) -> None:
     """Import the layers with PsychoPy made unavailable."""
     import builtins
@@ -78,5 +113,6 @@ def test_config_and_db_import_without_psychopy_installed(monkeypatch) -> None:
         "mcgurk.stimuli.prepare",
         "mcgurk.stimuli.verify",
         "mcgurk.stimuli.wavfile",
+        *ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY,
     ):
         importlib.reload(importlib.import_module(module))

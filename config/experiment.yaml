@@ -57,7 +57,7 @@ display:
   size: [1920, 1080]
   background: black
   video_position: [0, 0]     # centre — §A.13, the schema rejects anything else
-  expected_refresh_hz: 60
+  expected_refresh_hz: 75
 
 audio:
   sample_rate: 48000
