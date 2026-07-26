@@ -193,6 +193,20 @@ Açılan **Katılımcı Bilgileri** penceresinde sırayla deneyin:
 Bunlar tam ekran PsychoPy penceresi açar ve ses çalar. Sessiz bir odada,
 kulaklıkla yapın.
 
+> **Beklenen uyarı — endişelenmeyin.** Video içeren her denemede konsolda şu
+> satır çıkar:
+>
+> ```
+> WARNING  Using `sdl2` for audio playback via `ffpyplayer`. This is not
+> recommended for applications requiring precise audio-visual synchronization.
+> ```
+>
+> Bu uyarı bastırılamaz: PsychoPy 2026.1'de `MovieStim` `noAudio=True`
+> argümanını yok sayar ve ffpyplayer'ı her durumda SDL2'ye bağlar (başka bir
+> `audioLib` vermek istisna fırlatır). Zararsızdır, çünkü `MovieStim`'e verilen
+> dosyada **ses akışı yoktur** — ffmpeg ile sökülmüştür, `pytest`
+> (`test_silent_video.py`) bunu her koşuda doğrular. Sesi `ptb` çalar.
+
 ### Test 6: Ses backend'i gerçekten ptb
 
 **Komut:**
@@ -245,18 +259,33 @@ Ayarlar:
 
 ### Test 8: ESC ile kesme ve veri korunması
 
+`ESC` artık **her aşamada** çalışır: talimat ekranı, sabitleme haçı, uyaran
+sunumu ve yanıt ekranı. Dördünü de ayrı ayrı deneyin.
+
 **Komut:**
 ```bash
 python main.py
 ```
 
-Katılımcı Kodu `TEST-002`, McGurk bölümü seçili. **3–4 deneme yanıtlayın,
-sonra yanıt ekranında `ESC`'e basın.**
+Katılımcı Kodu `TEST-002`, McGurk bölümü seçili.
 
-**Kontrol edilecek:**
-- Program çökmeden kapanıyor.
-- Konsolda `Oturum katılımcı/operatör tarafından kesildi (deneme N).` satırı var.
+| Deneme | Nerede `ESC`'e basılacak | Beklenen |
+|---|---|---|
+| 8a | Talimat ekranında (SPACE'e basmadan) | Hiç deneme kaydedilmeden çıkar |
+| 8b | Sabitleme haçı gösterilirken | O deneme kaydedilmez, öncekiler kalır |
+| 8c | Video/ses oynarken | Ses anında susar, o deneme kaydedilmez |
+| 8d | Yanıt ekranında (3–4 deneme yanıtladıktan sonra) | Yanıtlanan denemeler kalır |
+
+Her seferinde `python main.py` ile yeniden başlatın.
+
+**Kontrol edilecek (her dördünde):**
+- Program çökmeden kapanıyor, pencere kapanıyor.
+- Konsolda `Oturum kesildi (N deneme kaydedildikten sonra).` satırı var.
+- Konsolda **`Deney başarıyla tamamlandı.` YAZMIYOR.** Bunun yerine
+  `Deney tamamlanmadı (durum: aborted). Kaydedilen denemeler korundu.`
+  uyarısı çıkıyor.
 - Bitiş ekranı **gösterilmiyor**.
+- 8c'de ses `ESC` ile birlikte kesiliyor, videonun sonunu beklemiyor.
 
 Sonra durumu doğrulayın:
 
@@ -423,7 +452,7 @@ python -c "import pathlib; p=pathlib.Path('data/mcgurk.db'); p.unlink(missing_ok
 
 ## Kabul kriterleri
 
-- [ ] `pytest` yeşil (45 test)
+- [ ] `pytest` yeşil (55 test)
 - [ ] `ruff check .` ve `mypy` temiz
 - [ ] Katılımcı formunda ad-soyad alanı yok; boş/geçersiz girdi reddediliyor
 - [ ] `participants` tablosunda `name` sütunu yok
@@ -431,7 +460,10 @@ python -c "import pathlib; p=pathlib.Path('data/mcgurk.db'); p.unlink(missing_ok
 - [ ] Tam oturum baştan sona çalışıyor, A/V senkron duyulabilir şekilde doğru
 - [ ] Yanıt ekranında video görünmüyor, ses duyulmuyor
 - [ ] Bitiş ekranı başarı yüzdesi göstermiyor
-- [ ] ESC her aşamada çalışıyor; oturum `aborted` işaretleniyor, veri korunuyor
+- [ ] ESC talimat ekranında, sabitleme haçında, uyaran sunumunda ve yanıt
+      ekranında çalışıyor; oturum `aborted` işaretleniyor, veri korunuyor
+- [ ] Kesilen oturumda konsol "başarıyla tamamlandı" demiyor
+- [ ] Tam ekranda `User requested fullscreen with size [800 600]` uyarısı yok
 - [ ] `mcgurk` ve `dichotic` denemelerinde `is_correct` NULL
 - [ ] Oturum kaydında `seed` dolu
 - [ ] Gürültü dosyası eksikken program açık hata veriyor

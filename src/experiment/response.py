@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from psychopy import core, event
 
+from .stimuli import ABORT_KEY, AbortSession
+
 
 @dataclass
 class ResponseData:
@@ -21,32 +23,35 @@ def collect_response(
     video_end_time: float,
     options_shown_time: float,
     clock: core.Clock,
-    escape_key: str = "escape",
-) -> ResponseData | None:
+) -> ResponseData:
     """Wait for a valid key press and compute reaction times.
 
     Args:
         valid_keys: List of accepted keys (e.g., ["1", "2", "3"]).
         key_to_syllable: Mapping from key to syllable name.
-        video_end_time: Clock time when video ended.
+        video_end_time: Clock time when the stimulus ended.
         options_shown_time: Clock time when response options appeared.
         clock: The clock used for timing.
-        escape_key: Key to abort the experiment.
 
     Returns:
-        ResponseData or None if escape was pressed.
+        The collected response.
+
+    Raises:
+        AbortSession: if the abort key was pressed instead of a response.
     """
-    all_keys = valid_keys + [escape_key]
+    all_keys = valid_keys + [ABORT_KEY]
     event.clearEvents()
     keys = event.waitKeys(keyList=all_keys, timeStamped=clock)
 
     if not keys:
-        return None
+        # waitKeys returns empty only when interrupted; treat that as an abort
+        # rather than silently recording a response that was never given.
+        raise AbortSession()
 
     key, press_time = keys[0]
 
-    if key == escape_key:
-        return None
+    if key == ABORT_KEY:
+        raise AbortSession()
 
     syllable = key_to_syllable.get(key, key)
     rt_video = (press_time - video_end_time) * 1000.0

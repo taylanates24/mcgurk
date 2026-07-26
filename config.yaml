@@ -38,6 +38,9 @@ trial_repetitions: 1
 # Display settings
 fullscreen: true
 monitor_name: default
+# Must match the real screen resolution. PsychoPy otherwise assumes 800x600
+# and warns on every fullscreen run that the screen is actually something else.
+window_size: [1920, 1080]
 background_color: [0.5, 0.5, 0.5]  # grey, PsychoPy color space [-1, 1]
 
 # Fixation cross

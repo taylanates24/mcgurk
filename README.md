@@ -146,9 +146,17 @@ python admin.py
 ```
 
 Akış: katılımcı girişi → admin ayarları (konuşmacı, bölümler, gürültü, ses
-aygıtı) → tam ekran deney → bitiş ekranı. Her aşamada `ESC` ile çıkılabilir;
-kesilen oturum veritabanında `aborted` olarak işaretlenir ve o ana kadarki
-denemeler korunur.
+aygıtı) → tam ekran deney → bitiş ekranı.
+
+`ESC` deneyin **her aşamasında** çalışır — talimat ekranı, sabitleme haçı,
+uyaran sunumu ve yanıt ekranı dahil. Kesilen oturum veritabanında `aborted`
+işaretlenir, o ana kadar yanıtlanan denemeler korunur ve program çıkış kodu
+`1` ile döner ("başarıyla tamamlandı" demez).
+
+> **Beklenen konsol uyarısı.** Video içeren denemelerde PsychoPy
+> `Using \`sdl2\` for audio playback via \`ffpyplayer\`` uyarısı basar. Bu
+> bastırılamaz (aşağıya bakın) ve zararsızdır: `MovieStim`'e verilen dosyada
+> ses akışı yoktur.
 
 ---
 
@@ -190,8 +198,11 @@ belirgin gecikme yaratır; `prefs.hardware['audioLatencyMode']` bu yolu
 etkilemez. Bu yüzden:
 
 1. Videodan ffmpeg ile **sesi tamamen sökülmüş** bir kopya üretilir ve
-   `MovieStim` yalnızca bunu oynatır (`noAudio=True` ve `setVolume(0)` bazı
-   ffpyplayer derlemelerinde yok sayılıyor).
+   `MovieStim` yalnızca bunu oynatır. Bu bir tercih değil zorunluluk:
+   PsychoPy 2026.1'de `MovieStim.__init__` çağıranın `noAudio` argümanını
+   koşulsuz eziyor (`self._noAudio = False`) ve SDL2 dışında bir `audioLib`
+   verilirse `MovieAudioError` fırlatıyor. SDL2'yi susturmanın tek yolu
+   dosyada ses akışı bırakmamak. `tests/test_silent_video.py` bunu doğrular.
 2. Ses ayrı bir WAV olarak çıkarılır ve **Psychtoolbox** backend'i üzerinden
    `Sound.play(when=win.getFutureFlipTime(clock="ptb"))` ile ekranın flip
    saatine karşı zamanlanır.

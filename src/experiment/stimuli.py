@@ -2,18 +2,35 @@
 
 Audio-video synchronisation strategy
 -------------------------------------
-PsychoPy's ``MovieStim`` (ffpyplayer backend) plays audio through SDL2,
-which introduces noticeable latency on Windows.  To achieve precise A/V
-sync we:
+``MovieStim`` (ffpyplayer backend) plays audio through SDL2, which adds
+noticeable latency on Windows.  It cannot be turned off: in PsychoPy 2026.1
+``MovieStim.__init__`` overwrites the caller's ``noAudio`` argument —
 
-1. **Always** create ``MovieStim`` with ``noAudio=True``.
-2. Extract the audio track from the mp4 to a temporary wav via *ffmpeg*.
-3. Play the wav through ``sound.Sound`` (ptb / sounddevice backend) which
-   has sub-millisecond timing control.
+    if audioLib is None and self._movieLib == 'ffpyplayer':
+        self._audioLib = 'sdl2'
+        self._noAudio = False        # <- our noAudio=True is discarded
+    ...
+    if self._audioLib != 'sdl2':
+        raise MovieAudioError(...)   # <- and any other value is rejected
+
+so passing ``audioLib`` does not help either.  The only reliable way to keep
+SDL2 silent is to hand MovieStim a file that has no audio stream at all.
+Hence:
+
+1. Produce a copy of the video with the audio stream stripped (``-an``) and
+   give *that* to ``MovieStim``.
+2. Extract the audio track to a wav separately.
+3. Play the wav through ``sound.Sound`` on the ptb backend, scheduled against
+   the window's flip clock.
 4. Start video and audio together in ``present_video``.
 
-The extracted wavs are cached per video path for the lifetime of the
-process and cleaned up on exit.
+PsychoPy still logs "Using `sdl2` for audio playback via `ffpyplayer`" when a
+MovieStim is created.  That warning is unavoidable and harmless here — the
+file it was handed carries no audio.  ``tests/test_silent_video.py`` asserts
+the stripped copies really are silent.
+
+The extracted wavs and silent videos are cached per source path for the
+lifetime of the process and cleaned up on exit.
 """
 
 import atexit
@@ -25,9 +42,21 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from psychopy import core, sound, visual
+from psychopy import core, event, sound, visual
 
 logger = logging.getLogger(__name__)
+
+# Key that aborts the session.  Live during every wait loop, not just while a
+# response is being collected.
+ABORT_KEY = "escape"
+
+
+class AbortSession(Exception):
+    """Raised when the operator aborts the session with the abort key.
+
+    Carries no message: it is control flow, not an error.  The engine catches
+    it, marks the session 'aborted' and keeps everything recorded so far.
+    """
 
 
 def _get_ffmpeg() -> str:
@@ -377,16 +406,33 @@ def load_video_stimulus(
     return movie, audio_obj
 
 
+def check_abort() -> None:
+    """Raise AbortSession if the operator has pressed the abort key.
+
+    Called from every wait loop, so the session can be stopped at any point of
+    a trial — during the fixation cross, mid-stimulus, or while the response
+    screen is up — not only when a response is being awaited.
+    """
+    if event.getKeys(keyList=[ABORT_KEY]):
+        raise AbortSession()
+
+
 def present_fixation(
     win: visual.Window,
     fixation: visual.ShapeStim,
     duration_ms: int,
 ):
-    """Present fixation cross for specified duration."""
+    """Present the fixation cross for *duration_ms*, abortable throughout.
+
+    Held with a flip loop rather than ``core.wait`` so the duration lands on
+    the refresh grid and the abort key stays live for the whole interval.
+    """
     duration_sec = duration_ms / 1000.0
-    fixation.draw()
-    win.flip()
-    core.wait(duration_sec)
+    timer = core.Clock()
+    while timer.getTime() < duration_sec:
+        check_abort()
+        fixation.draw()
+        win.flip()
 
 
 def present_audio_only(
@@ -397,9 +443,9 @@ def present_audio_only(
 ) -> float:
     """Play *audio* with only the fixation cross on screen.
 
-    Nothing is drawn beyond the fixation cross, so there is no frame loop to
-    run: playback is scheduled against the next flip and the trial lasts
-    exactly as long as the sound file.
+    There is no video to step through, so the trial lasts exactly as long as
+    the sound file.  The wait is a flip loop rather than ``core.wait`` so the
+    abort key remains live while the stimulus plays.
 
     Returns:
         Time (on the provided clock) when playback finished.
@@ -411,8 +457,15 @@ def present_audio_only(
     audio.play(when=win.getFutureFlipTime(clock="ptb"))
     win.flip()
 
-    core.wait(audio.getDuration())
-    audio.stop()
+    duration = audio.getDuration()
+    timer = core.Clock()
+    try:
+        while timer.getTime() < duration:
+            check_abort()
+            fixation.draw()
+            win.flip()
+    finally:
+        audio.stop()
 
     win.flip()  # clear the fixation cross before the response screen
     return clock.getTime()
@@ -446,19 +499,18 @@ def present_video(
 
     movie.play()
 
-    while not movie.isFinished:
-        movie.draw()
-        win.flip()
+    try:
+        while not movie.isFinished:
+            check_abort()
+            movie.draw()
+            win.flip()
+    finally:
+        movie.stop()
+        if audio is not None:
+            audio.stop()
 
-    movie.stop()
     win.flip()  # clear screen after video
-    video_end_time = clock.getTime()
-
-    # Ensure audio doesn't keep playing if it's slightly longer than video
-    if audio is not None:
-        audio.stop()
-
-    return video_end_time
+    return clock.getTime()
 
 
 def create_response_screen(

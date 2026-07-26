@@ -108,6 +108,31 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
   lateralizasyon Adım 3'te; yanıt seti/kategorizasyon Adım 4'te; config'e
   taşınacak metinler ve oturum akışı Adım 8'de.
 
+  - **Manuel test turunda çıkan dört düzeltme (2026-07-26, Test 8 sırasında):**
+    - **ESC artık her aşamada çalışıyor.** Önceden yalnızca `collect_response`
+      içinde ele alınıyordu; talimat ekranında, sabitleme haçında veya uyaran
+      sunumu sırasında basmak hiçbir şey yapmıyordu. `AbortSession` istisnası
+      ve `check_abort()` eklendi; `present_fixation` ve `present_audio_only`
+      `core.wait` yerine flip döngüsüne çevrildi (yan kazanç: sabitleme süresi
+      artık yenileme ızgarasına oturuyor), `present_video` döngüsünde de
+      kontrol ediliyor. Ses `finally` bloğunda durduruluyor, yani kesince
+      anında susuyor.
+    - **"Deney başarıyla tamamlandı" yanlış raporlaması.** `run_experiment`
+      kesilen oturumda da normal dönüyordu ve `main.py` koşulsuz başarı
+      logluyordu. Fonksiyon artık oturum durumunu döndürüyor; `main.py`
+      duruma bakıyor, kesilmişse uyarı basıp çıkış kodu 1 veriyor.
+    - **`[800 600]` tam ekran uyarısı.** `visual.Window`'a `size` verilmiyordu.
+      `config.yaml`'a `window_size` eklendi.
+    - **SDL2 uyarısının gerçek sebebi bulundu.** PsychoPy 2026.1'de
+      `MovieStim.__init__`, `audioLib is None` iken `self._noAudio = False`
+      atayarak çağıranın `noAudio=True` argümanını **koşulsuz eziyor**; başka
+      bir `audioLib` verilirse `MovieAudioError` fırlatıyor. Yani SDL2 yolu
+      kapatılamıyor ve uyarı kaçınılmaz. `CLAUDE.md`'deki "bazı ffpyplayer
+      derlemelerinde yok sayılıyor" teşhisi yanlıştı — sorun derlemede değil,
+      PsychoPy'nin kendi kodunda. Mevcut sessiz-video yaklaşımı tek çalışan
+      çözüm; `tests/test_silent_video.py` sessiz kopyalarda ses akışı
+      olmadığını her koşuda doğruluyor.
+
 - **Sonraki adıma not:**
   - **Dikotik bölümü yöntem dokümanında YOK.** Yöntem dokümanı §6'da üç modül
     (McGurk, AVSR, TBW) + §6.4 oddball tanımlıyor; `steps.md` de aynı dördü

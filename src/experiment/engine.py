@@ -16,6 +16,8 @@ from ..utils.assets import get_assets_dir
 from .response import collect_response
 from .sections import build_trial_list
 from .stimuli import (
+    ABORT_KEY,
+    AbortSession,
     create_fixation_cross,
     create_response_screen,
     load_audio_stimulus,
@@ -98,7 +100,9 @@ def _show_instruction_screen(win: visual.Window, text: str):
     msg = visual.TextStim(win, text=text, height=0.05, wrapWidth=1.5, color=[1, 1, 1])
     msg.draw()
     win.flip()
-    event.waitKeys(keyList=["space"])
+    keys = event.waitKeys(keyList=["space", ABORT_KEY])
+    if keys and keys[0] == ABORT_KEY:
+        raise AbortSession()
 
 
 def _show_end_screen(win: visual.Window, n_trials: int):
@@ -117,7 +121,7 @@ def _show_end_screen(win: visual.Window, n_trials: int):
     msg = visual.TextStim(win, text=text, height=0.05, wrapWidth=1.5, color=[1, 1, 1])
     msg.draw()
     win.flip()
-    event.waitKeys(keyList=["space"])
+    event.waitKeys(keyList=["space", ABORT_KEY])
 
 
 def run_experiment(
@@ -125,7 +129,7 @@ def run_experiment(
     participant_id: int,
     config: dict[str, Any],
     db: Database,
-):
+) -> str:
     """Run the full experiment.
 
     Args:
@@ -133,6 +137,11 @@ def run_experiment(
         participant_id: ID of the participant in the database.
         config: Experiment configuration dict.
         db: Database instance for saving results.
+
+    Returns:
+        The final session status — ``SESSION_COMPLETED`` or ``SESSION_ABORTED``.
+        Callers must not report success without checking this: a session that
+        was interrupted still returns normally.
     """
     # Refuse to run on a backend that cannot schedule audio against the flip
     # clock.  Checked before anything is written to the database.
@@ -153,7 +162,7 @@ def run_experiment(
 
     if not trials:
         logger.warning("Seçilen bölümler için hiç deneme üretilmedi.")
-        return
+        return SESSION_ABORTED
 
     session = Session(
         participant_id=participant_id,
@@ -172,10 +181,14 @@ def run_experiment(
     bg_color = config.get("background_color", [0.5, 0.5, 0.5])
     fullscreen = config.get("fullscreen", True)
     monitor_name = config.get("monitor_name", "default")
+    # Without an explicit size PsychoPy assumes 800x600 and warns that the
+    # screen is actually something else on every fullscreen run.
+    window_size = config.get("window_size", [1920, 1080])
 
     # Create PsychoPy window.  waitBlanking is explicit: without it flips do
     # not block on the vertical retrace and frame timing is unmeasurable.
     win = visual.Window(
+        size=window_size,
         fullscr=fullscreen,
         monitor=monitor_name,
         color=bg_color,
@@ -207,7 +220,6 @@ def run_experiment(
 
         # Run trials
         results: list[TrialResult] = []
-        aborted = False
 
         for trial_idx, trial_spec in enumerate(trials):
             # --- Load video + audio before the fixation period so file I/O
@@ -267,15 +279,6 @@ def run_experiment(
                 if movie is not None:
                     movie.unload()
 
-            if resp is None:
-                # Escape pressed — abort experiment
-                aborted = True
-                logger.info(
-                    "Oturum katılımcı/operatör tarafından kesildi (deneme %d).",
-                    trial_idx + 1,
-                )
-                break
-
             # Determine correctness.  Sections without a correct answer store
             # NULL rather than a fabricated right/wrong verdict.
             if trial_spec.section_type in _SECTIONS_WITHOUT_CORRECT_ANSWER:
@@ -324,16 +327,25 @@ def run_experiment(
             db.add_trial(trial_record)
             n_completed = len(results)
 
-        if not aborted:
-            status = SESSION_COMPLETED
-            _show_end_screen(win, n_completed)
+        status = SESSION_COMPLETED
+        _show_end_screen(win, n_completed)
+
+    except AbortSession:
+        # Operator or participant pressed the abort key.  Everything recorded
+        # up to this point stays in the database; only the session status
+        # changes, so the run can be told apart from a completed one.
+        logger.info(
+            "Oturum kesildi (%d deneme kaydedildikten sonra).", n_completed
+        )
 
     finally:
         # The session row is closed out in every exit path — normal finish,
-        # ESC, or an exception — so no session is ever left as 'running'.
+        # abort, or an exception — so no session is ever left as 'running'.
         db.finish_session(session_id, status, datetime.now().isoformat())
         logger.info(
             "Oturum %d kapatıldı: durum=%s, kaydedilen deneme=%d, seed=%d",
             session_id, status, n_completed, seed,
         )
         win.close()
+
+    return status

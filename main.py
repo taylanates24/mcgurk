@@ -65,6 +65,7 @@ sound.Sound.backend = "ptb"
 
 from src.config import load_config  # noqa: E402
 from src.data.database import Database, SchemaMismatchError  # noqa: E402
+from src.data.models import SESSION_COMPLETED  # noqa: E402
 from src.dialogs.admin_setup import show_admin_setup_dialog  # noqa: E402
 from src.dialogs.login import show_login_dialog  # noqa: E402
 from src.experiment.engine import run_experiment  # noqa: E402
@@ -130,15 +131,25 @@ def main(args: argparse.Namespace) -> int:
             logger.info("Ses aygıtı: %s", setup.audio_device)
 
         # Step 3: Run experiment
-        run_experiment(
+        status = run_experiment(
             setup=setup,
             participant_id=participant_id,
             config=config,
             db=db,
         )
 
-        logger.info("Deney başarıyla tamamlandı.")
-        return 0
+        # An interrupted session returns normally, so the status has to be
+        # checked — reporting success here unconditionally would tell the
+        # operator the run was fine when it was cut short.
+        if status == SESSION_COMPLETED:
+            logger.info("Deney başarıyla tamamlandı.")
+            return 0
+
+        logger.warning(
+            "Deney tamamlanmadı (durum: %s). Kaydedilen denemeler korundu.",
+            status,
+        )
+        return 1
 
     except (RuntimeError, FileNotFoundError) as exc:
         # Configuration / asset / backend problems: report clearly instead of
