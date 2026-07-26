@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
-Son güncelleme: 2026-07-26
-Aktif adım: 4 (Adım 3 tamamlandı)
+Son güncelleme: 2026-07-27
+Aktif adım: 5 (Adım 4 tamamlandı)
 
 ## Durum tablosu
 
@@ -11,7 +11,7 @@ Aktif adım: 4 (Adım 3 tamamlandı)
 | 1 | Proje iskeleti | TAMAMLANDI | 2026-07-26 | `0fb3d3f`…`9dbedee` |
 | 2 | Uyaran hazırlama | TAMAMLANDI | 2026-07-26 | `d6e7aaf` |
 | 3 | A/V senkron çekirdeği | TAMAMLANDI | 2026-07-26 | `bc215d8` |
-| 4 | Modül 1: McGurk | BEKLİYOR | | |
+| 4 | Modül 1: McGurk | TAMAMLANDI | 2026-07-27 | `709958e` |
 | 5 | Modül 2: AVSR | BEKLİYOR | | |
 | 6 | Modül 3: TBW | BEKLİYOR | | |
 | 7 | Modül 4: Oddball | BEKLİYOR | | |
@@ -673,13 +673,207 @@ Branches); bu, master'ın "sürüm" anlamını korur.
     `audio.require_ptb_backend`.
 
 ### Adım 4 — Modül 1: McGurk
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
-- **Commit:** —
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-27. Otomatik testler yeşil (381 → **451 test**,
+  ruff + mypy temiz; CI alt kümesi 401). `TEST_ADIM_4.md` manuel testleri
+  kullanıcı tarafından yürütüldü ve geçti; Test 8'in ölçüm kısmı (süre, blok
+  yapısı, kare/ses istatistiği) simüle yanıtlarla önceden koşulmuştu.
+- **Commit:**
+  - `709958e` — mcgurk/modules paketi, run_module aracı, config'te yanıt
+    alanları, design_extra'da speaker_id/noise_instance (şema sürümü 2),
+    DeviceNotConnectedError düzeltmesi
+
 - **Ne yapıldı:**
+  - **`mcgurk/modules/` dolduruldu**, motorla aynı ölçüte göre dört dosyaya
+    ayrıldı ("çalışmak için neye ihtiyaç duyuyor"):
+    - `base.py` — modül başına tohum türetme, tur bazlı sıralama, gürültü
+      varyantı dağıtımı, `PlannedTrial`, blok parçalama. **PsychoPy yok.**
+    - `mcgurk.py` — çaprazlama, deneme listesi, manifest'ten yol/patlama
+      çözümü, kategorizasyon. **PsychoPy yok** (paket sınırı testine eklendi).
+    - `response.py` — yanıt ızgarası, klavye, iki RT, serbest metin.
+    - `block.py` — sabitleme → sunum → yanıt → DB döngüsü ve blok sınırları.
+  - **`tools/run_module.py`** — geliştirme koşucusu: `--dry-run` (donanımsız
+    tasarım denetimi + dosya kontrolü), `--limit N` (kısa koşu), `--seed`,
+    `--speaker-id`, `--device`. Oturum satırını `provenance` ile dolduruyor;
+    kapanışta `db.backup()` çağırıyor.
+  - **Config'e Adım 4'ün ihtiyaç duyduğu alanlar** (§A.9): `response_keys`,
+    `free_text_response`, `fixation_duration_ms`, `post_response_ms`,
+    `prompts.{question,other,timeout}`. Şema `response_keys` ↔ `response_set`
+    birebir eşlemesini, tekrarsızlığı ve `free_text_response`'un sette
+    olduğunu doğruluyor.
+  - **`db/design.py` → `McGurkExtra`**: `speaker_id` (zorunlu) ve
+    `noise_instance` (gürültülüde 1–3, sessizde null). `v_trials_flat` bu iki
+    alanı sütun olarak açıyor; VIEW değiştiği için **şema sürümü 1 → 2**.
+    Etkisi yok: `data/mcgurk.sqlite` bu makinede hiç oluşturulmamıştı.
+  - **`db.next_block_index()`** eklendi — bir modül birden fazla blok
+    üretiyor, blok indeksi veritabanından alınıyor.
+  - **Test: 69 yeni test (381 → 450).** CI'da koşanlar: sıralama/tohum
+    matematiği (21), tasarım üretimi + kategorizasyon + config kapıları (39).
+    Gerçek donanımda koşanlar (`psychopy` işaretli, 6): **betiklenmiş
+    klavyeyle** gerçek pencere ve ses aygıtında tam blok döngüsü — zamanlama
+    kaydı, iki RT, füzyon kategorisi, zaman aşımının satır üretmemesi, blok
+    sınırında commit, çok bloklu bölünme.
+  - **Kendi koşabildiğim doğrulamalar:** `--dry-run` (140 deneme, 23 dosya,
+    20 hücre), bir denemelik canlı duman koşusu (oturum satırı, yedek, özet;
+    `audio_backend: ptb`, `measured_refresh_hz: 74.94`, `actual_soa_ms: 0.04`).
+
+- **Tam uzunlukta dayanıklılık koşusu (Test 8'in insan gerektirmeyen kısmı,
+  2026-07-27):** 140 deneme, tam ekran, 75 Hz, yanıtlar simüle (sabit tuş,
+  700 ms). Betik scratchpad'de tutuldu ve scratchpad'deki bir veritabanına
+  yazdı — uydurma yanıt üretebilen bir bayrak `tools/`'a girmemeli, çünkü
+  uydurma bir satır `data/mcgurk.sqlite`'a düştüğünde gerçeğinden ayırt
+  edilemez.
+
+  | Ölçüm | Sonuç |
+  |---|---|
+  | Süre | **11.69 dk** (140 deneme, 5.01 s/deneme) — config'in tahmini 14.0 dk |
+  | Bloklar | 60 / 60 / 20, üçü de `completed`, her biri ayrı commit |
+  | Düşen kare | **0** (en kötü kare aralığı 15.58 ms; kare 13.33 ms, sınır 20.00 ms) |
+  | `TimeFailed` / `XRuns` | **0** |
+  | `actual_soa_ms` | ort **−0.061 ms**, SD 0.213, aralık [−1.07, +0.50] |
+  | `rt_from_burst − rt_from_prompt` | 1512 ms — patlamadan sonra kalan video süresiyle (≈1.52 s) tutuyor |
+  | Yanıt satırı | 140/140, `is_correct` hepsinde NULL |
+
+  Süre tahmini gerçekçi: 700 ms'lik bir yanıtla deneme 5.0 s sürüyor, gerçek
+  RT 1–1.5 s olacağı için 5.3–5.8 s, yani config'in 6.0 s'i **üst sınıra
+  yakın ama aşılmıyor**. McGurk modülü için ~12–13.5 dk planlanabilir.
+
+  Kategori dağılımı (OTHER 80 / FUSION 40 / AUDITORY 20) bir algı ölçümü
+  değil — sabit "DA" tuşunun tasarımdaki karşılığı — ama **tam tasarım
+  üzerinde kategorizasyonun doğruluğunu** gösteriyor: ga|ba'nın 40 hücresi
+  FUSION, da|da'nın 20'si AUDITORY, kalan 80 OTHER. Beklenen sayılarla birebir.
+
 - **Alınan kararlar:**
+  - **Modül başına türetilmiş tohum** (`derive_seed(session_seed, "mcgurk")`).
+    Tek bir RNG akışı paylaşılsaydı `session.module_order`'da modülün yerini
+    değiştirmek McGurk'ün deneme sırasını da değiştirirdi; oysa tasarımında
+    hiçbir şey değişmiyor. `sessions.seed` yine tek başına her sırayı
+    belirliyor (§A.11).
+  - **`block_shuffle` = tur bazlı, eşit yayılımlı.** Uyumlu kontroller
+    (`reps: 5`) uyumsuz çiftlerin (`reps: 10`) yarısı kadar; naif tur yapısı
+    kontrollerin tamamını oturumun ilk yarısına koyup ikinci yarıyı tamamen
+    uyumsuz bırakırdı. Az tekrarlı hücre `floor(k·R/r)` ile yayılıyor.
+  - **Gürültü varyantı hücre içinde dengelenmiş** (3 varyant / 10 tekrar →
+    4/3/3), bağımsız çekimle değil: bağımsız çekim 7/2/1 üretebiliyor ve o
+    zaman "aynı dalga formunu tekrar tekrar duymama" amacı kayboluyor.
+    Kullanılan varyant `design_extra.noise_instance`'a yazılıyor.
+  - **`speaker_id` deneme başına kaydediliyor.** Config snapshot'ı yalnızca
+    `speaker_selection.strategy: fixed` iken konuşmacıyı sabitliyor; §F.4
+    `balanced`/`random`'ı açık bırakıyor. `plan_trials(..., speaker_id=...)`
+    Adım 8'in katılımcı başına seçim yapmasına izin veriyor, modül kendi
+    başına karar vermiyor.
+  - **Blok = en fazla `session.break_every_n_trials` deneme** (140 → 60/60/20).
+    §A.5 commit'i blok sonuna koyuyor; tek blok olsaydı bir çökme 14 dakikalık
+    commit edilmemiş veriyi götürürdü. Adım 8 mola ekranlarını aynı sınırlara
+    koyacak.
+  - **İki RT tek ölçümden.** `rt_from_prompt_ms` klavyenin kendi saatinden
+    (yanıt ekranının flip'inde sıfırlanıyor); `rt_from_burst_ms` = o sayı +
+    (prompt flip − patlama) farkı. Alternatif — tuşun mutlak zaman damgasından
+    patlama zamanını çıkarmak — klavye arka ucunun ptb saatiyle damgalamasına
+    bağlı olurdu. Bu makinede öyle, ve fark **kontrol edilip loglanıyor**
+    (`_check_clock_agreement`), ama hesap ona dayanmıyor.
+  - **Yanıt ekranından önceki tuş basımları atılıyor** ve sayısı loglanıyor.
+    Video sırasında basılan bir tuş sıfıra yakın RT ile kaydedilirdi.
+  - **Zaman aşımında `responses` satırı yok** (Adım 1 kararı). `NONE`
+    kategorisi satırın yokluğundan türetiliyor; `categorise(None)` de `NONE`
+    dönüyor, yani QC ve analiz aynı sözlüğü kullanıyor.
+  - **`is_correct` bu modülde her zaman NULL** — uyumlu kontroller dahil
+    (tetikleyici modül adına bakıyor). Uyumlu hücrede doğruluk `AUDITORY`
+    kategorisinden türetiliyor: aynı bilgi, skor değil algı olarak.
+  - **Serbest metin metninden kategori çıkarılmıyor.** Katılımcı, yazdığı
+    seçenek ekranda dururken "DİĞER"i seçti; metni o seçeneğin kategorisine
+    saymak vermeyi reddettiği yanıtı uydurmak olurdu. Metin `free_text`'e
+    ham hâliyle giriyor, `raw_response` `DIGER` kalıyor.
+  - **Fare desteği yazılmadı.** steps.md "fare opsiyonel" diyor; karışık girdi
+    her RT modelinde `input_device`'ı kovaryat yapardı. Sütun duruyor.
+  - **Serbest metin yalnızca ASCII harf/rakam + boşluk + tire.** Alan hece
+    transkripsiyonu için; PsychoPy'nin Türkçe ölü tuş adları güvenilir değil.
+  - **Kategorizasyon sırası sabit** (işitsel > görsel > füzyon > kombinasyon)
+    ve config doğrulaması buna dayanıyor: bir haritanın çiftin kendi
+    token'ını içermesi **hata**, çünkü o kural hiç çalışmaz ve yazan kişi
+    çalışmasını bekler.
+  - **Onay geri bildirimi yalnızca "tuş algılandı"** (seçenek kısa süre
+    sarıya dönüyor). Doğru/yanlış geri bildirimi yok: McGurk etkisini oturum
+    sırasında öğretmek talep karakteristiği yaratır.
+
+- **Dayanıklılık koşusunun ortaya çıkardığı bir kod açığı (Adım 3'ten
+  kalmış):** `audio.device` bağlı olmayan bir aygıtı gösterdiğinde
+  `open_speaker` operatör mesajı yerine çıplak bir traceback veriyordu.
+  Sebebi: **PsychoPy 2026.1'in `DeviceNotConnectedError`'ı `Exception`'dan
+  değil doğrudan `BaseException`'dan türüyor**, yani `except (ConnectionError,
+  OSError, ValueError, KeyError)` onu yakalamıyor — ve yukarıdaki hiçbir
+  `except Exception` de yakalamaz. İstisna adıyla yakalanıyor, mesaj artık
+  aygıtın bağlı olup olmadığını sormakla `--devices` komutunu söylüyor.
+  Regresyon testi var olmayan bir aygıt adı deniyor ve **çalışan bir aygıt
+  gerektirmiyor** (aksi hâlde tam olarak tarif ettiği makine durumunda
+  atlanırdı). `steps.md` §C Adım 9'un "ses aygıtı kayboluyor → açık hata"
+  başarısızlık modu böylece şimdiden karşılanıyor.
+
+- **Config'e `audio.device` yazılması kırılgan bir testi düşürdü** (kullanıcı,
+  2026-07-27): `test_all_problems_are_reported_at_once` gönderilen config'in
+  hangi alanlarının boş olduğuna güveniyordu. Test artık gated alanların
+  hepsini kendisi boşaltıyor — aksi hâlde fotodiyot ölçümü yapıldığı gün de
+  aynı şekilde kırılırdı.
+
+- **Yol boyunca çıkan iki test altyapısı sorunu:**
+  - **PTB aygıtı oturum başına bir kez açılmalı.** İki `psychopy` işaretli
+    test dosyası kendi modül kapsamlı aygıtını açınca, gecikme sınıfı 3'te
+    aygıt tekelde olduğu için ikinci dosya **sessizce atlanıyordu** ve hangisi
+    olduğu toplama sırasına bağlıydı. `tests/conftest.py`'ye oturum kapsamlı
+    `hardware_speaker` fixture'ı eklendi; iki dosya da onu kullanıyor.
+  - **`MCGURK_TEST_AUDIO_DEVICE`** ortam değişkeni eklendi: config'teki aygıt
+    bir Bluetooth kulaklık olduğu için kapalıyken tüm donanım süiti atlanıyor.
+    Fixture'ın sessizce başka bir aygıt seçmesi alternatifi, testlerin hangi
+    aygıtta koştuğunu gizlerdi.
+  - **`test_package_boundaries.py` modülleri `importlib.reload` ediyor** ve
+    bundan sonra `mcgurk.config.schema.DisplayConfig` artık başka bir sınıf
+    nesnesi oluyor: `config.display = DisplayConfig(...)` ataması pydantic'te
+    "geçerli bir DisplayConfig değil" hatası veriyor — ama yalnızca tam
+    süit koşarken. Blok testi alan alan atama yapıyor
+    (`config.display.fullscreen = False`) ve bu tuzak yorumda yazıyor.
+    **Adım 5–9 testleri için not:** yeniden yüklenmiş bir şemadan sonra sınıf
+    kimliğine güvenilmez.
+
 - **Bilinen sınırlar:**
+  - Modül tek başına koşuyor; yönerge, alıştırma, mola, katılımcı girişi ve
+    kesilen oturumdan devam Adım 8'de. `tools/run_module.py` bir geliştirme
+    aracı, oturum akışı değil.
+  - `audio.device` hâlâ `null` → duman koşusu bağlı olmayan SPDIF çıkışına
+    gitti. `data_collection` kapısı bunu zorunlu kılıyor ama geliştirme
+    koşularında hâlâ sessiz bir tuzak (aşağıdaki bekleyen aksiyon).
+  - `timing.system_av_offset_ms` `null`, yani `actual_soa_ms` mutlak A/V
+    gecikmesini içermiyor (fotodiyot ölçümü sonrası anlam kazanacak).
+  - Yanıt ızgarası 1920×1080 için sabit piksel değerleriyle yerleştirildi
+    (5 + 4 sütun, 300×130 px aralık). Başka bir çözünürlükte taşarsa
+    parametreler `ResponseGrid`'de; config'e taşımak Adım 8'in arayüz işi.
+  - Klavye zaman damgasının ptb saatiyle uyuşup uyuşmadığı **loglanıyor ama
+    veritabanına yazılmıyor**; QC raporu isterse şema kararı Adım 9'da.
+  - Süre tahmini (`estimated_trial_duration_s: 6.0`) gerçek deneme yapısıyla
+    karşılaştırılmadı: sabitleme 1.0 s + video 2.57 s + yanıt (≤5 s) + 0.3 s
+    ≈ 5–9 s. Test 8 (tam blok) gerçek süreyi verecek.
+
 - **Sonraki adıma not:**
+  - **Adım 5 (AVSR) `base.py`'yi doğrudan kullanabilir**: `derive_seed`,
+    `order_cells`, `balanced_cycle`, `PlannedTrial`, `chunk`. Yeni olan şey
+    V-only hücrelerinin gürültü ve kulakla çaprazlanmaması (§C Adım 5) ve
+    doğruluk skorlaması — AVSR'de `is_correct` **var**, tetikleyici yalnızca
+    `mcgurk`/`dichotic`'i engelliyor.
+  - **`response.py` yeniden kullanılabilir**: `ResponseGrid` etiket + tuş
+    listesi alıyor, modüle bağlı değil. AVSR'nin kapalı setine ve dikotiğin
+    dört seçeneğine olduğu gibi uyuyor. `PromptTexts` modeli de paylaşımlı —
+    her modülün config'ine `prompts` bloğu eklenmeli.
+  - **`block.py` kopyalanmamalı, ihtiyaç ortaya çıkınca ortaklaştırılmalı.**
+    AVSR'nin döngüsü McGurk'ünkiyle neredeyse aynı (tek fark skorlama ve
+    A/V/AV yolları); TBW'nin yanıt seti iki seçenekli; GIN ve oddball
+    uyaran içinde 0..n yanıt topluyor. İkinci örnek gelince ortak kısmı
+    `base.py`'ye çekmek doğru zaman olur.
+  - Adım 8 `tools/run_module.py`'nin oturum kurulumunu devralacak: katılımcı
+    satırı, `SessionRecord` alanları (provenance + ölçülen yenileme +
+    backend + aygıt), kapanışta `finish_session` + `db.backup()`. Kod orada
+    hazır örnek olarak duruyor.
+  - Adım 9 `v_trials_flat`'tan okurken artık `speaker_id` ve `noise_instance`
+    sütunlarını da bulacak. Füzyon oranı = `category = 'FUSION'` / sunulan
+    uyumsuz deneme; zaman aşımı `response_id IS NULL` ile sayılıyor.
 
 ### Adım 5 — Modül 2: AVSR
 - **Durum:** BEKLİYOR
@@ -771,6 +965,9 @@ Branches); bu, master'ın "sürüm" anlamını korur.
 Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelince güncellenir.
 
 - [ ] Deneysel tasarım / deneme sayıları (Adım 4'ten önce netleşmeli) — §F.1
+  - **Adım 4 bunu engellemedi:** üreteç config'ten gelen her tasarımı
+    üretiyor ve `config.trial_counts()` ile birebir aynı sayıyı veriyor
+    (test). Danışman sayıları yükseltince kod değişmiyor. Karar hâlâ açık.
 - [ ] Modül 2 kelime listesi (Adım 5, çekim gerekiyor) — §F.2
 - [ ] Kulaklık tipi (donanım, çapraz dinleme kontrolünü etkiler) — §F.3
 - [ ] Konuşmacı seçim stratejisi — §F.4
@@ -836,12 +1033,16 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   kulaklık öneriyor). Adım 3 testlerinde Bluetooth yeterli oldu — kulak
   izolasyonu ve SOA farkı doğrulandı — ama "ses ve dudak birlikte mi" yargısı
   kablolu kulaklıkla tekrar bakılmalı (`TEST_ADIM_3.md` Test 2, madde 7).
-- **`audio.device` config'te hâlâ `null`.** Bu makinede kullanılabilir aygıtlar:
-  `SPDIF Arabirimi (Realtek USB Audio)`, `Kulaklıklar (2- WH-1000XM4)`,
-  `ASUS VZ27V -2 (HD Audio Driver for Display Audio)`. Boş bırakılırsa PTB
-  ilkini (SPDIF, bağlı değil) seçiyor. Deneyin koşulacağı kulaklık
-  netleştiğinde config'e yazılmalı; `data_collection` modu zaten dolu olmasını
-  şart koşuyor. Listelemek için: `python tools/timing_selftest.py --devices`.
+- **`audio.device` artık dolu:** `"Kulaklıklar (2- WH-1000XM4)"` (kullanıcı,
+  2026-07-27). İki sonucu var: (a) Bluetooth kapalıyken donanım testleri ve
+  `tools/run_module.py` açık hatayla duruyor — testler için
+  `MCGURK_TEST_AUDIO_DEVICE` ortam değişkeni var; (b) §F.3 kulaklık kararı
+  hâlâ açık, bu aygıt veri toplama için uygun değil (yukarıdaki madde).
+  Aygıt **adları** sabit, **indeksleri değil**: 2026-07-26'da 6/7/8 olarak
+  görünen aygıtlar 2026-07-27'de 3/4 idi (Bluetooth kulaklık kapalıyken listeye
+  hiç girmiyor). Config'in isim kullanması bu yüzden. Listelemek için:
+  `python tools/timing_selftest.py --devices`. Gerçek kulaklık kararı verilince
+  (§F.3) config'teki değer değiştirilmeli.
 - **Fotodiyot ölçümü (`01_av_gecikme_olcumu.md`) hâlâ bekliyor** — tasarım
   gereği tüm kod bittikten sonra. O ana kadar `timing.system_av_offset_ms`
   `null` ve motor 0 kabul edip uyarı basıyor.
@@ -856,8 +1057,13 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
 - **§F.1 — deneme sayıları.** Config **minimumlarla** geliyor: 797 deneme /
   ~58.8 dakika (§G örnek değerleri 1167 / ~99.5 dakika veriyordu). Bunlar karar
   değil, başlangıç noktası — danışman her sayıyı config'ten yükseltebilir.
-  Ayrıntılı tablo ve gerekçeler `TEST_ADIM_1.md` → K1. Adım 4'ten önce
-  netleşmeli.
+  Ayrıntılı tablo ve gerekçeler `TEST_ADIM_1.md` → K1. **Adım 4 bunu
+  engellemedi** (üreteç config'ten geleni üretiyor), ama veri toplama
+  başlamadan — pratikte Adım 8'den önce — netleşmeli.
+  - **Ölçülen ilk gerçek süre (Adım 4):** McGurk modülü 140 deneme = 11.7 dk
+    (700 ms yanıtla), gerçek RT ile ~12–13.5 dk. Config'in tahmini 14.0 dk,
+    yani modül düzeyinde tahmin **tutuyor**; toplam 58.8 dakikalık tahmin de
+    bu ölçüde güvenilir sayılabilir.
   - Süre tahmini **alt sınırdır**: `practice` (12) ve `cross_hearing` (20)
     deneme sayısına giriyor ama süreye katılmıyor; yönerge ekranları, kulaklık
     yerleşimi ve modüller arası geçiş hiç sayılmıyor. Gerçek oturumu ~75–80
