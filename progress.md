@@ -12,7 +12,7 @@ Aktif adım: 6 (Adım 5 tamamlandı)
 | 2 | Uyaran hazırlama | TAMAMLANDI | 2026-07-26 | `d6e7aaf` |
 | 3 | A/V senkron çekirdeği | TAMAMLANDI | 2026-07-26 | `bc215d8` |
 | 4 | Modül 1: McGurk | TAMAMLANDI | 2026-07-27 | `709958e` |
-| 5 | Modül 2: AVSR | TAMAMLANDI | 2026-07-27 | |
+| 5 | Modül 2: AVSR | TAMAMLANDI | 2026-07-27 | `79fec8b` |
 | 6 | Modül 3: TBW | BEKLİYOR | | |
 | 7 | Modül 4: Oddball | BEKLİYOR | | |
 | 7b | Modül 5: Dikotik dinleme | BEKLİYOR | | |
@@ -881,7 +881,9 @@ Branches); bu, master'ın "sürüm" anlamını korur.
   ruff + mypy temiz; CI alt kümesi 502). `TEST_ADIM_5.md` Test 1 kullanıcı
   tarafından yürütüldü ve geçti: 12/12 deneme, 0 düşen kare, 0 ses zamanlaması
   bozulması, üç sunum modu da doğru sunuldu.
-- **Commit:** —
+- **Commit:**
+  - `79fec8b` — mcgurk/modules/avsr.py, block.py'nin ortaklaştırılması,
+    kelime listesi altyapısı, konsol kodlama düzeltmesi ve testi
 
 - **Ne yapıldı:**
   - **`mcgurk/modules/avsr.py`** — `stimulus_sets × presentation_modes ×
