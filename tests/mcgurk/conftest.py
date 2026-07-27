@@ -110,6 +110,7 @@ def build_manifest(config: Any) -> Any:
         SourceRef,
         StimulusManifest,
         TokenEntry,
+        ToneEntry,
         VideoEntry,
     )
 
@@ -175,6 +176,19 @@ def build_manifest(config: Any) -> Any:
                                 peak_dbfs=-3.0,
                             )
                         )
+
+    for frequency in config.required_tones():
+        manifest.tones.append(
+            ToneEntry(
+                frequency_hz=frequency,
+                file=media(f"tones/tone_{frequency:g}Hz.wav"),
+                duration_s=config.modules.oddball.tone_duration_ms / 1000.0,
+                sample_rate=config.audio.sample_rate,
+                ramp_ms=config.modules.oddball.tone_ramp_ms,
+                level_dbfs=config.stimulus_prep.tones.level_dbfs,
+                peak_dbfs=-20.0,
+            )
+        )
     return manifest
 
 

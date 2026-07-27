@@ -259,6 +259,75 @@ def cosine_fade(x: np.ndarray, sample_rate: int, ramp_ms: float) -> np.ndarray:
     return faded
 
 
+# --------------------------------------------------------------------- tones
+
+
+def tone(
+    frequency_hz: float,
+    duration_ms: float,
+    sample_rate: int,
+    *,
+    ramp_ms: float,
+    level_dbfs: float,
+) -> np.ndarray:
+    """A raised-cosine ramped sinusoid, normalised to *level_dbfs* RMS.
+
+    The ramp is the point of this function.  A 50 ms tone gated instantaneously
+    is not a 1 kHz tone: the discontinuity spreads energy across the whole
+    spectrum, and the click it produces is audible whatever the carrier is —
+    which in an oddball task means the participant could tell standard from
+    target without hearing either frequency.
+
+    The level is the RMS of the whole written tone, ramps included, because that
+    is what ``verify_stimuli.py`` measures back off the disk.
+
+    Raises:
+        DSPError: on a non-positive duration, a ramp pair longer than the tone,
+            or a frequency at or above the Nyquist limit.
+    """
+    if duration_ms <= 0:
+        raise DSPError(f"Ton süresi pozitif olmalı (verilen: {duration_ms} ms)")
+    if ramp_ms < 0:
+        raise DSPError(f"Ton rampası negatif olamaz (verilen: {ramp_ms} ms)")
+    if 2.0 * ramp_ms > duration_ms:
+        raise DSPError(
+            f"İki rampa ton süresinden uzun: 2 x {ramp_ms} ms > {duration_ms} ms"
+        )
+    if frequency_hz <= 0 or frequency_hz >= sample_rate / 2.0:
+        raise DSPError(
+            f"Ton frekansı 0 ile Nyquist ({sample_rate / 2:g} Hz) arasında "
+            f"olmalı (verilen: {frequency_hz} Hz)"
+        )
+
+    n_samples = int(round(duration_ms * sample_rate / 1000.0))
+    if n_samples < 2:
+        raise DSPError(
+            f"Ton {n_samples} örnek uzunluğunda — {duration_ms} ms "
+            f"{sample_rate} Hz'de bir dalga biçimi taşımıyor"
+        )
+    t = np.arange(n_samples, dtype=np.float64) / sample_rate
+    shaped = cosine_fade(np.sin(2.0 * np.pi * frequency_hz * t), sample_rate, ramp_ms)
+
+    current = rms(shaped)
+    if current <= _FLOOR:
+        raise DSPError("Ton sessiz çıktı — rampa tüm sinyali yuttu")
+    return np.asarray(shaped * (10.0 ** (level_dbfs / 20.0) / current))
+
+
+def dominant_frequency_hz(x: np.ndarray, sample_rate: int) -> float:
+    """Frequency of the strongest spectral component of *x*.
+
+    Resolution is ``sample_rate / len(x)`` — 20 Hz for a 50 ms tone at 48 kHz —
+    which is why the caller compares with a tolerance rather than for equality.
+    Used to check a written tone really carries the frequency it is named after.
+    """
+    mono = to_mono(x)
+    if mono.size < 2:
+        raise DSPError("Sinyal çok kısa — baskın frekans ölçülemez")
+    spectrum = np.abs(np.fft.rfft(mono * np.hanning(mono.size)))
+    return float(np.argmax(spectrum)) * sample_rate / mono.size
+
+
 # -------------------------------------------------------------------- noise
 
 

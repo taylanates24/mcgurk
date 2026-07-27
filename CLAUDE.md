@@ -79,13 +79,15 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── av_presenter.py          # TrialSpec -> presentation -> TimingRecord
 │   ├── loopback.py              # level-2 jitter analysis (pure numpy)
 │   └── psychopy_prefs.py        # must run before psychopy.sound is imported
-├── modules/                     # Adım 4 (mcgurk), 5 (avsr), 6 (tbw); 7–7c to come
+├── modules/                     # Adım 4 (mcgurk), 5 (avsr), 6 (tbw), 7 (oddball); 7b–7c to come
 │   ├── base.py                  # seeding, ordering, PlannedTrial — no PsychoPy
 │   ├── mcgurk.py                # design + categorisation — no PsychoPy
 │   ├── avsr.py                  # design + scoring + measures — no PsychoPy
 │   ├── tbw.py                   # design + Gaussian fit + bootstrap — no PsychoPy
+│   ├── oddball.py               # stream design + attribution + d' — no PsychoPy
 │   ├── response.py              # option grid, keyboard, two RTs, free text
-│   └── block.py                 # shared trial loop + per-module TrialPolicy
+│   ├── block.py                 # shared trial loop + per-module TrialPolicy
+│   └── stream.py                # continuous-stream loop (oddball; GIN in 7c)
 ├── analysis/                    # Adım 9 (empty)
 ├── ui/                          # Adım 8 (empty)
 ├── logging_setup.py
@@ -114,6 +116,7 @@ stimuli/audio_noisy/speaker_<id>/…_ssn<snr>dB_<n>.wav   n noise instances per 
 stimuli/dichotic/speaker_<id>/Left-<l>_Right-<r>.wav    both ears on one burst time
 stimuli/gin/segment_<nn>.wav                            gaps cut offline
 stimuli/noise/speech_shaped_noise.wav                   from the corpus LTAS
+stimuli/tones/tone_<hz>Hz.wav                           oddball tones, ramped
 ```
 
 Key points that are easy to get wrong:
@@ -164,7 +167,7 @@ to get wrong:
 - The device's stream rate is checked against `audio.sample_rate`: PsychoPy
   resamples at load time otherwise, undoing the 48 kHz the set was prepared at.
 
-### Assessment modules (`mcgurk/modules/`, from Adım 4–6)
+### Assessment modules (`mcgurk/modules/`, from Adım 4–7)
 
 The split follows the engine's: `base.py`, `mcgurk.py`, `avsr.py` and `tbw.py`
 are PsychoPy-free, so the design, the categorisation, the scoring and the
@@ -268,6 +271,51 @@ wrappers. Copying the loop per module is how two copies drift apart.
   same two strings: a mismatch would invert the curve, and an inverted curve
   still fits.
 
+**Modül 4 — Oddball** (`oddball.py` + `stream.py`, Adım 7) is the first module
+that is *not* a sequence of trials. It is a continuous stream of tones with a
+jittered ISI, and it does not use `block.py` or `AVPresenter` at all:
+
+- **A press is attributed, not collected.** Presses are timestamped as they
+  arrive and assigned afterwards to the tone whose onset most recently preceded
+  them. `modules.oddball.response_window_ms` then decides whether that press
+  counts as a *response* to it. The config refuses a window that reaches past
+  the shortest ISI, so a press can never belong to two tones.
+- **The window is a design parameter, fixed before data collection.** Chosen
+  afterwards it becomes a way of choosing the hit and false-alarm rates after
+  seeing them. (Same rule as GIN's, still open with the danışman — §F.)
+- **A press outside every window is still written**, against the tone it
+  followed, with `category = OUTSIDE_WINDOW` and `is_correct` NULL. A
+  participant pressing at random has to be visible in QC without their presses
+  entering either rate.
+- **A miss and a correct rejection produce no `responses` row.** Both are the
+  absence of a press; they are derived from `v_trials_flat`, which keeps the
+  trial visible through its LEFT JOIN.
+- **`rt_from_prompt_ms` is NULL here** — a stream has no prompt. The RT lives
+  in `rt_from_burst_ms`, measured from the tone's own onset.
+- **Onsets are cumulative from one origin** and every tone is handed to PTB as
+  an absolute time. A stream that re-referenced itself each tone would
+  accumulate the scheduler's error over five minutes; measured drift over 300
+  tones is under a millisecond.
+- **The keyboard clock is reset once**, at the start of the run, and an RT is
+  `press.rt + (reset_time − tone_onset)`. Resetting per tone would require the
+  reset to happen *at* the onset, which no flip loop can promise.
+- **Every target has its run of standards in front of it, the first one
+  included.** A deviant presented before any standard is not a deviant. The
+  placement is drawn uniformly from the legal sequences (stars and bars), not
+  greedily: greedy placement pushes targets towards the end, where the free
+  space accumulates.
+- **d' and the criterion use the log-linear correction** (Hautus 1995) always,
+  not only when a rate is 0 or 1 — a conditional correction is discontinuous
+  exactly where an easy task puts most participants. One consequence: with 54
+  targets against 246 standards, someone who presses at *every* tone lands at a
+  small negative d' rather than zero, and it is the criterion that identifies
+  them.
+- **The tones are prepared offline** like everything else that is presented
+  (`stimuli/tones/`, derived from `modules.oddball` rather than configured
+  twice). The 10 ms raised-cosine ramp is the point: an un-ramped 50 ms tone
+  can be told from another one by its click alone, which would make the task
+  solvable without hearing a pitch.
+
 ### Legacy Structure (src/, Adım 0)
 ```
 mcgurk/
@@ -367,16 +415,22 @@ Validated by `mcgurk/config/schema.py`; **unknown fields are an error**.
   structure. These live on `ResponseUIConfig`, shared by `mcgurk`, `avsr` and
   `tbw`; AVSR adds `mode_questions` (per presentation mode), TBW adds
   `response_labels` (which of its two options means "simultaneous"),
-  `tbw_definition` and `bootstrap_samples`/`bootstrap_ci`.
+  `tbw_definition` and `bootstrap_samples`/`bootstrap_ci`. **Oddball has none
+  of it**: no grid, no prompt, one `response_key` — plus
+  `response_window_ms` (which press answers which tone), `lead_in_s`, and
+  `ears` restricted to exactly one entry because `n_trials` is the total and
+  the ear is not crossed.
 - `modules.avsr.stimulus_sets[].list` points at a `config/word_lists/*.yaml`
   file, read by the loader (§F.2 — the recording session has not happened, so
   the shipped list is an empty template with `enabled: false`).
 - `stimulus_prep.*`: everything `tools/prepare_stimuli.py` needs — the seed,
   the `speaker_id` → source-folder map, the token list, and the video/audio/
-  burst/noise/GIN parameters. The SNRs to prepare are **derived** from the
-  enabled modules' `noise_conditions`, never listed a second time. Load-time
-  checks: every `modules.*.speaker_id` names a declared speaker, and every
-  token the design uses is in `stimulus_prep.tokens`.
+  burst/noise/GIN/tone parameters. The SNRs to prepare are **derived** from the
+  enabled modules' `noise_conditions`, and the tone frequencies from
+  `modules.oddball`, never listed a second time. Load-time checks: every
+  `modules.*.speaker_id` names a declared speaker, and every token the design
+  uses is in `stimulus_prep.tokens`. `stimulus_prep.tones.level_dbfs` is the
+  one thing about a tone that is not design — the level it is written at.
 
 ## Data Model (new package — data/mcgurk.sqlite, schema version 3)
 Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
@@ -389,11 +443,14 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - `trials` — shared design columns + realised timing; module-specific fields in
   `design_extra` (JSON), validated by `mcgurk/db/design.py`. `mcgurk`, `avsr`
   and `tbw` trials carry `speaker_id` (required) and `noise_instance`; `avsr`
-  adds `stimulus_type` and `item`. `v_trials_flat` exposes `speaker_id`,
-  `noise_instance` and `avsr_item` as columns (`stimulus_type` is only in the
-  JSON — adding it to the VIEW is a schema-version bump, and the occasion for
-  that is the word set arriving).
-- `responses` — **0..n per trial**: none on timeout, several for a GIN segment
+  adds `stimulus_type` and `item`; `oddball` carries `tone_type`, `tone_hz` and
+  the nominal `isi_ms`. `v_trials_flat` exposes `speaker_id`, `noise_instance`,
+  `avsr_item` and `oddball_tone_type` as columns (`stimulus_type` and `isi_ms`
+  are only in the JSON — adding either to the VIEW is a schema-version bump,
+  and the occasion for that is the word set arriving; the realised interval is
+  recoverable by differencing `audio_onset_s`).
+- `responses` — **0..n per trial**: none on timeout or on an oddball tone the
+  participant did not answer, several for a GIN segment or a tone pressed twice
 - A trigger refuses `is_correct` on `mcgurk`/`dichotic`/`tbw` trials (§A.10)
 - A module may write several blocks; use `db.next_block_index(session_id)`
   rather than counting in the caller.
@@ -435,8 +492,8 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Monitor setup (ilk kurulumda bir kez): `python scripts/setup_monitor.py`
 - Validate config + design cost: `python -m mcgurk.config`
 - Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
-- Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw --dry-run`
-- Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw [--limit N] [--seed N]`
+- Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw|oddball --dry-run`
+- Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw|oddball [--limit N] [--seed N]`
 - Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
 - Verify stimuli: `python tools/verify_stimuli.py [--quick]`
 - Verify a backup: `python tools/verify_backup.py <yedek> --compare-with data/mcgurk.sqlite`
@@ -490,3 +547,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't score a TBW simultaneity judgement — there is no correct answer at any SOA, and the database refuses `is_correct` on `tbw` trials
 - Don't count a TBW timeout as "different" — with no correct answer, filling it in either direction moves the curve; it is a missing observation
 - Don't report a fitted window wider than half the tested SOA range — beyond that the grid does not constrain sigma and the number is an extrapolation, not a measurement
+- Don't decide an oddball press's response window inside the trial loop — it is a config parameter, fixed before data collection, and attribution has to stay testable without hardware
+- Don't drop an oddball press that fell outside every window — record it with `category = OUTSIDE_WINDOW` and no correctness; a participant pressing at random must be visible without being counted as a hit or a false alarm
+- Don't write a `responses` row for an oddball miss or correct rejection — both are the absence of a press, and inventing a row puts the analyst's reading into the data
+- Don't schedule an oddball tone relative to the previous *realised* onset — the whole stream comes off one origin, or the scheduler's error accumulates over five minutes

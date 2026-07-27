@@ -152,6 +152,24 @@ class GinSegmentEntry(StrictModel):
     level_dbfs: float
 
 
+class ToneEntry(StrictModel):
+    """One pure tone of the oddball module (Adım 7).
+
+    Prepared offline like everything else that is presented: the ramp that keeps
+    a 50 ms tone from clicking is exactly the kind of thing that has to be
+    measurable off the disk, and ``verify_stimuli.py`` measures it.
+    """
+
+    frequency_hz: float
+    file: MediaFile
+    duration_s: float
+    sample_rate: int
+    ramp_ms: float
+    #: RMS of the whole file, ramps included.
+    level_dbfs: float
+    peak_dbfs: float
+
+
 class NoiseEntry(StrictModel):
     """The speech-shaped noise master the noisy tokens are drawn from."""
 
@@ -175,6 +193,11 @@ class StimulusManifest(StrictModel):
     noisy_tokens: list[NoisyTokenEntry] = Field(default_factory=list)
     dichotic: list[DichoticEntry] = Field(default_factory=list)
     gin_segments: list[GinSegmentEntry] = Field(default_factory=list)
+    #: Added in Adım 7.  The version is deliberately *not* bumped: an older
+    #: manifest simply has no tones, and the oddball design says so by name
+    #: rather than being refused wholesale — the same treatment as an AVSR word
+    #: set that has not been recorded yet.
+    tones: list[ToneEntry] = Field(default_factory=list)
     noise: NoiseEntry | None = None
 
     # -- lookups ----------------------------------------------------------
@@ -231,6 +254,15 @@ class StimulusManifest(StrictModel):
             f"Left-{left}/Right-{right}"
         )
 
+    def tone(self, frequency_hz: float) -> ToneEntry:
+        for entry in self.tones:
+            if entry.frequency_hz == frequency_hz:
+                return entry
+        raise ManifestError(
+            f"Manifest'te {frequency_hz:g} Hz tonu yok. Uyaran seti bu tasarımla "
+            "hazırlanmamış: python tools/prepare_stimuli.py --force"
+        )
+
     def files(self) -> list[MediaFile]:
         """Every prepared file the manifest refers to."""
         entries: list[MediaFile] = [entry.file for entry in self.videos]
@@ -238,6 +270,7 @@ class StimulusManifest(StrictModel):
         entries += [entry.file for entry in self.noisy_tokens]
         entries += [entry.file for entry in self.dichotic]
         entries += [entry.file for entry in self.gin_segments]
+        entries += [entry.file for entry in self.tones]
         if self.noise is not None:
             entries.append(self.noise.file)
         return entries

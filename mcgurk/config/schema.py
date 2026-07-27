@@ -539,12 +539,24 @@ class OddballConfig(ModuleBase):
     isi_ms: tuple[float, float]
     ears: list[Ear] = Field(min_length=1)
     response_key: str = Field(min_length=1)
+    #: ``[alt, üst]`` ms from a tone's onset: a press inside this interval is a
+    #: response to that tone.  It is a design parameter, not an analysis one —
+    #: choosing it after the data is in means choosing the hit and false-alarm
+    #: rates after seeing them.
+    response_window_ms: tuple[float, float]
+    #: Fixation before the first tone.  The participant needs a moment between
+    #: "the module started" and the first thing they have to judge.
+    lead_in_s: float = Field(gt=0)
 
     def total_trials(self) -> int:
         return self.n_trials
 
     def n_targets(self) -> int:
         return round(self.n_trials * self.target_probability)
+
+    def tone_frequencies(self) -> list[float]:
+        """The tones this module needs prepared, low to high."""
+        return sorted({self.standard_hz, self.target_hz})
 
     @model_validator(mode="after")
     def _design_is_realisable(self) -> OddballConfig:
@@ -553,25 +565,60 @@ class OddballConfig(ModuleBase):
         if 2 * self.tone_ramp_ms > self.tone_duration_ms:
             raise ValueError(
                 "modules.oddball: iki rampa ton süresinden uzun — "
-                f"2 × {self.tone_ramp_ms} ms > {self.tone_duration_ms} ms"
+                f"2 x {self.tone_ramp_ms} ms > {self.tone_duration_ms} ms"
             )
         if self.isi_ms[0] > self.isi_ms[1]:
             raise ValueError("modules.oddball.isi_ms [alt, üst] sırasında olmalı")
         if self.isi_ms[0] <= 0:
             raise ValueError("modules.oddball.isi_ms pozitif olmalı")
 
-        # A target sequence only exists if the standards required between
+        low, high = self.response_window_ms
+        if low < 0 or high <= low:
+            raise ValueError(
+                "modules.oddball.response_window_ms [alt, üst] ve "
+                f"0 <= alt < üst olmalı, verilen: {list(self.response_window_ms)}"
+            )
+        # A press has to belong to exactly one tone.  If the window outlasted
+        # the shortest interval, a press could be a response to two of them and
+        # the hit rate would depend on which one the code happened to pick.
+        if high >= self.isi_ms[0]:
+            raise ValueError(
+                f"modules.oddball.response_window_ms üst sınırı ({high:g} ms) en "
+                f"kısa ISI'dan ({self.isi_ms[0]:g} ms) kısa olmalı — aksi hâlde "
+                "bir tuş basımı iki tona birden ait olurdu"
+            )
+        if self.tone_duration_ms > high:
+            raise ValueError(
+                f"modules.oddball: ton süresi ({self.tone_duration_ms:g} ms) yanıt "
+                f"penceresinin üst sınırından ({high:g} ms) uzun — ton biterken "
+                "verilen bir yanıt pencerenin dışında kalırdı"
+            )
+
+        # n_trials is the total, so the ears are not crossed; a second entry
+        # would have no defined meaning.  Which ear the tones go to is still a
+        # choice, it is just one choice per session.
+        if len(self.ears) != 1:
+            raise ValueError(
+                "modules.oddball.ears tam olarak bir değer içermeli "
+                f"(verilen: {self.ears}). n_trials toplam deneme sayısıdır, "
+                "kulakla çaprazlanmaz."
+            )
+
+        # A target sequence only exists if the standards required around the
         # targets actually fit into the trial count.
         targets = self.n_targets()
         if targets < 1:
             raise ValueError(
-                "modules.oddball: target_probability × n_trials 1'den küçük, "
+                "modules.oddball: target_probability x n_trials 1'den küçük, "
                 "hiç hedef üretilemez"
             )
-        needed = targets + (targets - 1) * self.min_standards_between_targets
+        # The leading standards count too: the first tone of the run cannot be
+        # a deviant, because nothing has been established for it to deviate
+        # from.  So every target needs its own run of standards before it.
+        needed = targets * (1 + self.min_standards_between_targets)
         if needed > self.n_trials:
             raise ValueError(
-                f"modules.oddball: {targets} hedef arasında en az "
+                f"modules.oddball: {targets} hedefin her birinin önünde en az "
                 f"{self.min_standards_between_targets} standart olması için "
                 f"{needed} deneme gerekir, n_trials={self.n_trials}"
             )
@@ -827,6 +874,18 @@ class GinPrep(StrictModel):
     bandwidth_hz: tuple[float, float]
 
 
+class TonePrep(StrictModel):
+    """The part of an oddball tone that is not in ``modules.oddball``.
+
+    Frequency, duration and ramp are the design and live with the module; the
+    level is a property of the written file, like every other level under
+    ``stimulus_prep``.  Separate from ``audio.target_level_dbfs`` so the speech
+    corpus can be re-levelled without silently moving the tones with it.
+    """
+
+    level_dbfs: float = Field(lt=0)
+
+
 class StimulusPrep(StrictModel):
     """Everything ``tools/prepare_stimuli.py`` needs (steps.md §C Adım 2).
 
@@ -845,6 +904,7 @@ class StimulusPrep(StrictModel):
     burst: BurstPrep
     noise: NoisePrep
     gin: GinPrep
+    tones: TonePrep
 
     def speaker_ids(self) -> list[int]:
         return [speaker.id for speaker in self.speakers]
@@ -905,6 +965,18 @@ class ExperimentConfig(StrictModel):
                 continue
             snrs.update(snr for snr in module.noise_conditions if snr is not None)
         return sorted(snrs)
+
+    def required_tones(self) -> list[float]:
+        """Tone frequencies the enabled modules ask for, in Hz.
+
+        Derived from ``modules.oddball`` for the same reason as
+        :meth:`required_snrs`: a second list under ``stimulus_prep`` could
+        disagree with the design, and the disagreement would surface as a
+        stimulus file that is named after one frequency and carries another.
+        """
+        if not self.modules.oddball.enabled:
+            return []
+        return self.modules.oddball.tone_frequencies()
 
     def required_speaker_ids(self) -> list[int]:
         ids: set[int] = set()

@@ -93,6 +93,7 @@ def verify(
         _check_tokens(config, loaded, root, report)
         _check_noise(config, loaded, root, report)
         _check_gin(config, loaded, root, report)
+        _check_tones(config, loaded, root, report)
         _check_edges(loaded, root, report)
     elif deep:
         report.note("Derin kontroller atlandı — önce yukarıdaki hatalar giderilmeli")
@@ -168,6 +169,12 @@ def _check_coverage(
                 )
             except manifest.ManifestError as exc:
                 problems.append(str(exc))
+
+    for frequency in config.required_tones():
+        try:
+            loaded.tone(frequency)
+        except manifest.ManifestError as exc:
+            problems.append(f"oddball: {exc}")
 
     if config.modules.gin.enabled:
         expected = config.modules.gin.n_segments
@@ -310,6 +317,79 @@ def _check_noise(
         report.ok(f"{len(loaded.noisy_tokens)} gürültülü uyaran kırpma sınırının altında")
 
 
+def _check_tones(
+    config: ExperimentConfig,
+    loaded: manifest.StimulusManifest,
+    root: Path,
+    report: Report,
+) -> None:
+    """The oddball tones, re-measured from disk.
+
+    The frequency is checked because the file is named after it, and the ramp
+    because it is the only thing separating a 50 ms tone from a click: a tone
+    that begins abruptly can be told apart from another one without either
+    frequency being heard, which would make the oddball task solvable by
+    something other than pitch.
+    """
+    if not loaded.tones:
+        return
+    oddball = config.modules.oddball
+    problems: list[str] = []
+
+    for entry in loaded.tones:
+        samples, rate = wavfile.read(entry.file.resolve(root))
+        if rate != entry.sample_rate:
+            problems.append(f"{entry.file.path}: {rate} Hz, manifest {entry.sample_rate}")
+            continue
+
+        measured = dsp.dominant_frequency_hz(samples, rate)
+        resolution = rate / samples.size
+        if abs(measured - entry.frequency_hz) > 2.0 * resolution:
+            problems.append(
+                f"{entry.file.path}: baskın frekans {measured:.0f} Hz, "
+                f"manifest {entry.frequency_hz:g} Hz"
+            )
+
+        duration_ms = samples.size / rate * 1000.0
+        if abs(duration_ms - oddball.tone_duration_ms) > 1.0:
+            problems.append(
+                f"{entry.file.path}: {duration_ms:.1f} ms, config "
+                f"{oddball.tone_duration_ms:g} ms istiyor"
+            )
+
+        level = dsp.to_db(dsp.rms(samples))
+        if abs(level - config.stimulus_prep.tones.level_dbfs) > LEVEL_TOLERANCE_DB:
+            problems.append(
+                f"{entry.file.path}: seviye {level:.2f} dBFS, hedef "
+                f"{config.stimulus_prep.tones.level_dbfs:.2f} dBFS"
+            )
+        if dsp.peak_dbfs(samples) > -1.0:
+            problems.append(f"{entry.file.path}: tepe {dsp.peak_dbfs(samples):.1f} dBFS")
+
+        # The ramp: a quarter of the way into it the envelope must still be
+        # well below the plateau.  An un-ramped tone is already at full level
+        # there, and that is the failure this is looking for.
+        ramp_samples = int(round(oddball.tone_ramp_ms * rate / 1000.0))
+        if ramp_samples >= 4:
+            quarter = float(np.max(np.abs(samples[: ramp_samples // 4])))
+            plateau = float(np.max(np.abs(samples)))
+            if plateau > 0 and quarter > 0.5 * plateau:
+                problems.append(
+                    f"{entry.file.path}: rampanın ilk çeyreği tepe seviyenin "
+                    f"%{100 * quarter / plateau:.0f}'inde — rampa uygulanmamış"
+                )
+
+    if problems:
+        report.fail(f"{len(problems)} ton sorunu:")
+        for problem in problems[:10]:
+            report.note(f"  {problem}")
+    else:
+        report.ok(
+            f"{len(loaded.tones)} oddball tonu: frekans, süre, seviye ve rampa "
+            "beklendiği gibi"
+        )
+
+
 def _check_edges(
     loaded: manifest.StimulusManifest, root: Path, report: Report
 ) -> None:
@@ -324,6 +404,7 @@ def _check_edges(
     entries += [entry.file for entry in loaded.dichotic]
     entries += [entry.file for entry in loaded.noisy_tokens]
     entries += [entry.file for entry in loaded.gin_segments]
+    entries += [entry.file for entry in loaded.tones]
     if loaded.noise is not None:
         entries.append(loaded.noise.file)
 

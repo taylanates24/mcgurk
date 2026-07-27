@@ -139,8 +139,8 @@ python scripts/generate_dichotic_stimuli.py
 `assets/` ham kayıttır ve doğrudan sunulmaz. Yeni paket `stimuli/` altındaki
 **hazırlanmış** seti kullanır: sessiz sabit kare hızlı video, patlama anına
 hizalanmış ve eşit seviyeye getirilmiş 48 kHz 24-bit ses, konuşma şekilli
-gürültü, gürültülü türevler, dikotik çiftler ve GIN gürültü segmentleri.
-Hepsi **çevrimdışı** üretilir (§A.12: çalışma anında DSP yok).
+gürültü, gürültülü türevler, dikotik çiftler, GIN gürültü segmentleri ve
+oddball tonları. Hepsi **çevrimdışı** üretilir (§A.12: çalışma anında DSP yok).
 
 ```bash
 python tools/prepare_stimuli.py            # ilk üretim
@@ -449,8 +449,8 @@ Kademe 3 bu araçta gerçeklenmez; `docs/01_av_gecikme_olcumu.md` scriptleriyle,
 ### Bir modülü tek başına koşmak (Adım 4→)
 
 Oturum akışı Adım 8'de geliyor; o zamana kadar bir modül `tools/run_module.py`
-ile koşuluyor. Koşulabilen modüller: `mcgurk` (Adım 4), `avsr` (Adım 5) ve
-`tbw` (Adım 6).
+ile koşuluyor. Koşulabilen modüller: `mcgurk` (Adım 4), `avsr` (Adım 5),
+`tbw` (Adım 6) ve `oddball` (Adım 7).
 Önce tasarımı donanım açmadan denetleyin — deneme sayısını config'in hesabıyla
 karşılaştırır, hücre tablosunu basar ve her uyaran dosyasının yerinde olduğunu
 doğrular:
@@ -472,6 +472,12 @@ sonunda psikometrik fonksiyon (SOA başına "aynı" oranı), uydurulan PSS, sigm
 ve pencere genişliği ile bootstrap güven aralıkları basılır. Kısa bir `--limit`
 koşusunda uydurma **yapılamaz** ve bunu açıkça söyler: SOA başına birkaç yanıt
 eğriyi kestirmeye yetmez.
+
+Oddball koşusu diğerlerinden farklı görünür: yanıt ekranı yoktur, ekranda
+yalnızca sabitleme haçı durur ve tonlar kendi saatlerine göre akar. Sonunda
+sinyal tespiti tablosu basılır — isabet, kaçırma, yanlış alarm, doğru ret,
+d′, kriter ve isabet RT'si. Pencere dışında kalan tuş basımları ayrı sayılır:
+kaydedilirler ama hiçbir orana girmezler.
 
 Bu bir **geliştirme aracıdır**: yönerge, alıştırma bloğu, mola ve katılımcı
 girişi yok, veritabanına `DEV01` kodlu bir geliştirme katılımcısı yazıyor.
@@ -542,11 +548,9 @@ gürültüsü biriktirmesini engeller. Manifest her dosyanın kaynak codec'ini v
 - Kesilen oturuma kaldığı yerden devam etme yok.
 
 **Yeni pakette henüz gelmeyenler:**
-- `mcgurk/modules/` McGurk (Adım 4), AVSR (Adım 5) ve TBW'yi (Adım 6)
-  içeriyor; oddball, dikotik ve GIN sırasıyla Adım 7–7c'de. `ui/` ve
+- `mcgurk/modules/` McGurk (Adım 4), AVSR (Adım 5), TBW (Adım 6) ve oddball'ı
+  (Adım 7) içeriyor; dikotik ve GIN sırasıyla Adım 7b–7c'de. `ui/` ve
   `analysis/` hâlâ boş (Adım 8 ve 9).
-- Oddball tonları henüz üretilmiyor: `steps.md` onları Adım 7'ye koyuyor. Orada
-  da çevrimdışı üretilecek (§A.12).
 - Yeni config ve veritabanı henüz hiçbir deneyi çalıştırmıyor; `main.py` Adım
   8'e kadar `src/` yolunu kullanmaya devam ediyor.
 - AVSR kelime seti (`type: word`) **içerik olarak boş**: kayıt seansı yapılmadı

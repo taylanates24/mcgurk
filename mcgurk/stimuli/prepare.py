@@ -15,6 +15,9 @@ The pipeline, per speaker (steps.md §C Adım 2):
    gesture is; forcing every token to one instant would destroy that.
 5. Noise, dichotic pairs and GIN segments are derived from the normalised
    tokens.
+6. The oddball tones are synthesised (Adım 7).  They owe nothing to the corpus,
+   but they are presented, so they belong in the prepared set like everything
+   else that is.
 
 Every measurement is made again on the written file.  Anything outside
 tolerance raises: a stimulus set that is a little bit wrong produces data that
@@ -64,6 +67,7 @@ _SUBDIRS = {
     "dichotic": "dichotic",
     "gin": "gin",
     "noise": "noise",
+    "tones": "tones",
 }
 
 
@@ -424,6 +428,8 @@ def _prepare_noise_and_derivatives(
         _write_dichotic(config, root, result, tokens)
     if config.modules.gin.enabled:
         _write_gin(config, root, result, np.random.default_rng(seeds[2]))
+    if config.required_tones():
+        _write_tones(config, root, result)
 
 
 def _corpus_ltas(
@@ -636,6 +642,75 @@ def _write_dichotic(
                 )
             )
     logger.info("Dikotik uyaran: %d dosya", len(result.dichotic))
+
+
+def _write_tones(
+    config: ExperimentConfig,
+    root: Path,
+    result: manifest.StimulusManifest,
+) -> None:
+    """The oddball tones (Adım 7).
+
+    Generated here rather than at run time even though a sinusoid is cheap: what
+    is presented comes from the prepared set, gets a manifest entry, and is
+    audited by ``verify_stimuli.py``.  The frequencies are derived from the
+    module rather than listed again, so a config that changes ``target_hz``
+    without re-running this fails at load instead of playing the old tone.
+    """
+    oddball = config.modules.oddball
+    sample_rate = config.audio.sample_rate
+
+    for frequency in config.required_tones():
+        samples = dsp.tone(
+            frequency,
+            oddball.tone_duration_ms,
+            sample_rate,
+            ramp_ms=oddball.tone_ramp_ms,
+            level_dbfs=config.stimulus_prep.tones.level_dbfs,
+        )
+        peak = dsp.peak_dbfs(samples)
+        if peak > MAX_PEAK_DBFS:
+            raise StimulusError(
+                f"{frequency:g} Hz tonunun tepe seviyesi {peak:.1f} dBFS "
+                f"({MAX_PEAK_DBFS:.1f} dBFS sınırı aşıldı) — "
+                "stimulus_prep.tones.level_dbfs düşürülmeli"
+            )
+
+        # Measured back off the synthesised array, not assumed: the ramp is the
+        # whole reason this file exists offline.
+        measured = dsp.dominant_frequency_hz(samples, sample_rate)
+        resolution = sample_rate / samples.size
+        if abs(measured - frequency) > 2.0 * resolution:
+            raise StimulusError(
+                f"Üretilen tonun baskın frekansı {measured:.0f} Hz, beklenen "
+                f"{frequency:g} Hz (çözünürlük {resolution:.0f} Hz)"
+            )
+
+        destination = root / _SUBDIRS["tones"] / f"tone_{frequency:g}Hz.wav"
+        wavfile.write(
+            destination,
+            samples,
+            sample_rate,
+            bit_depth=config.stimulus_prep.audio.bit_depth,
+        )
+        result.tones.append(
+            manifest.ToneEntry(
+                frequency_hz=frequency,
+                file=manifest.describe(destination, root),
+                duration_s=samples.size / sample_rate,
+                sample_rate=sample_rate,
+                ramp_ms=oddball.tone_ramp_ms,
+                level_dbfs=dsp.to_db(dsp.rms(samples)),
+                peak_dbfs=peak,
+            )
+        )
+
+    logger.info(
+        "Oddball tonları: %s Hz, %.0f ms (%.0f ms rampa)",
+        ", ".join(f"{f:g}" for f in config.required_tones()),
+        oddball.tone_duration_ms,
+        oddball.tone_ramp_ms,
+    )
 
 
 def _write_gin(

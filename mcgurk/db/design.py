@@ -76,8 +76,17 @@ class TBWExtra(_SpeakerExtra):
 
 
 class OddballExtra(_Extra):
+    """Which tone was presented, and how long after the previous one.
+
+    ``isi_ms`` is the *nominal* interval from the preceding tone's onset, None
+    for the first tone of the run.  The realised interval is recoverable by
+    differencing ``trials.audio_onset_s``; keeping the nominal one alongside is
+    what lets QC compare the two without re-running the design generator.
+    """
+
     tone_type: Literal["standard", "target"]
     tone_hz: float = Field(gt=0)
+    isi_ms: float | None = Field(default=None, gt=0)
 
 
 class DichoticExtra(_Extra):

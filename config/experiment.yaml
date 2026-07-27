@@ -206,8 +206,19 @@ modules:
     tone_duration_ms: 50
     tone_ramp_ms: 10
     isi_ms: [900, 1100]
+    # One entry only: n_trials is the total, so the ear is not crossed.  Both
+    # ears, because this is the attention control task — presenting it to one
+    # side would measure a deaf ear's attention in half the SSD sample.
     ears: [both]
     response_key: space
+    # Which press counts as a response to which tone, in ms from tone onset.
+    # Fixed before data collection on purpose (§F): choosing it afterwards means
+    # choosing the hit and false-alarm rates after seeing them.  The lower bound
+    # is faster than a real decision to that tone; the upper bound has to stay
+    # under the shortest ISI, or a press would belong to two tones at once.
+    response_window_ms: [100, 800]
+    # Fixation before the first tone.
+    lead_in_s: 1.0
 
   # ---- Modül 5: Dikotik dinleme ----
   # Not in the reference method document yet — see progress.md, "Kullanıcıya
@@ -320,6 +331,14 @@ stimulus_prep:
     # lead-in in this corpus is ~740 ms (speaker 2, /ga/), and preparation
     # fails rather than guesses if a future recording is tighter than that.
     ramp_ms: 250.0
+
+  tones:
+    # The oddball tones (Adım 7).  Frequency, duration and ramp are the design
+    # and live under modules.oddball; only the written level is here.  Same
+    # value as the speech tokens so one calibration governs both — a pure tone
+    # at equal RMS is heard as somewhat louder than speech, which is acceptable
+    # for a control task and is what the calibration trim then sets in SPL.
+    level_dbfs: -23.0
 
   gin:
     gap_ramp_ms: 1.0

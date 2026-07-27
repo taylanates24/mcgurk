@@ -24,7 +24,8 @@ PSYCHOPY_ALLOWED = {"engine", "ui", "modules"}
 #: testable on a machine with no screen and no sound card, which is where CI
 #: runs.  ``modules/response.py`` and ``modules/block.py`` are deliberately not
 #: here: drawing an option grid and running a trial loop cannot be done without
-#: PsychoPy in any case.
+#: PsychoPy in any case, and neither can ``modules/stream.py``, which flips a
+#: window for five minutes.
 ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY = (
     "mcgurk.engine.scheduling",
     "mcgurk.engine.audio",
@@ -36,6 +37,7 @@ ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY = (
     "mcgurk.modules.mcgurk",
     "mcgurk.modules.avsr",
     "mcgurk.modules.tbw",
+    "mcgurk.modules.oddball",
 )
 
 

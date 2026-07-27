@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-27
-Aktif adım: 7 (Adım 6 tamamlandı)
+Aktif adım: 7b (Adım 7 tamamlandı)
 
 ## Durum tablosu
 
@@ -14,7 +14,7 @@ Aktif adım: 7 (Adım 6 tamamlandı)
 | 4 | Modül 1: McGurk | TAMAMLANDI | 2026-07-27 | `709958e` |
 | 5 | Modül 2: AVSR | TAMAMLANDI | 2026-07-27 | `79fec8b` |
 | 6 | Modül 3: TBW | TAMAMLANDI | 2026-07-27 | `3974aee` |
-| 7 | Modül 4: Oddball | BEKLİYOR | | |
+| 7 | Modül 4: Oddball | TESTTE | 2026-07-27 | |
 | 7b | Modül 5: Dikotik dinleme | BEKLİYOR | | |
 | 7c | Modül 6: GIN | BEKLİYOR | | |
 | 8 | Oturum akışı ve arayüz | BEKLİYOR | | |
@@ -1238,13 +1238,154 @@ Branches); bu, master'ın "sürüm" anlamını korur.
     kazanır; kod değişmiyor, yalnızca `timing.system_av_offset_ms` doluyor.
 
 ### Adım 7 — Modül 4: Oddball
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
-- **Commit:** —
+- **Durum:** TESTTE — kod ve otomatik testler bitti, `TEST_ADIM_7.md`'deki tek
+  manuel test (kulakla dinleme + gerçek klavye) kullanıcıda.
+- **Tamamlanma:** 2026-07-27 (kod). Otomatik testler yeşil (614 → **688 test**;
+  CI'da koşan 610, donanımda 61, ffmpeg gerektirdiği için atlanan 17; ruff +
+  mypy temiz).
+- **Commit:** (bir sonraki adımda doldurulacak)
+
 - **Ne yapıldı:**
+  - **`mcgurk/modules/oddball.py`** — hedef yerleşimi, ISI çekimi, onset
+    takvimi, tuş atfetme, sinyal tespiti ölçütleri (isabet/kaçırma/yanlış
+    alarm/doğru ret, d′, kriter, isabet RT'si) ve operatör raporu. **PsychoPy
+    yok** (paket sınırı testine eklendi).
+  - **`mcgurk/modules/stream.py`** — kesintisiz akış koşucusu. `block.py`
+    kopyalanmadı: oddball'ın yanıt ekranı yok, tonları kendi saatine göre akıyor
+    ve deneme başına 0..n yanıt topluyor. Adım 7c'nin GIN'i buraya katılabilir.
+  - **`stimuli/tones/tone_<hz>Hz.wav`** — tonlar çevrimdışı üretiliyor
+    (`dsp.tone`, `prepare._write_tones`, `manifest.ToneEntry`,
+    `verify._check_tones`). Frekanslar `modules.oddball`'dan **türetiliyor**
+    (`config.required_tones()`), ikinci kez yazılmıyor.
+  - **Config'e üç alan:** `modules.oddball.response_window_ms` ([100, 800] ms),
+    `lead_in_s` (1.0 s) ve `stimulus_prep.tones.level_dbfs` (−23 dBFS).
+  - **`db/design.py` → `OddballExtra`** artık nominal `isi_ms` de taşıyor.
+    Şema sürümü **değişmedi** (3): `v_trials_flat` `oddball_tone_type`'ı zaten
+    açıyordu ve `isi_ms` VIEW'e eklenmedi — gerçekleşen aralık `audio_onset_s`
+    farklarından zaten çıkıyor.
+  - **`tools/run_module.py --module oddball`**: kuru koşuda hedef oranı,
+    hedefler arası standart dağılımı, ISI aralığı ve akış süresi; canlı koşunun
+    sonunda sinyal tespiti tablosu.
+  - **Test: 74 yeni test.** CI'da koşanlar: 52 tasarım/atfetme/ölçüt testi
+    (hedef sayısı, kısıt her tohumda, yerleşimin düzgün dağılımlı olduğu,
+    pencere kenarları, blok sınırı, elle hesaplanmış d′ ve kriter, sınır
+    durumları) + 13 ton üretimi testi (frekans, süre, seviye, rampa, spektral
+    saçılma) + config kapıları. Donanımda koşanlar (`psychopy`, 4): tonlar
+    tasarlanan aralıklarla sunuluyor, basım doğru tona düşüyor, bloğu kapanmış
+    bir tona gelen geç basım da kaydediliyor, pencere dışı basım puanlanmıyor.
+
+- **Tam uzunlukta dayanıklılık koşusu (2026-07-27):** 300 ton, tam ekran,
+  75.01 Hz, yanıtlar **bilinen bir gözlemciden** simüle edildi (hedeflerin
+  %90'ına 350 ± 60 ms'de basım, standartların %2'sinde yanlış alarm).
+
+  | Ölçüm | Sonuç |
+  |---|---|
+  | Süre | **5.06 dk** (1.013 s/ton) — config'in tahmini 5.2 dk |
+  | Bloklar | 5 × 60, hepsi `completed`, her biri ayrı commit |
+  | Düşen kare | **0** (en uzun kare aralığı 17.27 ms) |
+  | `TimeFailed` / `XRuns` | **0** — 300 tonun hiçbirinde kaçırılan planlama yok |
+  | Geri kestirim | isabet %92.6 (gerçek %90), yanlış alarm %2.4 (gerçek %2) |
+  | d′ / kriter | **3.33** / +0.27 |
+  | Isabet RT | 344 ms (SD 71), n=50 — simülasyonun 350 ± 60'ı |
+
+  **Aralık sapması ölçüm değildir:** `trials.audio_onset_s` planlanan onset'i
+  taşıyor (Adım 3 kararı — PTB bu makinede kendisine söyleneni aynen geri
+  bildiriyor), dolayısıyla nominal ile gerçekleşen aralık farkının 0.0000 ms
+  çıkması aritmetiğin doğruluğunu söyler, sesin o anda çıktığını değil. Onu
+  söyleyen şey `TimeFailed`/`XRuns` = 0 ve kademe 2 loopback ölçümü.
+
 - **Alınan kararlar:**
+  - **Tonlar çevrimdışı üretiliyor**, çalışma anında değil. Bir sinüs ucuz, ama
+    sunulan her şey hazırlanmış setten gelir, manifest'te kaydı olur ve
+    `verify_stimuli.py` onu denetler — 50 ms'lik bir tonu tona çeviren şey
+    (rampa) tam olarak diskten ölçülebilmesi gereken şey. Manifest sürümü
+    **bump edilmedi**: alan eklemek geriye uyumlu, eksik ton açık hatayla
+    bildiriliyor (AVSR kelime setiyle aynı yol).
+  - **Yanıt penceresi config'te ve veri toplanmadan önce sabit.** Sonradan
+    seçilmesi, isabet ve yanlış alarm oranlarının sonuçlara bakarak
+    ayarlanabilmesi demek. Üst sınır en kısa ISI'dan kısa olmak zorunda —
+    aksi hâlde bir basım iki tona birden ait olurdu ve oran, kodun hangisini
+    seçtiğine bağlı kalırdı. Değer (100–800 ms) **danışman kararına açık**.
+  - **Pencere dışı basım atılmıyor.** Takip ettiği tona `OUTSIDE_WINDOW`
+    kategorisi ve `is_correct = NULL` ile yazılıyor: rastgele tuşa basan bir
+    katılımcı QC'de görünmeli, ama basımları isabet ya da yanlış alarm sayımına
+    girmemeli. İlk tondan önceki basımlar hiçbir denemeye ait olmadığı için
+    yalnızca sayılıp loglanıyor.
+  - **Kaçırma ve doğru ret satır üretmiyor** — ikisi de basımın *yokluğu*.
+    Zaman aşımı kuralıyla aynı: `v_trials_flat` LEFT JOIN olduğu için deneme
+    yine görünüyor ve ölçütler oradan türüyor.
+  - **Basımlar atfediliyor, toplanmıyor.** Zaman damgasıyla tamponlanıp sonradan
+    tonlara dağıtılıyor. Bunun bir sonucu: bloğu kapanmış bir tona gelen geç
+    basım kayıp değil — kendi tonuna yazılıyor, yalnızca bir sonraki bloğun
+    commit'iyle diske iniyor. Bir yanıt satırının hangi commit'le indiği ne
+    söylediğini değiştirmiyor; kaybolması ise isabet oranını blok sınırlarının
+    nereye düştüğüne bağlardı.
+  - **Klavye saati bir kez sıfırlanıyor** (akış başında); RT = `press.rt +
+    (sıfırlama anı − ton onset'i)`. Ton başına sıfırlama, sıfırlamanın tam
+    onset anında olmasını gerektirirdi ve bunu hiçbir flip döngüsü milisaniye
+    hassasiyetinde vaat edemez. `tDown`'dan yine hiçbir şey hesaplanmıyor
+    (Adım 4 kuralı).
+  - **Her hedefin önünde standart koşusu var — ilkinin de.** Hiçbir standart
+    kurulmadan sunulan bir "sapma" sapma değildir. Config doğrulaması buna göre
+    değişti (`hedef × (1 + min_standards)`); 300 denemede 162, bol bol sığıyor.
+  - **Yerleşim geçerli dizilerden düzgün rastgele** (yıldızlar-ve-çubuklar),
+    açgözlü değil. Açgözlü yerleştirme boş yerin biriktiği yere — akışın
+    sonuna — yığar; dikkat görevinde hedef oranının sabit kalması gereken yer
+    tam olarak ikinci yarıdır. Test bunu hem tek tek konumların dağılımıyla hem
+    de yarı-yarıya dengeyle kontrol ediyor.
+  - **`ears` tam bir öğe içermeli.** `n_trials` toplam deneme sayısı, yani
+    kulak çaprazlanmıyor; ikinci bir değerin tanımlı anlamı olmazdı. Diotik
+    (`both`) sunum seçildi: bu dikkat *kontrol* görevi, tek tarafa sunmak SSD
+    örnekleminin yarısında sağır kulağın dikkatini ölçmek olurdu.
+  - **d′ ve kriter log-lineer düzeltmeli** (Hautus 1995), koşulsuz. Koşullu
+    düzeltme (yalnızca oran 0 ya da 1 iken) kestiriciyi tam da kolay bir görevin
+    çoğu katılımcıyı bıraktığı yerde süreksiz yapar. Bir yan etkisi belgelendi:
+    54 hedefe karşı 246 standartla, **her** tona basan biri sıfır yerine küçük
+    negatif bir d′ alıyor; onu tanımlayan şey kriter (−2.6).
+  - **Akış flip ızgarasına bağlanmadı.** Video yok, dolayısıyla `AVPresenter`
+    kullanılmıyor; onset'ler tek bir başlangıçtan kümülatif hesaplanıp mutlak
+    ptb zamanı olarak PTB'ye veriliyor. Her tonu bir öncekinin *gerçekleşen*
+    anına göre planlamak, planlayıcının hatasını beş dakika boyunca biriktirirdi.
+  - **Planlama anı kaçırılırsa deneme değil akış hatalıdır:** `play(when=geçmiş)`
+    PTB'de anında başlar ve tasarlanan aralık hiç var olmamış olur. Bu durumda
+    koşu **hata verip duruyor** (`StreamError`); yalnızca pay daralmışsa uyarı
+    basılıp sayılıyor.
+
 - **Bilinen sınırlar:**
+  - **Yanıt penceresi (100–800 ms) danışman onayı bekliyor** — GIN'inkiyle
+    (Adım 7c) birlikte kararlaştırılmalı. Veri toplama başlamadan önce
+    kesinleşmeli; sonradan değiştirmek isabet/yanlış alarm oranlarını yeniden
+    tanımlar.
+  - **Kayıtlı onset planlanan onsettir**, ölçülen değil (yukarıdaki not).
+    Motorun geri kalanında da böyle (§ Adım 3, `audio_onset_reported`).
+  - **Hedefler arası en uzun boşluk 17 standarda kadar çıkabiliyor** (~17 s
+    hedefsiz). Düzgün rastgele yerleşimin doğal kuyruğu; standart oddball
+    uygulamasıyla uyumlu, ama isterse config'e bir üst sınır eklenebilir.
+  - Modül tek başına koşuyor; yönerge ("tiz tonu duyunca boşluğa basın"),
+    alıştırma, mola ve katılımcı girişi Adım 8'de. Şu an ne yapılacağını
+    yalnızca `TEST_ADIM_7.md` söylüyor.
+  - Dayanıklılık koşusu monitörün HD Audio çıkışında yapıldı (Bluetooth
+    kulaklık kapalıydı). Ses yolunun mutlak gecikmesi ölçülmedi — kademe 2/3'ün
+    işi.
+
 - **Sonraki adıma not:**
+  - **Adım 7c (GIN) `stream.py`'yi paylaşabilir.** Aynı şekil: uyaran içinde
+    0..n yanıt, yanıt ekranı yok, tuş basımı zaman damgasıyla atfediliyor. GIN'de
+    "onset" bir tonun değil bir boşluğun başlangıcı olacak ve pencere
+    `modules.gin.response_window_ms` (henüz yok) olacak. `_flush`/`_hold`/
+    `_schedule` üçlüsü olduğu gibi kullanılabilir; segment başına tek bir uzun
+    ses ve segment içinde birden çok "onset" listesi gerekiyor.
+  - **Adım 7b (dikotik) `block.py`'yi paylaşır**, `stream.py`'yi değil — tek
+    zorunlu seçim. Adım 6'nın notu geçerli: dikotik config'ine `ResponseUIConfig`
+    alanları eklenmeli.
+  - Adım 8 modül sırasına oddball'ı eklerken yönerge ekranını da vermeli;
+    `lead_in_s` yönergeden sonra, ilk tondan önceki sabitleme süresidir.
+  - Adım 9 `v_trials_flat`'tan okurken oddball için `oddball_tone_type`,
+    `is_correct` ve `rt_from_burst_ms` sütunlarını bulacak;
+    `oddball.measures_from_rows()` doğrudan çağrılabilir, taşımaya gerek yok.
+    QC raporu iki şeye bakmalı: `category = 'OUTSIDE_WINDOW'` basım sayısı
+    (rastgele basan katılımcı) ve `criterion` (her tona basan katılımcı — d′
+    onları güvenilir biçimde göstermez).
 
 ### Adım 7b — Modül 5: Dikotik dinleme
 - **Durum:** BEKLİYOR
@@ -1322,6 +1463,9 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
     `python -m mcgurk.config` çıktısına bakılmalı (§F.1).
 - [ ] Kulaklık tipi (donanım, çapraz dinleme kontrolünü etkiler) — §F.3
 - [ ] Konuşmacı seçim stratejisi — §F.4
+- [ ] **Oddball yanıt penceresi** (Adım 7'de eklendi, `[100, 800]` ms) ve GIN
+  yanıt penceresi (Adım 7c) — ikisi de veri toplamadan önce sabitlenmeli;
+  ayrıntı aşağıdaki bekleyen aksiyonlarda.
 
 ### Ek açık kararlar (2026-07-26 depo incelemesinde çıktı)
 
@@ -1405,6 +1549,15 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   ve silindi; ilk koşuda yeni şemayla oluşuyor. Başka bir makinede sürüm 2
   dosyası varsa aynı şey gerekir — kod açık hata veriyor
   (`SchemaVersionError`), sessizce açmıyor.
+- **Oddball yanıt penceresi — danışman kararı (Adım 7).**
+  `modules.oddball.response_window_ms` config'e `[100, 800]` ms olarak girdi:
+  ton başlangıcından sonra bu aralıkta gelen bir tuş basımı o tona verilmiş
+  yanıt sayılıyor. Alt sınır o tona verilmiş olamayacak kadar hızlı basımları,
+  üst sınır bir sonraki tona karışacak basımları dışarıda bırakıyor (şema, üst
+  sınırın en kısa ISI'dan kısa olmasını zorluyor). **Veri toplama başlamadan
+  önce kesinleşmeli** — sonradan değiştirmek isabet ve yanlış alarm oranlarını
+  yeniden tanımlar, yani sonuca bakarak ayarlanabilir hâle getirir. GIN'in
+  yanıt penceresiyle (Adım 7c, `docs/EK_GIN.docx`) birlikte karara bağlanmalı.
 - **Fotodiyot ölçümü (`01_av_gecikme_olcumu.md`) hâlâ bekliyor** — tasarım
   gereği tüm kod bittikten sonra. O ana kadar `timing.system_av_offset_ms`
   `null` ve motor 0 kabul edip uyarı basıyor.

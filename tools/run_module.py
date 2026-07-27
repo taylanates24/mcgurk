@@ -51,19 +51,25 @@ from mcgurk.db.models import (  # noqa: E402
 from mcgurk.logging_setup import setup_logging  # noqa: E402
 from mcgurk.modules import avsr as avsr_module  # noqa: E402
 from mcgurk.modules import mcgurk as mcgurk_module  # noqa: E402
+from mcgurk.modules import oddball as oddball_module  # noqa: E402
 from mcgurk.modules import tbw as tbw_module  # noqa: E402
 from mcgurk.modules.base import ModuleError, PlannedTrial  # noqa: E402
 from mcgurk.provenance import collect as collect_provenance  # noqa: E402
 from mcgurk.stimuli import manifest as manifest_module  # noqa: E402
 from mcgurk.stimuli.manifest import ManifestError  # noqa: E402
 
-#: Modules this harness can run, and where their design comes from.  Adım 6–7c
+#: Modules this harness can run, and where their design comes from.  Adım 7b–7c
 #: add their own entries here; nothing else in the tool is module-specific.
 MODULES = {
     "mcgurk": mcgurk_module,
     "avsr": avsr_module,
     "tbw": tbw_module,
+    "oddball": oddball_module,
 }
+
+#: Modules presented as a continuous stream rather than as discrete trials.
+#: They open no ``AVPresenter``: there is no video to synchronise to.
+STREAM_MODULES = {"oddball"}
 
 #: Development participant.  An anonymous code and nothing else (§A.6); the age
 #: has to satisfy the database's 18–60 CHECK.
@@ -112,6 +118,35 @@ def dry_run(config: ExperimentConfig, module: str, planned: list[PlannedTrial], 
         MODULES[module].cell_counts(planned).items()
     ):
         print(f"  {label:<20}{tokens:<22}{ear:<8}{noise:<10}{count:>4}")
+
+    if module == "oddball":
+        _rule("Akış")
+        oddball = config.modules.oddball
+        gaps = oddball_module.target_gaps(planned)
+        targets = len(gaps)
+        intervals = [
+            float(item.trial.design_extra["isi_ms"]) for item in planned[1:]
+        ]
+        print(f"  Hedef sayısı         : {targets} (%{100 * targets / len(planned):.1f})")
+        print(f"  Config'in beklentisi : {oddball.n_targets()}")
+        print(
+            f"  Hedefler arası standart: en az {min(gaps) if gaps else 0}, "
+            f"en çok {max(gaps) if gaps else 0} "
+            f"(kısıt >= {oddball.min_standards_between_targets})"
+        )
+        if intervals:
+            print(
+                f"  ISI                  : {min(intervals):.0f}-{max(intervals):.0f} ms "
+                f"(config {oddball.isi_ms[0]:g}-{oddball.isi_ms[1]:g})"
+            )
+        print(
+            f"  Akış süresi          : "
+            f"{oddball_module.stream_duration_s(planned, oddball) / 60.0:.1f} dk"
+        )
+        print(
+            f"  Yanıt penceresi      : {oddball.response_window_ms[0]:g}-"
+            f"{oddball.response_window_ms[1]:g} ms (ton başlangıcından)"
+        )
 
     if module == "tbw":
         _rule("SOA sunumu")
@@ -162,7 +197,11 @@ def dry_run(config: ExperimentConfig, module: str, planned: list[PlannedTrial], 
 
     _rule("Yanıt seti")
     module_config = config.modules.by_name()[module]
-    assert isinstance(module_config, ResponseUIConfig)
+    if not isinstance(module_config, ResponseUIConfig):
+        # A stream module has one key and no grid: the participant is not
+        # choosing between options, they are reporting a detection.
+        print(f"  [{config.modules.oddball.response_key}] hedef tonu duyunca")
+        return 0
     for key, label in zip(module_config.response_keys, module_config.response_set, strict=True):
         marker = ""
         if (
@@ -221,6 +260,7 @@ def live_run(
     )
     from mcgurk.modules.block import run_avsr, run_mcgurk, run_tbw, summarise
     from mcgurk.modules.response import make_keyboard
+    from mcgurk.modules.stream import run_oddball
 
     runners = {"mcgurk": run_mcgurk, "avsr": run_avsr, "tbw": run_tbw}
 
@@ -271,24 +311,38 @@ def live_run(
         )
         print(f"  Oturum {session_id}, katılımcı {participant_code}, tohum {seed}")
 
-        presenter = AVPresenter(
-            win,
-            params,
-            speaker=speaker,
-            calibration=_calibration(config),
-            sample_rate=config.audio.sample_rate,
-            alignment_tolerance_ms=config.stimulus_prep.burst.alignment_tolerance_ms,
-            fixation=make_fixation(win),
-        )
-        outcomes = runners[module](
-            config=config,
-            db=db,
-            session_id=session_id,
-            presenter=presenter,
-            win=win,
-            kb=make_keyboard(),
-            planned=planned,
-        )
+        if module in STREAM_MODULES:
+            outcomes = run_oddball(
+                config=config,
+                db=db,
+                session_id=session_id,
+                planned=planned,
+                win=win,
+                kb=make_keyboard(),
+                params=params,
+                speaker=speaker,
+                calibration=_calibration(config),
+                fixation=make_fixation(win),
+            )
+        else:
+            presenter = AVPresenter(
+                win,
+                params,
+                speaker=speaker,
+                calibration=_calibration(config),
+                sample_rate=config.audio.sample_rate,
+                alignment_tolerance_ms=config.stimulus_prep.burst.alignment_tolerance_ms,
+                fixation=make_fixation(win),
+            )
+            outcomes = runners[module](
+                config=config,
+                db=db,
+                session_id=session_id,
+                presenter=presenter,
+                win=win,
+                kb=make_keyboard(),
+                planned=planned,
+            )
     except AbortSession:
         status = SESSION_ABORTED
         exit_code = 2
@@ -322,6 +376,9 @@ def live_run(
                     _flat_rows(db_path, session_id), config.modules.tbw, seed=seed
                 )
             )
+        if module == "oddball":
+            print()
+            print(oddball_module.summarise_measures(_flat_rows(db_path, session_id)))
     return exit_code
 
 

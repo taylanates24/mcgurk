@@ -70,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Ses (gürültülü) : {len(result.noisy_tokens)}")
     print(f"Dikotik         : {len(result.dichotic)}")
     print(f"GIN segmenti    : {len(result.gin_segments)}")
+    if result.tones:
+        frequencies = ", ".join(f"{entry.frequency_hz:g}" for entry in result.tones)
+        print(f"Oddball tonu    : {len(result.tones)} ({frequencies} Hz)")
     if result.noise is not None:
         print(
             f"SSN             : 1 (en büyük LTAS sapması "
