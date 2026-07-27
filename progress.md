@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-27
-Aktif adım: 6 (Adım 5 tamamlandı)
+Aktif adım: 7 (Adım 6 tamamlandı)
 
 ## Durum tablosu
 
@@ -13,7 +13,7 @@ Aktif adım: 6 (Adım 5 tamamlandı)
 | 3 | A/V senkron çekirdeği | TAMAMLANDI | 2026-07-26 | `bc215d8` |
 | 4 | Modül 1: McGurk | TAMAMLANDI | 2026-07-27 | `709958e` |
 | 5 | Modül 2: AVSR | TAMAMLANDI | 2026-07-27 | `79fec8b` |
-| 6 | Modül 3: TBW | BEKLİYOR | | |
+| 6 | Modül 3: TBW | TAMAMLANDI | 2026-07-27 | `3974aee` |
 | 7 | Modül 4: Oddball | BEKLİYOR | | |
 | 7b | Modül 5: Dikotik dinleme | BEKLİYOR | | |
 | 7c | Modül 6: GIN | BEKLİYOR | | |
@@ -1073,13 +1073,169 @@ Branches); bu, master'ın "sürüm" anlamını korur.
     U+2212 bulgusu).
 
 ### Adım 6 — Modül 3: TBW
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
-- **Commit:** —
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-27. Otomatik testler yeşil (556 → **614 test**;
+  CI'da koşan 542, donanımda 57, ffmpeg gerektirdiği için atlanan 15; ruff +
+  mypy temiz). `TEST_ADIM_6.md` Test 1 kullanıcı tarafından yürütüldü ve geçti.
+- **Commit:**
+  - `3974aee` — mcgurk/modules/tbw.py, block.py'ye TBW politikası,
+    TBWConfig'in ResponseUIConfig'e taşınması, şema sürümü 3 (§A.10
+    tetikleyicisi tbw'yi de reddediyor), paket sınırı testinin izolasyonu
+
 - **Ne yapıldı:**
+  - **`mcgurk/modules/tbw.py`** — sabit uyaranlar yöntemi (`soa_values_ms ×
+    reps_per_soa × ears`), tohumlu sıralama, manifest'ten tek uyaran çözümü,
+    yargı eşlemesi (`SAME`/`DIFFERENT`), **binom maksimum olabilirlikle Gauss
+    psikometrik uydurma**, bootstrap güven aralıkları ve operatör raporu.
+    **PsychoPy yok** (paket sınırı testine eklendi). Mevcut config ile
+    **130 deneme**: 13 SOA × 10 tekrar × 1 kulak.
+  - **`block.py`'ye `tbw_policy` + `run_tbw`** — döngü yine kopyalanmadı; TBW
+    iki seçenekli bir ızgara ve kategorili/skorsuz bir değerlendirme olarak
+    `TrialPolicy` üzerinden geldi. McGurk ve AVSR'nin donanım testleri
+    değişmeden geçiyor.
+  - **`TBWConfig` artık `ResponseUIConfig`'ten türüyor** (Adım 5'in notu):
+    `response_set`, `response_keys`, `fixation_duration_ms`,
+    `post_response_ms`, `prompts`, `randomization` ortak tabandan geliyor.
+    TBW'ye özgü doğrulamalar: tam iki seçenek, `response_labels` değerleri
+    `response_set` ile birebir aynı, `free_text_response` null, `ears`
+    tekrarsız, `bootstrap_samples` ya 0 ya en az 200.
+  - **`prompts.other` artık koşullu zorunlu**: `free_text_response` doluysa
+    gerekli, değilse yazılamaz durumda değil ama TBW'de hiç yazılmıyor. Hiç
+    açılmayacak bir ekranın metnini config'e koymak, katılımcının okumayacağı
+    bir protokol satırı yazmaktır.
+  - **`db/design.py` → `TBWExtra`**: `tbw` artık `NoExtra` değil, `speaker_id`
+    (zorunlu) taşıyor — McGurk ve AVSR ile aynı gerekçe (§F.4). `v_trials_flat`
+    `speaker_id`'yi zaten sütun olarak açıyor.
+  - **§A.10 tetikleyicisi `tbw`'yi de reddediyor → şema sürümü 2 → 3.**
+    Mevcut geliştirme veritabanı `backups/mcgurk_pre_adim6_schema2_*.sqlite`
+    olarak `VACUUM INTO` ile yedeklendi (14 oturum, 43 deneme — hepsi DEV01
+    geliştirme koşusu), sonra `data/mcgurk.sqlite` silindi; ilk koşuda yeni
+    şemayla oluşuyor.
+  - **`tools/run_module.py --module tbw`**: kuru koşuda SOA aralığı, gereken
+    sunum payı ve pencere tanımı; canlı koşunun sonunda psikometrik fonksiyon
+    ve uydurma raporu.
+  - **`base.row_value`** ortaklaştırıldı (AVSR'nin `_field`'ı oradan geliyor):
+    üçüncü modül de `v_trials_flat` satırı okuyor, "bir sütun nasıl okunur"un
+    üç kopyası üç farklı KeyError davranışı demekti.
+  - **Test: 58 yeni test (556 → 614; CI'da koşan 542 + 15 atlanan, donanımda
+    57).** CI'da koşanlar: 25 tasarım/yargı/config testi + 25 uydurma testi (bilinen
+    parametreden geri kestirim, tanım farkı, bootstrap kapsama ve
+    yeniden üretilebilirlik, dört hata yolu, zaman aşımının eğriye girmemesi)
+    + veritabanı tetikleyicisi. Donanımda koşanlar (`psychopy`, 3): −300/0/+300
+    ms gerçek pencerede sunuluyor, negatif SOA'da ses videodan **önce**
+    başlıyor, `actual_soa_ms` nominale kare süresi içinde oturuyor, `category`
+    yazılıyor ve `is_correct` NULL kalıyor, zaman aşımı eğriye nokta koymuyor.
+
+- **Tam uzunlukta dayanıklılık koşusu (2026-07-27):** 130 deneme, tam ekran,
+  74.77 Hz, yanıtlar **bilinen bir gözlemciden** simüle edildi (PSS +40 ms,
+  sigma 90 ms, tepe 0.95) — böylece koşu yalnızca dayanıklılığı değil,
+  tasarım → sunum → veritabanı → uydurma zincirinin tamamını sınadı. Betik ve
+  veritabanı scratchpad'de tutuldu.
+
+  | Ölçüm | Sonuç |
+  |---|---|
+  | Süre | **11.13 dk** (5.14 s/deneme) — config'in tahmini 10.8 dk |
+  | Bloklar | 60 / 60 / 10, üçü de `completed`, her biri ayrı commit |
+  | Düşen kare | **1 deneme** (en uzun aralık 20.23 ms; kare 13.37 ms, sınır 20.06 ms) |
+  | `TimeFailed` / `XRuns` | **0** |
+  | `actual_soa_ms − nominal_soa_ms` | ort **+0.389 ms**, SD 0.732, aralık [−1.24, +2.39] |
+  | Geri kestirim | PSS **+44.8** ms (gerçek +40.0), sigma **96.8** ms (gerçek 90.0) |
+  | Bootstrap | 2000 örnekten 1'i uydurulamadı; GA'lar [28.0, 62.8] ve [83.3, 109.9] — ikisi de gerçek değeri kapsıyor |
+
+  Süre tahmini tutuyor: 700 ms'lik bir yanıtla deneme 5.14 s sürüyor, gerçek RT
+  ile ~5.5–6 s, yani modül için **~12–13 dk** planlanabilir. Kestirim sapması
+  (PSS +4.8 ms, sigma +6.8 ms) 130 denemede beklenen örnekleme gürültüsü
+  mertebesinde; güven aralıkları gerçek değerleri kapsıyor.
+
 - **Alınan kararlar:**
+  - **Uydurma modülün içinde, `analysis/` içinde değil** — AVSR'nin ölçütleriyle
+    aynı yer ve aynı gerekçe: Adım 9 sarmalayacak, taşımayacak. scipy CI'da
+    kurulu olduğu için PSS/sigma kestirimi **CI'da** test ediliyor.
+  - **Binom maksimum olabilirlik**, oranlar üzerinde en küçük kareler değil.
+    Zaman aşımları düşünce noktalar farklı deneme sayısı taşıyor ve kare hata,
+    10/10'luk bir oranı olduğundan daha bilgili sayıyor.
+  - **Zaman aşımı eksik gözlem** (AVSR'nin tam tersi, ve tam tersi gerekçeyle):
+    orada doğru cevap vardı, burada yok. Bir zaman aşımını "farklı" saymak
+    eğriyi daraltır, "aynı" saymak genişletir; hangisini seçerseniz seçin,
+    katılımcının vermediği bir yanıtı siz vermiş olursunuz.
+    `SOAPoint.n_missing` sayıyı yanında taşıyor.
+  - **`is_correct` NULL, `category` `SAME`/`DIFFERENT`** ve **tetikleyici bunu
+    veritabanı düzeyinde zorluyor** (şema 3). ±300 ms'te akışlar gerçekten
+    eşzamanlı değil — ama ölçülen şey **algılanıp algılanmadığı**; "farklı"yı
+    doğru saymak katılımcının pencere genişliğini hata oranına çevirirdi.
+    Bedeli mevcut geliştirme veritabanının yeniden oluşturulması oldu.
+  - **Test edilen ızgaradan geniş pencere rapor edilmiyor.** İlk yazdığım
+    kontrol sigmanın optimizasyon sınırına dayanmasına bakıyordu ve düz bir
+    eğride (her SOA'da p = 0.5) **sigma 2770 ms** dönüyordu: sınıra dayanmıyor,
+    ama 600 ms'lik bir ızgarada ölçülmüş de değil. Ölçüt sigma ≥ aralık/2
+    yapıldı — o noktada eğri en uçtaki SOA'da yalnızca %12 düşüyor, yani veri
+    daha geniş her genişlikle uyumlu ve optimizasyon yine de birini seçiyor.
+    "TBW 6500 ms" bir tabloda ölçüm gibi okunur.
+  - **Bootstrap tohumu oturum tohumundan türetiliyor** (§A.11): aynı veri her
+    zaman aynı güven aralığını verir, yoksa analiz iki koşuda aynı katılımcı
+    hakkında iki farklı şey söyler. Uydurulamayan örnekler sayılıyor; yarıdan
+    fazlası düşerse **hiç aralık verilmiyor**, çünkü uyanlardan hesaplanan
+    aralık tam da uyan şekle yanlıdır.
+  - **SOA planlama anında denetleniyor** (`check_soa_is_schedulable`): motorun
+    pay hesabı beklenen yenileme hızıyla önceden koşuluyor. −300 ms 75 Hz'de
+    320 ms pay istiyor (üst sınır 1 s). Sunulamayacak bir ızgarayı oturumun
+    ortasında öğrenmek geç.
+  - **`response_set` ekranı, `response_labels` anlamı veriyor** ve şema ikisinin
+    aynı iki metni adlandırdığını doğruluyor. Uyuşmazlık eğriyi ters çevirirdi
+    — ve ters eğri de uyar, yalnızca pencereyi tümleyeni olarak raporlar.
+  - **Serbest metin yok.** İki alternatifli bir yargının üçüncü yanıtı yoktur;
+    bir kaçış seçeneği psikometrik fonksiyondan deneme düşürürdü.
+
+- **Yol boyunca çıkan bir test altyapısı sorunu (Adım 4'ün notunun kökü):**
+  `test_package_boundaries.py` PsychoPy'siz import denemesini
+  `importlib.reload` ile yapıyordu. `reload` modülü **kendi namespace'inde**
+  yeniden çalıştırır, yani tanımladığı her sınıf yeni bir nesne olur; oturumun
+  geri kalanı eskisini tutmaya devam eder. Sonuç: alfabetik olarak bu dosyadan
+  **sonra** koşan her test dosyasında `pytest.raises(FitError)` o modülün kendi
+  `FitError`'ını yakalamıyor. Adım 4 bunu `DisplayConfig` atamasında görmüş ve
+  "yeniden yüklenmiş şemadan sonra sınıf kimliğine güvenilmez" diye not
+  düşmüştü; Adım 6'da aynı tuzak yedi testi düşürdü. Kalıcı çözüm: modüller
+  `sys.modules`'tan çıkarılıp **taze nesnelere** import ediliyor, test bitince
+  taze kopyalar atılıp orijinaller (paket niteliği dahil) geri konuyor. Artık
+  hiçbir sınıf kimliği değişmiyor.
+
 - **Bilinen sınırlar:**
+  - **PSS mutlak olarak henüz anlamlı değil.** `timing.system_av_offset_ms`
+    `null` (fotodiyot ölçümü tüm kod bittikten sonra), yani kestirilen PSS
+    makinenin A/V gecikmesini içeriyor. Grup **karşılaştırması** bundan
+    etkilenmez (herkese aynı sabit eklenir), ama "PSS +45 ms" tek başına
+    rapor edilemez. Ölçüm yapıldığında yeniden hesap gerekmiyor:
+    `actual_soa_ms` D'yi zaten içeriyor (Adım 3 kararı).
+  - Dayanıklılık koşusunda **bir denemede kare düştü** (20.23 ms, sınır
+    20.06 ms). Adım 4–5'te sıfırdı; fark, TBW'nin negatif SOA'da 24 kare
+    boyunca sabitleme haçını çizerek beklemesi olabilir. Tek deneme ve sınırın
+    0.2 ms üstünde; QC raporu (Adım 9) bu denemeyi işaretleyecek.
+  - Kulak **çaprazlanmıyor** (`ears: [both]`). Config her üç değeri de
+    destekliyor; SSD'de TBW'nin kulağa göre değişip değişmediği bir tasarım
+    kararı (§F.1) ve açık.
+  - Uydurma **tek Gauss**. Literatürde iki ayrı sigmoid (sol/sağ kenar ayrı)
+    uyduran çalışmalar da var ve asimetrik bir pencere onlarla tam
+    karşılaştırılamaz. `steps.md` §C Adım 6 Gauss diyor; asimetri gerekirse
+    `tbw_definition` gibi bir config alanı ve ikinci bir uydurma fonksiyonu
+    yeterli, veri yapısı değişmiyor.
+  - Modül tek başına koşuyor; yönerge, alıştırma, mola ve katılımcı girişi
+    Adım 8'de.
+
 - **Sonraki adıma not:**
+  - **Adım 7 (oddball) ve 7c (GIN) `block.py`'yi paylaşamaz**: uyaran içinde
+    0..n yanıt topluyorlar. `run_blocks`'un blok/commit yapısı yine örnek.
+    **Adım 7b (dikotik) paylaşabilir** — tek zorunlu seçim, dört seçenek,
+    doğru cevap yok (tetikleyici zaten reddediyor); `TrialPolicy` yazmak
+    yetiyor. Dikotik config'ine `ResponseUIConfig` alanları eklenmeli
+    (bugün yalnızca `response_set` ve `response_timeout_s` var).
+  - Adım 9 `v_trials_flat`'tan okurken TBW için `nominal_soa_ms`,
+    `actual_soa_ms` ve `category` sütunlarını bulacak;
+    `tbw.psychometric_points()` + `tbw.fit_from_rows()` doğrudan çağrılabilir,
+    taşımaya gerek yok. **Gerçekleşen SOA analizde kullanılabilir:** nominal
+    yerine `actual_soa_ms` ile uydurmak isteniyorsa noktaları oradan gruplamak
+    yeterli (sapma ölçüldü: SD 0.73 ms, yani pratikte fark etmeyecek).
+  - Fotodiyot ölçümü yapıldığında (`docs/01`) TBW'nin PSS'i mutlak anlam
+    kazanır; kod değişmiyor, yalnızca `timing.system_av_offset_ms` doluyor.
 
 ### Adım 7 — Modül 4: Oddball
 - **Durum:** BEKLİYOR
@@ -1243,6 +1399,12 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   hiç girmiyor). Config'in isim kullanması bu yüzden. Listelemek için:
   `python tools/timing_selftest.py --devices`. Gerçek kulaklık kararı verilince
   (§F.3) config'teki değer değiştirilmeli.
+- **Veritabanı şema sürümü 3'e çıktı (Adım 6).** Eski `data/mcgurk.sqlite`
+  (14 geliştirme oturumu, 43 deneme, hepsi DEV01) `VACUUM INTO` ile
+  `backups/mcgurk_pre_adim6_schema2_20260727T222615.sqlite` olarak yedeklendi
+  ve silindi; ilk koşuda yeni şemayla oluşuyor. Başka bir makinede sürüm 2
+  dosyası varsa aynı şey gerekir — kod açık hata veriyor
+  (`SchemaVersionError`), sessizce açmıyor.
 - **Fotodiyot ölçümü (`01_av_gecikme_olcumu.md`) hâlâ bekliyor** — tasarım
   gereği tüm kod bittikten sonra. O ana kadar `timing.system_av_offset_ms`
   `null` ve motor 0 kabul edip uyarı basıyor.
