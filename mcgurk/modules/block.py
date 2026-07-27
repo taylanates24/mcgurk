@@ -46,6 +46,7 @@ from ..engine import AbortSession
 from ..engine.av_presenter import AVPresenter, TimingRecord, check_abort
 from . import avsr as avsr_module
 from . import mcgurk as mcgurk_module
+from . import tbw as tbw_module
 from .base import PlannedTrial, chunk
 from .response import Choice, ResponseGrid, collect_choice, collect_free_text, show_message
 
@@ -81,7 +82,9 @@ class TrialPolicy:
     timeout_message: str
     #: The response-set entry that opens a free-text field, or None.
     free_text_label: str | None
-    free_text_prompt: str
+    #: What the free-text screen asks.  None wherever ``free_text_label`` is
+    #: None: a prompt for a screen that never opens is text nobody reads.
+    free_text_prompt: str | None
     #: The grid to show for a given trial.  A callable rather than a single
     #: grid because AVSR asks a different question in V-only, where there is
     #: nothing to have heard.
@@ -187,6 +190,45 @@ def avsr_policy(config: ExperimentConfig, win: Any) -> TrialPolicy:
         free_text_label=module.free_text_response,
         free_text_prompt=module.prompts.other,
         grid_for=grid_for,
+        evaluate=evaluate,
+    )
+
+
+def tbw_policy(config: ExperimentConfig, win: Any) -> TrialPolicy:
+    """Modül 3 — a two-alternative simultaneity judgement.
+
+    The same screen as the other modules with two options instead of nine, and
+    the same absence of a correct answer as McGurk: what is recorded is which
+    judgement was given (``category``), never whether it was right (§A.10 — and
+    the database refuses ``is_correct`` on ``tbw`` trials).
+    """
+    module = config.modules.tbw
+    grid = ResponseGrid(
+        win,
+        labels=list(module.response_set),
+        keys=list(module.response_keys),
+        question=module.prompts.question,
+        # Two long Turkish labels side by side: they need the room that nine
+        # syllables did not.
+        columns=2,
+        spacing_px=(520.0, 130.0),
+    )
+
+    def evaluate(label: str | None, _trial: Trial) -> Evaluation:
+        judgement = tbw_module.judge(label, module)
+        return Evaluation(
+            tally=judgement or TIMEOUT_TALLY, category=judgement, is_correct=None
+        )
+
+    return TrialPolicy(
+        module=tbw_module.MODULE_NAME,
+        fixation_s=module.fixation_duration_ms / 1000.0,
+        post_response_s=module.post_response_ms / 1000.0,
+        timeout_s=module.response_timeout_s,
+        timeout_message=module.prompts.timeout,
+        free_text_label=module.free_text_response,
+        free_text_prompt=module.prompts.other,
+        grid_for=lambda _trial: grid,
         evaluate=evaluate,
     )
 
@@ -325,6 +367,29 @@ def run_avsr(
     )
 
 
+def run_tbw(
+    *,
+    config: ExperimentConfig,
+    db: Database,
+    session_id: int,
+    presenter: AVPresenter,
+    win: Any,
+    kb: Any,
+    planned: list[PlannedTrial],
+) -> list[BlockOutcome]:
+    """Modül 3 — see :func:`run_blocks`."""
+    return run_blocks(
+        config=config,
+        db=db,
+        session_id=session_id,
+        presenter=presenter,
+        win=win,
+        kb=kb,
+        planned=planned,
+        policy=tbw_policy(config, win),
+    )
+
+
 def outcome_label(outcome: BlockOutcome) -> str:
     return f"{outcome.module} #{outcome.block_index}"
 
@@ -369,6 +434,9 @@ def _run_one_trial(
             and policy.free_text_label is not None
             and choice.label.casefold() == policy.free_text_label.casefold()
         ):
+            # The config refuses a free-text option without its prompt, so this
+            # is a guarantee rather than a fallback.
+            assert policy.free_text_prompt is not None
             free_text = collect_free_text(
                 win,
                 kb,

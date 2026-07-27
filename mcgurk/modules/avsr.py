@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import random
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -47,6 +47,7 @@ from .base import (
     balanced_cycle,
     derive_seed,
     order_cells,
+    row_value,
 )
 
 logger = logging.getLogger(__name__)
@@ -376,12 +377,8 @@ class Accuracy:
         return f"%{100 * self.accuracy:.1f} ({self.n_correct}/{self.n_trials})"
 
 
-def _field(row: Mapping[str, Any] | Any, key: str) -> Any:
-    """Read *key* from a mapping or a ``sqlite3.Row``; None when absent."""
-    try:
-        return row[key]
-    except (KeyError, IndexError):
-        return None
+#: Shared with the other modules' measures (``base.row_value``).
+_field = row_value
 
 
 def _avsr_rows(rows: Iterable[Any]) -> list[Any]:

@@ -277,6 +277,44 @@ def test_dichotic_trial_cannot_be_scored(db: Database) -> None:
         db.add_response(Response(trial_id=trial_id, raw_response="BA", is_correct=True))
 
 
+def test_simultaneity_judgement_cannot_be_scored(db: Database) -> None:
+    """A TBW trial has no correct answer either (Adım 6, schema version 3).
+
+    At +300 ms the streams really are asynchronous, but the measurement is
+    whether they were *perceived* as one event; scoring "different" as correct
+    would turn the width of the participant's binding window into an error rate.
+    """
+    participant_id = _participant(db)
+    session_id = _session(db, participant_id)
+    block_id = _block(db, session_id, "tbw")
+    trial_id = db.add_trial(
+        Trial(
+            block_id=block_id,
+            trial_index=0,
+            module="tbw",
+            visual_token="ba",
+            audio_token="ba",
+            ear="both",
+            nominal_soa_ms=300.0,
+            presentation_mode="AV",
+            design_extra={"speaker_id": 1},
+        )
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="A.10"):
+        db.add_response(
+            Response(trial_id=trial_id, raw_response="Farklı zamanda", is_correct=True)
+        )
+    # The judgement itself is recorded, as a category.
+    assert (
+        db.add_response(
+            Response(
+                trial_id=trial_id, raw_response="Farklı zamanda", category="DIFFERENT"
+            )
+        )
+        > 0
+    )
+
+
 def test_congruent_module_may_be_scored(db: Database) -> None:
     participant_id = _participant(db)
     session_id = _session(db, participant_id)

@@ -33,7 +33,9 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+#: 1 -> 2: v_trials_flat exposes speaker_id and noise_instance (Adım 4).
+#: 2 -> 3: the §A.10 trigger also refuses is_correct on ``tbw`` trials (Adım 6).
+SCHEMA_VERSION = 3
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 

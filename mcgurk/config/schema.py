@@ -174,7 +174,11 @@ class PromptTexts(StrictModel):
     """
 
     question: str = Field(min_length=1)
-    other: str = Field(min_length=1)
+    #: Prompt of the free-text field.  Optional because a module without a
+    #: free-text option (TBW's two-alternative judgement) would otherwise have
+    #: to carry a string the participant can never see; ``ResponseUIConfig``
+    #: requires it exactly when ``free_text_response`` is set.
+    other: str | None = Field(default=None, min_length=1)
     timeout: str = Field(min_length=1)
 
 
@@ -233,6 +237,11 @@ class ResponseUIConfig(ModuleBase):
                 f"{where}.free_text_response '{self.free_text_response}' "
                 "response_set içinde yok — seçilemeyen bir seçenek serbest metin "
                 "alanını hiç açmaz"
+            )
+        if self.free_text_response is not None and self.prompts.other is None:
+            raise ValueError(
+                f"{where}.free_text_response tanımlı ama prompts.other yok — "
+                "serbest metin alanı katılımcıya sorusuz açılırdı"
             )
         return self
 
@@ -433,7 +442,21 @@ class TBWStimulus(StrictModel):
     audio: str = Field(min_length=1)
 
 
-class TBWConfig(ModuleBase):
+class TBWConfig(ResponseUIConfig):
+    """Modül 3 — the temporal binding window, by the method of constant stimuli.
+
+    The response screen is the shared one (Adım 4–5), with two options instead
+    of nine, so everything about showing it and timing it is inherited.  What
+    this module adds is meaning: ``response_set`` says what is on the screen and
+    in which order, ``response_labels`` says which of those two options is the
+    *simultaneous* judgement.  The two are checked against each other at load,
+    because a mismatch would silently invert the psychometric function — and an
+    inverted curve still fits, it just reports the participant's window as its
+    complement.
+    """
+
+    config_path: ClassVar[str] = "modules.tbw"
+
     speaker_id: int = Field(ge=1)
     stimulus: TBWStimulus
     soa_values_ms: list[float] = Field(min_length=3)
@@ -442,8 +465,11 @@ class TBWConfig(ModuleBase):
     #: Written into the QC report — the literature uses both definitions and a
     #: TBW figure is meaningless without saying which one produced it.
     tbw_definition: Literal["fwhm", "sigma1"]
+    #: ``same`` / ``different`` -> the ``response_set`` entry that means it.
     response_labels: dict[str, str]
-    response_timeout_s: float = Field(gt=0)
+    #: Resamples behind the confidence intervals; 0 reports the fit without any.
+    bootstrap_samples: int = Field(default=2000, ge=0)
+    bootstrap_ci: float = Field(default=0.95, gt=0.0, lt=1.0)
 
     def total_trials(self) -> int:
         return len(self.soa_values_ms) * self.reps_per_soa * len(self.ears)
@@ -457,11 +483,47 @@ class TBWConfig(ModuleBase):
                 "modules.tbw.soa_values_ms artan sırada olmalı — psikometrik "
                 "eğri uydurma sıralı ızgara varsayıyor"
             )
+        if len(set(self.ears)) != len(self.ears):
+            raise ValueError("modules.tbw.ears tekrarlı değer içeriyor")
         expected = {"same", "different"}
         if set(self.response_labels) != expected:
             raise ValueError(
                 "modules.tbw.response_labels anahtarları tam olarak "
                 f"{sorted(expected)} olmalı, bulunan: {sorted(self.response_labels)}"
+            )
+
+        # Two alternatives, and the two names have to be the same two strings:
+        # the grid is built from response_set and the judgement is read off
+        # response_labels, so anything else leaves an option that cannot be
+        # interpreted or a judgement that cannot be given.
+        if len(self.response_set) != 2:
+            raise ValueError(
+                "modules.tbw.response_set tam olarak iki seçenek içermeli "
+                f"(eşzamanlılık yargısı iki alternatiflidir), bulunan: "
+                f"{len(self.response_set)}"
+            )
+        shown = {r.casefold() for r in self.response_set}
+        named = {label.casefold() for label in self.response_labels.values()}
+        if shown != named:
+            raise ValueError(
+                "modules.tbw.response_labels değerleri response_set ile "
+                f"eşleşmiyor: ekranda {sorted(self.response_set)}, "
+                f"anlamlandırılan {sorted(self.response_labels.values())}"
+            )
+        if self.free_text_response is not None:
+            raise ValueError(
+                "modules.tbw.free_text_response null olmalı — serbest metin "
+                "seçeneği psikometrik eğriden deneme düşürür ve iki alternatifli "
+                "yargının üçüncü bir yanıtı yoktur"
+            )
+
+        # A percentile interval is read off the tails of the resample
+        # distribution; with 100 resamples the 2.5th percentile is decided by
+        # two of them, and the interval says more about the draw than the data.
+        if 0 < self.bootstrap_samples < 200:
+            raise ValueError(
+                "modules.tbw.bootstrap_samples ya 0 (güven aralığı yok) ya da "
+                f"en az 200 olmalı, verilen: {self.bootstrap_samples}"
             )
         return self
 

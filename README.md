@@ -449,7 +449,8 @@ Kademe 3 bu araçta gerçeklenmez; `docs/01_av_gecikme_olcumu.md` scriptleriyle,
 ### Bir modülü tek başına koşmak (Adım 4→)
 
 Oturum akışı Adım 8'de geliyor; o zamana kadar bir modül `tools/run_module.py`
-ile koşuluyor. Koşulabilen modüller: `mcgurk` (Adım 4) ve `avsr` (Adım 5).
+ile koşuluyor. Koşulabilen modüller: `mcgurk` (Adım 4), `avsr` (Adım 5) ve
+`tbw` (Adım 6).
 Önce tasarımı donanım açmadan denetleyin — deneme sayısını config'in hesabıyla
 karşılaştırır, hücre tablosunu basar ve her uyaran dosyasının yerinde olduğunu
 doğrular:
@@ -466,7 +467,11 @@ python tools/run_module.py --module avsr --limit 12 --seed 3
 ```
 
 AVSR koşusunun sonunda modülün kendi ölçütleri de basılır: mod başına
-doğruluk, görsel fayda indeksi (AV − A) ve lipreading (V).
+doğruluk, görsel fayda indeksi (AV - A) ve lipreading (V). TBW koşusunun
+sonunda psikometrik fonksiyon (SOA başına "aynı" oranı), uydurulan PSS, sigma
+ve pencere genişliği ile bootstrap güven aralıkları basılır. Kısa bir `--limit`
+koşusunda uydurma **yapılamaz** ve bunu açıkça söyler: SOA başına birkaç yanıt
+eğriyi kestirmeye yetmez.
 
 Bu bir **geliştirme aracıdır**: yönerge, alıştırma bloğu, mola ve katılımcı
 girişi yok, veritabanına `DEV01` kodlu bir geliştirme katılımcısı yazıyor.
@@ -537,9 +542,9 @@ gürültüsü biriktirmesini engeller. Manifest her dosyanın kaynak codec'ini v
 - Kesilen oturuma kaldığı yerden devam etme yok.
 
 **Yeni pakette henüz gelmeyenler:**
-- `mcgurk/modules/` McGurk (Adım 4) ve AVSR'yi (Adım 5) içeriyor; TBW, oddball,
-  dikotik ve GIN sırasıyla Adım 6–7c'de. `ui/` ve `analysis/` hâlâ boş
-  (Adım 8 ve 9).
+- `mcgurk/modules/` McGurk (Adım 4), AVSR (Adım 5) ve TBW'yi (Adım 6)
+  içeriyor; oddball, dikotik ve GIN sırasıyla Adım 7–7c'de. `ui/` ve
+  `analysis/` hâlâ boş (Adım 8 ve 9).
 - Oddball tonları henüz üretilmiyor: `steps.md` onları Adım 7'ye koyuyor. Orada
   da çevrimdışı üretilecek (§A.12).
 - Yeni config ve veritabanı henüz hiçbir deneyi çalıştırmıyor; `main.py` Adım

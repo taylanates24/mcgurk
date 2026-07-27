@@ -152,18 +152,22 @@ CREATE INDEX IF NOT EXISTS idx_trials_block         ON trials(block_id);
 CREATE INDEX IF NOT EXISTS idx_trials_module        ON trials(module);
 CREATE INDEX IF NOT EXISTS idx_responses_trial      ON responses(trial_id);
 
--- §A.10: an incongruent trial has no correct answer.  Scoring a McGurk or
--- dichotic response against the audio token is a category error, so the
--- database refuses it outright rather than trusting every future caller.
+-- §A.10: some trials have no correct answer.  Scoring a McGurk or dichotic
+-- response against the audio token is a category error, and so is scoring a
+-- simultaneity judgement: at +300 ms the streams really are asynchronous, but
+-- what is measured is whether the participant *perceived* them as one event,
+-- and calling "different" the right answer would turn the width of their
+-- binding window into an error rate.  The database refuses all three outright
+-- rather than trusting every future caller.
 CREATE TRIGGER IF NOT EXISTS trg_responses_no_correctness_on_insert
 BEFORE INSERT ON responses
 FOR EACH ROW
 WHEN NEW.is_correct IS NOT NULL
  AND (SELECT module FROM trials WHERE trial_id = NEW.trial_id)
-     IN ('mcgurk', 'dichotic')
+     IN ('mcgurk', 'dichotic', 'tbw')
 BEGIN
     SELECT RAISE(ABORT,
-        'is_correct must be NULL for mcgurk/dichotic trials (steps.md §A.10)');
+        'is_correct must be NULL for mcgurk/dichotic/tbw trials (steps.md §A.10)');
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_responses_no_correctness_on_update
@@ -171,10 +175,10 @@ BEFORE UPDATE OF is_correct ON responses
 FOR EACH ROW
 WHEN NEW.is_correct IS NOT NULL
  AND (SELECT module FROM trials WHERE trial_id = NEW.trial_id)
-     IN ('mcgurk', 'dichotic')
+     IN ('mcgurk', 'dichotic', 'tbw')
 BEGIN
     SELECT RAISE(ABORT,
-        'is_correct must be NULL for mcgurk/dichotic trials (steps.md §A.10)');
+        'is_correct must be NULL for mcgurk/dichotic/tbw trials (steps.md §A.10)');
 END;
 
 -- Flat table for analysis.  LEFT JOIN on responses so a timed-out trial (no

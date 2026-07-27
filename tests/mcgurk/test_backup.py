@@ -168,7 +168,15 @@ def test_stale_backup_is_reported(populated_db: Database, tmp_path: Path) -> Non
     block_id = populated_db.add_block(
         Block(session_id=session_id, module="tbw", block_index=1, n_trials_planned=1)
     )
-    populated_db.add_trial(Trial(block_id=block_id, trial_index=0, module="tbw"))
+    populated_db.add_trial(
+        Trial(
+            block_id=block_id,
+            trial_index=0,
+            module="tbw",
+            nominal_soa_ms=0.0,
+            design_extra={"speaker_id": 1},
+        )
+    )
     populated_db.finish_block(block_id, SESSION_COMPLETED)
 
     ok, report = verify(target, populated_db.path)

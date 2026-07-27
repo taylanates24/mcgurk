@@ -165,6 +165,7 @@ def test_timing_is_written_after_presentation(
             visual_token="ba",
             audio_token="ba",
             nominal_soa_ms=-100.0,
+            design_extra={"speaker_id": 1},
         )
     )
     db.set_trial_timing(
@@ -234,12 +235,34 @@ def test_design_extra_round_trip() -> None:
 
 
 def test_module_without_extras_takes_none(db: Database, session: tuple[int, int]) -> None:
+    """``practice`` fits entirely in the shared columns — TBW no longer does,
+    since Adım 6 records which speaker the SOA was presented on."""
+    _, session_id = session
+    block_id = db.add_block(
+        Block(
+            session_id=session_id, module="practice", block_index=0, n_trials_planned=1
+        )
+    )
+    trial_id = db.add_trial(Trial(block_id=block_id, trial_index=0, module="practice"))
+    assert trial_id > 0
+
+
+def test_tbw_trial_must_say_which_speaker(
+    db: Database, session: tuple[int, int]
+) -> None:
     _, session_id = session
     block_id = db.add_block(
         Block(session_id=session_id, module="tbw", block_index=0, n_trials_planned=1)
     )
-    trial_id = db.add_trial(Trial(block_id=block_id, trial_index=0, module="tbw"))
-    assert trial_id > 0
+    with pytest.raises(DesignExtraError, match="speaker_id"):
+        db.add_trial(
+            Trial(
+                block_id=block_id,
+                trial_index=0,
+                module="tbw",
+                nominal_soa_ms=0.0,
+            )
+        )
 
 
 def test_mcgurk_trial_must_say_which_speaker(

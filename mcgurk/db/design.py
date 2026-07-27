@@ -66,6 +66,15 @@ class AVSRExtra(_SpeakerExtra):
     item: str = Field(min_length=1)
 
 
+class TBWExtra(_SpeakerExtra):
+    """Which speaker the SOA was presented on.
+
+    ``noise_instance`` is always None here — TBW is presented in quiet — but it
+    comes with the base rather than being forbidden: the field means "which
+    noise waveform", and "none" is the honest answer for a quiet trial.
+    """
+
+
 class OddballExtra(_Extra):
     tone_type: Literal["standard", "target"]
     tone_hz: float = Field(gt=0)
@@ -106,7 +115,7 @@ _BY_MODULE: dict[str, type[_Extra]] = {
     "practice": NoExtra,
     "mcgurk": McGurkExtra,
     "avsr": AVSRExtra,
-    "tbw": NoExtra,
+    "tbw": TBWExtra,
     "oddball": OddballExtra,
     "dichotic": DichoticExtra,
     "gin": GINExtra,

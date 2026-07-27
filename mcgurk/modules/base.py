@@ -16,7 +16,7 @@ import hashlib
 import random
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from ..db.models import Trial
 from ..engine.av_presenter import TrialSpec
@@ -143,6 +143,20 @@ def balanced_cycle(n_options: int, n_draws: int, rng: random.Random) -> list[int
         rng.shuffle(cycle)
         order.extend(cycle)
     return order[:n_draws]
+
+
+def row_value(row: Any, key: str) -> Any:
+    """Read *key* from a mapping or a ``sqlite3.Row``; None when absent.
+
+    The measure functions of every module read ``v_trials_flat`` rows, which are
+    ``sqlite3.Row`` objects in a run and plain dicts in a test.  One helper
+    rather than one per module: two copies of "how do I read a column" is two
+    places for a KeyError to be swallowed differently.
+    """
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return None
 
 
 @dataclass(frozen=True)

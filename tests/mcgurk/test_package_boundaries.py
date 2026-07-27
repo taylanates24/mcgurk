@@ -35,6 +35,7 @@ ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY = (
     "mcgurk.modules.base",
     "mcgurk.modules.mcgurk",
     "mcgurk.modules.avsr",
+    "mcgurk.modules.tbw",
 )
 
 
@@ -90,10 +91,41 @@ def test_engine_defers_its_psychopy_imports(module_name: str) -> None:
     assert "psychtoolbox" not in top_level_roots
 
 
+#: Everything that has to import on a machine with no PsychoPy.
+PURE_LAYERS = (
+    "mcgurk.config.schema",
+    "mcgurk.config.loader",
+    "mcgurk.config.calibration",
+    "mcgurk.db.database",
+    "mcgurk.db.backup",
+    "mcgurk.db.design",
+    "mcgurk.logging_setup",
+    "mcgurk.provenance",
+    "mcgurk.stimuli.dsp",
+    "mcgurk.stimuli.ffmpeg",
+    "mcgurk.stimuli.manifest",
+    "mcgurk.stimuli.prepare",
+    "mcgurk.stimuli.verify",
+    "mcgurk.stimuli.wavfile",
+    *ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY,
+)
+
+
 def test_config_and_db_import_without_psychopy_installed(monkeypatch) -> None:
-    """Import the layers with PsychoPy made unavailable."""
+    """Import the layers with PsychoPy made unavailable.
+
+    Imported into *fresh* module objects and thrown away afterwards, rather
+    than reloaded in place.  ``importlib.reload`` re-executes the module in its
+    existing namespace, so every class it defines becomes a new object while
+    the rest of the test session still holds the old one — after which
+    ``pytest.raises(FitError)`` stops catching that module's ``FitError`` and a
+    pydantic model stops accepting its own config class.  Both were seen (Adım
+    4, Adım 6) and both depended on collection order, which made them look like
+    unrelated flakiness in whichever test file sorted last.
+    """
     import builtins
     import importlib
+    import sys
 
     real_import = builtins.__import__
 
@@ -104,21 +136,21 @@ def test_config_and_db_import_without_psychopy_installed(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "__import__", blocking_import)
 
-    for module in (
-        "mcgurk.config.schema",
-        "mcgurk.config.loader",
-        "mcgurk.config.calibration",
-        "mcgurk.db.database",
-        "mcgurk.db.backup",
-        "mcgurk.db.design",
-        "mcgurk.logging_setup",
-        "mcgurk.provenance",
-        "mcgurk.stimuli.dsp",
-        "mcgurk.stimuli.ffmpeg",
-        "mcgurk.stimuli.manifest",
-        "mcgurk.stimuli.prepare",
-        "mcgurk.stimuli.verify",
-        "mcgurk.stimuli.wavfile",
-        *ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY,
-    ):
-        importlib.reload(importlib.import_module(module))
+    saved = {name: sys.modules[name] for name in PURE_LAYERS if name in sys.modules}
+    for name in PURE_LAYERS:
+        sys.modules.pop(name, None)
+    try:
+        for name in PURE_LAYERS:
+            importlib.import_module(name)
+    finally:
+        for name in PURE_LAYERS:
+            sys.modules.pop(name, None)
+        sys.modules.update(saved)
+        # The import machinery also binds each submodule onto its package, so
+        # ``from mcgurk.modules import tbw`` would otherwise keep handing out
+        # the throwaway copy.
+        for name, module in saved.items():
+            parent_name, _, child = name.rpartition(".")
+            parent = sys.modules.get(parent_name)
+            if parent is not None:
+                setattr(parent, child, module)

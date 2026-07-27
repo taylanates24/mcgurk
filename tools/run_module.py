@@ -51,6 +51,7 @@ from mcgurk.db.models import (  # noqa: E402
 from mcgurk.logging_setup import setup_logging  # noqa: E402
 from mcgurk.modules import avsr as avsr_module  # noqa: E402
 from mcgurk.modules import mcgurk as mcgurk_module  # noqa: E402
+from mcgurk.modules import tbw as tbw_module  # noqa: E402
 from mcgurk.modules.base import ModuleError, PlannedTrial  # noqa: E402
 from mcgurk.provenance import collect as collect_provenance  # noqa: E402
 from mcgurk.stimuli import manifest as manifest_module  # noqa: E402
@@ -61,6 +62,7 @@ from mcgurk.stimuli.manifest import ManifestError  # noqa: E402
 MODULES = {
     "mcgurk": mcgurk_module,
     "avsr": avsr_module,
+    "tbw": tbw_module,
 }
 
 #: Development participant.  An anonymous code and nothing else (§A.6); the age
@@ -110,6 +112,17 @@ def dry_run(config: ExperimentConfig, module: str, planned: list[PlannedTrial], 
         MODULES[module].cell_counts(planned).items()
     ):
         print(f"  {label:<20}{tokens:<22}{ear:<8}{noise:<10}{count:>4}")
+
+    if module == "tbw":
+        _rule("SOA sunumu")
+        tbw = config.modules.tbw
+        lead_s = tbw_module.check_soa_is_schedulable(config)
+        soa_range = f"{min(tbw.soa_values_ms):g} … {max(tbw.soa_values_ms):g} ms"
+        print(f"  SOA aralığı          : {soa_range} ({len(tbw.soa_values_ms)} nokta)")
+        print(f"  En geniş negatif SOA : {lead_s * 1000:.0f} ms pay gerektiriyor")
+        print(f"  (beklenen yenileme {config.display.expected_refresh_hz:g} Hz, "
+              f"D = {config.timing.system_av_offset_ms or 0:g} ms)")
+        print(f"  Pencere tanımı       : {tbw.tbw_definition}")
 
     _rule("İlk 12 deneme")
     print(f"  {'#':>3}  {'Etiket':<20}{'Kulak':<8}{'Gürültü':<10}{'Örnek':<7}Dosya")
@@ -206,10 +219,10 @@ def live_run(
         measure_refresh_hz,
         open_window,
     )
-    from mcgurk.modules.block import run_avsr, run_mcgurk, summarise
+    from mcgurk.modules.block import run_avsr, run_mcgurk, run_tbw, summarise
     from mcgurk.modules.response import make_keyboard
 
-    runners = {"mcgurk": run_mcgurk, "avsr": run_avsr}
+    runners = {"mcgurk": run_mcgurk, "avsr": run_avsr, "tbw": run_tbw}
 
     configure_psychopy(audio_device=config.audio.device)
     require_ptb_backend()
@@ -302,6 +315,13 @@ def live_run(
         if module == "avsr":
             print()
             print(avsr_module.summarise_measures(_flat_rows(db_path, session_id)))
+        if module == "tbw":
+            print()
+            print(
+                tbw_module.summarise_measures(
+                    _flat_rows(db_path, session_id), config.modules.tbw, seed=seed
+                )
+            )
     return exit_code
 
 
