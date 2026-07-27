@@ -14,7 +14,7 @@ Aktif adım: 7b (Adım 7 tamamlandı)
 | 4 | Modül 1: McGurk | TAMAMLANDI | 2026-07-27 | `709958e` |
 | 5 | Modül 2: AVSR | TAMAMLANDI | 2026-07-27 | `79fec8b` |
 | 6 | Modül 3: TBW | TAMAMLANDI | 2026-07-27 | `3974aee` |
-| 7 | Modül 4: Oddball | TESTTE | 2026-07-27 | |
+| 7 | Modül 4: Oddball | TESTTE | 2026-07-27 | `d6f5340` |
 | 7b | Modül 5: Dikotik dinleme | BEKLİYOR | | |
 | 7c | Modül 6: GIN | BEKLİYOR | | |
 | 8 | Oturum akışı ve arayüz | BEKLİYOR | | |
@@ -1243,7 +1243,9 @@ Branches); bu, master'ın "sürüm" anlamını korur.
 - **Tamamlanma:** 2026-07-27 (kod). Otomatik testler yeşil (614 → **688 test**;
   CI'da koşan 610, donanımda 61, ffmpeg gerektirdiği için atlanan 17; ruff +
   mypy temiz).
-- **Commit:** (bir sonraki adımda doldurulacak)
+- **Commit:**
+  - `d6f5340` — mcgurk/modules/oddball.py + stream.py, çevrimdışı ton üretimi,
+    config'e response_window_ms/lead_in_s/tones.level_dbfs, OddballExtra.isi_ms
 
 - **Ne yapıldı:**
   - **`mcgurk/modules/oddball.py`** — hedef yerleşimi, ISI çekimi, onset
