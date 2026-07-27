@@ -1,0 +1,14 @@
+# Türkçe fonetik dengeli kelime listesi — ŞABLON, İÇERİK BOŞ.
+#
+# Kayıt seansı henüz yapılmadı (progress.md → §F.2, çekim kılavuzu
+# docs/04_kod_disi_isler.md §2).  Bu dosyanın var olma nedeni biçimi
+# sabitlemek: kelimeler geldiğinde yalnızca aşağıdaki `items` listesi ve
+# config'teki `enabled` bayrağı değişir, kod değişmez.
+#
+# Devreye alma adımları: config/word_lists/README.md
+name: tr_pb_50
+language: tr
+description: >
+  Türkçe fonetik dengeli 50 kelime listesi. Kaynak ve derleyen bilgisi kayıt
+  yapıldığında buraya yazılacak.
+items: []

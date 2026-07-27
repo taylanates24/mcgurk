@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-27
-Aktif adım: 5 (Adım 4 tamamlandı)
+Aktif adım: 6 (Adım 5 tamamlandı)
 
 ## Durum tablosu
 
@@ -12,7 +12,7 @@ Aktif adım: 5 (Adım 4 tamamlandı)
 | 2 | Uyaran hazırlama | TAMAMLANDI | 2026-07-26 | `d6e7aaf` |
 | 3 | A/V senkron çekirdeği | TAMAMLANDI | 2026-07-26 | `bc215d8` |
 | 4 | Modül 1: McGurk | TAMAMLANDI | 2026-07-27 | `709958e` |
-| 5 | Modül 2: AVSR | BEKLİYOR | | |
+| 5 | Modül 2: AVSR | TAMAMLANDI | 2026-07-27 | |
 | 6 | Modül 3: TBW | BEKLİYOR | | |
 | 7 | Modül 4: Oddball | BEKLİYOR | | |
 | 7b | Modül 5: Dikotik dinleme | BEKLİYOR | | |
@@ -876,13 +876,199 @@ Branches); bu, master'ın "sürüm" anlamını korur.
     uyumsuz deneme; zaman aşımı `response_id IS NULL` ile sayılıyor.
 
 ### Adım 5 — Modül 2: AVSR
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-27. Otomatik testler yeşil (451 → **556 test**,
+  ruff + mypy temiz; CI alt kümesi 502). `TEST_ADIM_5.md` Test 1 kullanıcı
+  tarafından yürütüldü ve geçti: 12/12 deneme, 0 düşen kare, 0 ses zamanlaması
+  bozulması, üç sunum modu da doğru sunuldu.
 - **Commit:** —
+
 - **Ne yapıldı:**
+  - **`mcgurk/modules/avsr.py`** — `stimulus_sets × presentation_modes ×
+    noise_conditions × ears` çaprazlaması, tohumlu sıralama, manifest'ten yol
+    çözümü, skorlama ve türetilen ölçütler. **PsychoPy yok** (paket sınırı
+    testine eklendi). Mevcut config ile **135 deneme**: 3 hece × 5 tekrar = 15
+    öğe; A ve AV her biri 15 × 2 gürültü × 2 kulak = 60; V-only 15.
+  - **`block.py` ortaklaştırıldı.** Adım 4'ün notu "ikinci örnek gelince ortak
+    kısmı çek" diyordu; AVSR o ikinci örnek. Döngü (sabitleme → sunum → yanıt →
+    DB → blok sınırı) tek yerde; modül farkı bir `TrialPolicy`'de: hangi ızgara,
+    yanıt ne anlama geliyor, doğru cevap var mı. `run_mcgurk` ve `run_avsr`
+    ince sarmalayıcı. McGurk'ün altı donanım testi değişmeden geçiyor.
+  - **Config'e AVSR yanıt alanları** (§A.9): `response_set` (BA/DA/GA),
+    `response_keys`, `free_text_response: null`, `fixation_duration_ms`,
+    `post_response_ms`, `randomization`, `prompts` ve **`mode_questions`**.
+    McGurk ile ortak olan yedi alan `ResponseUIConfig` tabanına çekildi; hata
+    mesajları `config_path` ClassVar'ı üzerinden doğru bölümü adlandırıyor.
+  - **Kelime listesi altyapısı** (§F.2, içerik boş): `mcgurk/config/word_lists.py`
+    (Pydantic şema + okuyucu), `config/word_lists/tr_pb_50.yaml` (şablon,
+    `items: []`) ve `config/word_lists/README.md` (biçim + devreye alma
+    adımları). Listeyi **loader** okuyor — şema diske dokunmuyor kuralı korundu —
+    ve okuduktan sonra tasarım kontrolünü tekrar koşuyor.
+  - **`db/design.py`:** `AVSRExtra` artık `speaker_id` (zorunlu),
+    `noise_instance`, `stimulus_type` ve `item` taşıyor. `McGurkExtra` ile
+    ortak iki alan `_SpeakerExtra` tabanında. `v_trials_flat` üç alanı zaten
+    sütun olarak açıyor → **şema sürümü 2'de kaldı**.
+  - **Motorda tek satırlık ekleme:** V-only denemesinde `burst_onset_s`
+    videonun kendi patlama anından hesaplanıyor (aşağıda gerekçe).
+  - **`tools/run_module.py`** iki modülü de koşuyor (`--module avsr`);
+    modül tablosu üzerinden çalışıyor, Adım 6–7c yalnızca satır ekleyecek.
+    AVSR koşusunun sonunda ölçütler de basılıyor.
+  - **Test: 105 yeni test (451 → 556).** CI'da koşanlar: 42 AVSR testi
+    (tasarım, V-only'nin çaprazlanmaması, tohum, gürültü dengelemesi,
+    skorlama, ölçütler, kelime listesi hata yolları, `open_set`,
+    `mode_questions`) + 42 konsol kodlama testi (aşağıda). Donanımda koşanlar
+    (`psychopy`, 4): üç sunum modunun gerçekten sunulması, `is_correct`
+    yazılması, V-only'de iki RT'nin de kaydı, zaman aşımı. `ScriptedKeyboard`
+    iki donanım test dosyasının paylaştığı `tests/scripted_keyboard.py`'ye
+    taşındı.
+
+- **Tam uzunlukta dayanıklılık koşusu (2026-07-27):** 135 deneme, tam ekran,
+  75 Hz, yanıtlar simüle (koşullara göre olasılıklı, 700 ms). Adım 4'teki gibi
+  betik ve veritabanı scratchpad'de tutuldu.
+
+  | Ölçüm | Sonuç |
+  |---|---|
+  | Süre | **11.18 dk** (4.97 s/deneme) — config'in tahmini 15.8 dk |
+  | Bloklar | 60 / 60 / 15, üçü de `completed`, her biri ayrı commit |
+  | Düşen kare | **0** (en kötü kare aralığı 17.85 ms; kare 13.33 ms, sınır 20.00 ms) |
+  | `TimeFailed` / `XRuns` | **0** |
+  | `actual_soa_ms` | yalnızca 60 AV denemesinde; ort **+0.028 ms**, SD 0.118 |
+  | A-only | 60/60 `video_onset` boş, `audio_onset` dolu |
+  | V-only | 15/15 `audio_onset` boş, `video_onset` dolu, **`rt_from_burst` dolu** |
+  | Gürültü varyantı | 60 gürültülü denemede 23/19/18 |
+
+  Ölçütler simülasyona giren yapıyı geri veriyor: A %75.0, V %33.3, AV %93.3;
+  görsel fayda %+18.3; koşul bazında **gürültüde (+26.7 / +33.3) sessizden
+  (+6.7 / +6.7) belirgin şekilde büyük** — yani indeks, SSD hipotezinin
+  aradığı etkileşimi hücre düzeyinde gösterebiliyor. Süre tahmini
+  (`estimated_trial_duration_s: 7.0`) rahat bir üst sınır; gerçek RT ile
+  ~12–13 dk beklenir.
+
+- **Koşunun bulduğu hata — Windows konsolu Unicode:** özet çıktısındaki
+  "Görsel fayda (AV − A)" satırı **U+2212 eksi işareti** içeriyordu ve Python,
+  cp1254 konsolunda kodlanamayan bir karakteri sessizce bozmak yerine
+  `UnicodeEncodeError` fırlatıyor. Yani 11 dakikalık koşunun **sonunda**, veri
+  toplandıktan sonra rapor yerine traceback basıyordu. Aynı karakter sınıfı
+  kodda **yedi yerde daha** vardı ve çoğu **hata mesajlarındaydı**
+  (`modules.gin` doğrulaması, `design.py`, `base.py`, `prepare.py`,
+  `verify_backup.py`, `timing_selftest.py`) — orada etkisi daha kötü olurdu:
+  hata mesajının yerine başka bir hata geçer. Hepsi ASCII'ye çevrildi
+  (`≠` → `!=`, `→` → `->`, `−` → `-`) ve
+  **`tests/mcgurk/test_console_encoding.py`** her koşuda `mcgurk/` ile
+  `tools/` altındaki tüm string sabitlerini tarıyor. Docstring ve yorumlar
+  muaf: onlar hiçbir zaman bir akışa kodlanmıyor.
+
 - **Alınan kararlar:**
+  - **V-only gürültü ve kulakla çaprazlanmıyor** (§C Adım 5) ve o denemelerde
+    `snr_db`, `noise_condition`, `ear` **NULL** yazılıyor — "sessiz/iki kulak"
+    değil. NULL "uygulanamaz" demek; sessiz bir koşulla aynı sütunda toplanırsa
+    analizde ayırt edilemez.
+  - **Doğru cevap var, kategori yok.** `responses.is_correct` yazılıyor,
+    `category` NULL kalıyor. Aynı bilgiyi iki sütuna yazmak, ikisinin
+    çelişebilmesi demek. Tetikleyici yalnızca `mcgurk`/`dichotic`'i engelliyor.
+  - **Zaman aşımı yanlış sayılıyor** (kullanıcı onayı, 2026-07-27), dışlanmıyor.
+    Dışlamak, tam da zamanında yanıtlayamayan katılımcının doğruluğunu
+    yükseltirdi — ve gürültülü A-only, grup farkının beklendiği hücre.
+    `Accuracy.n_missing` zaman aşımı sayısını yanında taşıyor, böylece çoğu
+    zaman aşımı olan bir hücre "düşük" değil "yanıtsız" olarak görünüyor.
+  - **Yanıt seti üç seçenek, serbest metin yok** (kullanıcı onayı). McGurk'te
+    kategori vardı, burada skor var: bir kaçış seçeneği, görsel fayda
+    indeksinin hesaplandığı doğruluk figürünün dışına deneme çıkarırdı.
+  - **V-only'nin RT referansı görsel patlama.** Ses yok, akustik patlama yok;
+    referanssız bırakılsaydı V-only RT'leri temel oluşturduğu AV denemeleriyle
+    karşılaştırılamazdı. `TimingRecord.burst_onset_s` ses yoksa
+    `video_onset + video_burst_s`'e düşüyor — manifest'in ölçtüğü, orijinal
+    çekimdeki artikülasyon anı.
+  - **Soru metni moda göre değişiyor** (`mode_questions`). V-only'de "Ne
+    duydunuz?" yanlış bir soru; metin config'te, çünkü ifade değişikliği bir
+    protokol değişikliğidir ve `sessions.config_snapshot`'ta görünmeli.
+  - **Kelime listesi ayrı dosyada, loader okuyor.** Şemaya inline yazmak
+    tasarımla korpusu karıştırırdı; `StimulusSet._items` private, yani
+    kelimeler YAML'a ikinci bir yoldan yazılamıyor ve iki kaynak çelişemiyor.
+    Etkin bir kelime seti üç ayrı noktada açık hata veriyor: liste boş/okunamaz
+    (yükleme), kelime `stimulus_prep.tokens` içinde değil (yükleme), kelime
+    manifest'te yok (tasarım üretimi).
+  - **`stimulus_type` VIEW'a eklenmedi.** Sütun eklemek şema sürümü 2 → 3
+    demek ve mevcut `data/mcgurk.sqlite` açılamaz hâle gelirdi. Bilgi
+    `design_extra` JSON'unda duruyor; VIEW'a eklemenin doğru zamanı kelime
+    setinin gelmesi (o zaten manifest ve hazırlama boru hattı değişikliği
+    gerektiriyor).
+  - **Modül başına RNG akışı** McGurk'ünkiyle aynı gerekçe. McGurk'ün
+    çekim sırası **bilinçli olarak değiştirilmedi**: gürültü varyantı
+    dağıtımı AVSR'de yeniden yazıldı (hücre şekli farklı), ortaklaştırılsaydı
+    aynı tohum McGurk'te başka bir sıra üretebilirdi.
+
+- **Manuel test turu (2026-07-27):**
+  - Kullanıcı `--limit 12 --seed 3` ile koştu: 12/12 sunuldu, **0 düşen kare,
+    0 ses zamanlaması bozulması**, üç mod da beklendiği gibi (A'da video yok,
+    V'de ses yok ve soru "Ne söyledi?", AV'de ikisi birlikte), kulak
+    lateralizasyonu ve zaman aşımı mesajı doğru. Doğruluk 12/12.
+  - **AV'de dudak–ses eşzamanlılığı maddesi atlandı** — kablolu kulaklık yok,
+    test Bluetooth (WH-1000XM4) ile koşuldu. O kulaklık 100–300 ms **değişken**
+    gecikme ekliyor, yani yargı kodun değil kulaklığın davranışı olurdu. Aynı
+    madde Adım 3'ten beri açık (`TEST_ADIM_3.md` Test 2, madde 7); ikisi
+    kablolu kulaklık geldiğinde birlikte kapatılacak (bekleyen aksiyonlara
+    işlendi). Adım 5'i bloklamıyor: yazılım tarafındaki A/V farkı ölçüldü
+    (`actual_soa_ms` ort +0.028 ms, SD 0.118) ve mutlak gecikme yalnızca
+    fotodiyot ölçümüyle doğrulanabilir.
+  - **Tavan etkisi gözlendi:** üç modda da %100 doğruluk, dolayısıyla görsel
+    fayda %+0.0. n=12'de bu bir ölçüm değil, ama **kapalı 3 heceli sette
+    +5 dB SNR'ın normal işiten bir yetişkin için kolay olduğunu** gösteriyor.
+    Kontrol grubu tavanda kalırsa görsel fayda indeksi grup farkını gösteremez.
+    §F.1'e (deneme sayıları/tasarım) not düşüldü — SNR'ı düşürmek bir danışman
+    kararı, kod tarafında yalnızca `noise_conditions` değişikliği.
+
+- **Ortama ffmpeg kurma denemesi geri alındı (2026-07-27):** kullanıcı isteği
+  üzerine `conda install -c conda-forge ffmpeg` denendi. Kurulum "başarılı"
+  döndü ama **ffmpeg çalışmadı**: `avcodec-62.dll` WinError 127 veriyor —
+  karışık kanal ABI uyuşmazlığı (çözücü `libglib`'i `pkgs/main`'den,
+  gerisini conda-forge'dan aldı). Daha önemlisi kurulum env'e **sdl2 ve sdl3**
+  bıraktı; ortam aktive edildiğinde `ffpyplayer` bozuk `SDL2.dll`'i alıyor ve
+  kullanıcının ilk manuel test denemesi "failed to load sdl3" hatası verdi.
+  `conda install --revision 0` ile tam geri alındı, ortam doğrulandı
+  (556 test + 54 donanım testi yeşil). **Sistem ffmpeg'i gerekmiyor:**
+  `find_ffmpeg()` PATH'ten sonra `imageio-ffmpeg`'e düşüyor ve
+  `mcgurk/stimuli/ffmpeg.py` `ffprobe`'u kasıtlı olarak hiç kullanmıyor —
+  ihtiyaç duyulan her şey ffmpeg'in kendi stderr'inden okunuyor. Adım 0'ın
+  "Adım 2'nin araçları kurulu ffmpeg gerektirecek" notu geçersiz.
+  Gerçekten gerekirse doğru yol `--override-channels -c conda-forge`'dur, ama
+  o da python/openssl'i conda-forge'a taşıyıp pip ile kurulmuş PsychoPy
+  yığınını riske atar.
+
 - **Bilinen sınırlar:**
+  - Kelime seti içerik olarak boş (§F.2). Şema, okuyucu, şablon ve hata
+    yolları hazır; kayıt yapılınca kod değişmeyecek.
+  - `response_mode: open_set` gerçeklenmedi — `OpenSetNotImplemented`.
+    Puanlama kuralları (transkripsiyon, kısmi kredi, Türkçe klavye) karar
+    bekliyor.
+  - Modül tek başına koşuyor; yönerge, alıştırma, mola ve katılımcı girişi
+    Adım 8'de.
+  - Ölçüt fonksiyonları (`accuracy_by_*`, `visual_benefit*`,
+    `lipreading_accuracy`) `modules/avsr.py` içinde ve `v_trials_flat`
+    satırlarını okuyor. Adım 9 bunları `analysis/`'ten çağıracak; taşımak
+    gerekmiyor, sarmalamak yetiyor.
+  - Konsol kodlama testi yalnızca **string sabitlerini** tarıyor. Çalışma
+    anında birleştirilen bir metin (örneğin bir dosya adı) hâlâ konsolda
+    patlatabilir; kalıcı çözüm çıkış akışını `errors="replace"` ile açmak
+    olurdu ve bu Adım 8'in giriş noktası işiyle birlikte yapılmalı.
+
 - **Sonraki adıma not:**
+  - **Adım 6 (TBW) `block.py`'yi olduğu gibi kullanamaz**: yanıt iki
+    seçenekli ("Aynı anda"/"Farklı zamanda") ve `nominal_soa_ms` her denemede
+    dolu. İlk ikisi `TrialPolicy` ile karşılanıyor; SOA için `TrialSpec`
+    zaten alan taşıyor ve motor negatif SOA'da payı kendisi hesaplıyor
+    (Adım 3). TBW config'ine `ResponseUIConfig` alanları eklenmeli
+    (`response_labels` bugün ayrı bir alan).
+  - **Adım 7 (oddball) ve 7c (GIN) döngüyü paylaşamaz**: uyaran içinde 0..n
+    yanıt topluyorlar. `run_blocks`'un blok/commit yapısı yine de örnek.
+  - Adım 8 modül sırasına AVSR'yi eklerken `plan_trials(..., speaker_id=...)`
+    ile konuşmacıyı katılımcı başına verebilir (§F.4).
+  - Adım 9 `v_trials_flat`'tan okurken AVSR için `avsr_item` sütununu ve
+    `is_correct`'i bulacak; `stimulus_type` yalnızca JSON'da.
+  - **Adım 8 giriş noktalarını yazarken `sys.stdout`/`sys.stderr`'i
+    `errors="replace"` ile açsın** — konsol kodlama testi string sabitlerini
+    koruyor ama çalışma anında birleşen metinleri koruyamaz (bkz. yukarıdaki
+    U+2212 bulgusu).
 
 ### Adım 6 — Modül 3: TBW
 - **Durum:** BEKLİYOR
@@ -969,6 +1155,13 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
     üretiyor ve `config.trial_counts()` ile birebir aynı sayıyı veriyor
     (test). Danışman sayıları yükseltince kod değişmiyor. Karar hâlâ açık.
 - [ ] Modül 2 kelime listesi (Adım 5, çekim gerekiyor) — §F.2
+  - **Adım 5 bunu engellemedi:** hece seti çalışıyor, kelime seti için şema,
+    okuyucu (`mcgurk/config/word_lists.py`), şablon
+    (`config/word_lists/tr_pb_50.yaml`) ve üç ayrı hata yolu hazır. Kayıt
+    yapılınca **kod değişmeyecek**: kelimeler `stimulus_prep.tokens`'a eklenir,
+    `prepare_stimuli.py` koşulur, liste doldurulur, `enabled: true` yapılır.
+    50 kelime × `reps: 1` oturuma **450 deneme** ekler — açmadan önce
+    `python -m mcgurk.config` çıktısına bakılmalı (§F.1).
 - [ ] Kulaklık tipi (donanım, çapraz dinleme kontrolünü etkiler) — §F.3
 - [ ] Konuşmacı seçim stratejisi — §F.4
 
@@ -1023,6 +1216,11 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   Danışmanın karara bağlaması gereken altı madde listelendi; en kritik ikisi
   **kontrol grubunda kulak seçimi** (taslak, SSD gruplarının iyi kulak
   dağılımına oranlı dengeleme öneriyor) ve **yanıt penceresi süresi**.
+- **Kablolu kulaklık geldiğinde iki madde birlikte kapatılacak:**
+  `TEST_ADIM_3.md` Test 2 madde 7 ve `TEST_ADIM_5.md` Test 1 madde 3 — ikisi de
+  "AV denemesinde dudak ile ses eşzamanlı mı" sorusu. Bluetooth'la yargılanamaz
+  (aşağıdaki §F.3 maddesi). Komut: `python tools/run_module.py --module avsr
+  --limit 12 --seed 3` (4., 6., 9., 10. denemeler AV).
 - **§F.3 — kulaklık kararı artık somut bir gerekçeye sahip (Adım 3 bulgusu).**
   Test kulaklığı **Sony WH-1000XM4, Bluetooth** ve gerçek veri toplama için
   uygun değil: (a) 100–300 ms gecikme ekliyor ve bu gecikme **sabit değil**,
@@ -1064,6 +1262,18 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
     (700 ms yanıtla), gerçek RT ile ~12–13.5 dk. Config'in tahmini 14.0 dk,
     yani modül düzeyinde tahmin **tutuyor**; toplam 58.8 dakikalık tahmin de
     bu ölçüde güvenilir sayılabilir.
+  - **Ölçülen ikinci süre (Adım 5):** AVSR 135 deneme = 11.2 dk (700 ms
+    yanıtla), gerçek RT ile ~12–13 dk. Config'in tahmini 15.8 dk, yani bu
+    modülde tahmin **fazla cömert**; toplam 58.8 dakika bu ölçüde güvenli
+    tarafta.
+  - **Tavan etkisi uyarısı (Adım 5 manuel testi):** AVSR'nin kapalı 3 heceli
+    setinde +5 dB SNR normal işiten bir yetişkin için kolay; ilk canlı koşuda
+    üç modda da %100 doğruluk çıktı (n=12, ölçüm değil ama işaret). Kontrol
+    grubu tavanda kalırsa **görsel fayda indeksi grup farkını gösteremez**.
+    Danışmanla konuşulacak: `modules.avsr.noise_conditions` içindeki SNR
+    düşürülmeli mi (örn. 0 veya −5 dB), ya da ikinci bir SNR eklenmeli mi.
+    Kod tarafında yalnızca config değişikliği + `prepare_stimuli.py` yeniden
+    koşumu gerekir.
   - Süre tahmini **alt sınırdır**: `practice` (12) ve `cross_hearing` (20)
     deneme sayısına giriyor ama süreye katılmıyor; yönerge ekranları, kulaklık
     yerleşimi ve modüller arası geçiş hiç sayılmıyor. Gerçek oturumu ~75–80

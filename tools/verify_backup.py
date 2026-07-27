@@ -136,7 +136,7 @@ def _compare(live_path: Path, counts: dict[str, int], lines: list[str]) -> bool:
             # something is wrong with the live file.  Both need a human.
             ok = False
             lines.append(
-                f"KIRMIZI  {table:<16}{counts[table]:>8} ≠ canlı "
+                f"KIRMIZI  {table:<16}{counts[table]:>8} != canlı "
                 f"{live_counts[table]}"
             )
     return ok

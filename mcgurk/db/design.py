@@ -31,7 +31,7 @@ class NoExtra(_Extra):
     """Modules whose design fits entirely in the shared trial columns."""
 
 
-class McGurkExtra(_Extra):
+class _SpeakerExtra(_Extra):
     """Which speaker was seen, and which noise waveform was heard.
 
     ``speaker_id`` is recorded per trial rather than left to the config
@@ -39,17 +39,29 @@ class McGurkExtra(_Extra):
     ``speaker_selection.strategy`` is ``fixed``, and §F.4 leaves ``balanced``
     and ``random`` open.
 
-    ``noise_instance`` is 1-based, matching the manifest, and None in the quiet
-    condition.  Adım 2 prepares several noise waveforms per cell so that the
-    repetitions of a cell are not repetitions of one waveform; which one a
-    trial used is part of the trial.
+    ``noise_instance`` is 1-based, matching the manifest, and None wherever no
+    noise was mixed in — the quiet condition, and AVSR's V-only trials, which
+    carry no audio at all.  Adım 2 prepares several noise waveforms per cell so
+    that the repetitions of a cell are not repetitions of one waveform; which
+    one a trial used is part of the trial.
     """
 
     speaker_id: int = Field(ge=1)
     noise_instance: int | None = Field(default=None, ge=1)
 
 
-class AVSRExtra(_Extra):
+class McGurkExtra(_SpeakerExtra):
+    pass
+
+
+class AVSRExtra(_SpeakerExtra):
+    """The item that was presented, and which kind of item it was.
+
+    ``item`` is the syllable or word itself rather than a row number: it is
+    what the response is scored against, and a number would need the config
+    snapshot to be interpretable.
+    """
+
     stimulus_type: Literal["syllable", "word"]
     item: str = Field(min_length=1)
 
@@ -78,7 +90,7 @@ class GINExtra(_Extra):
         if len(self.gap_onsets_s) != len(self.gap_durations_ms):
             raise ValueError(
                 "gap_onsets_s ve gap_durations_ms aynı uzunlukta olmalı "
-                f"({len(self.gap_onsets_s)} ≠ {len(self.gap_durations_ms)})"
+                f"({len(self.gap_onsets_s)} != {len(self.gap_durations_ms)})"
             )
         if any(onset < 0 for onset in self.gap_onsets_s):
             raise ValueError("gap_onsets_s negatif olamaz")

@@ -23,6 +23,12 @@ from ..engine.av_presenter import TrialSpec
 
 T = TypeVar("T")
 
+#: ``trials.noise_condition`` when nothing was mixed in.  A noisy trial is
+#: named after ``stimulus_prep.noise.type`` instead, so the column says what
+#: was heard rather than merely that something was.  NULL is reserved for
+#: "not applicable" — an AVSR V-only trial, which carries no audio at all.
+QUIET = "quiet"
+
 
 class ModuleError(RuntimeError):
     """A module cannot build the design it was asked for."""
@@ -117,7 +123,7 @@ def _check_lengths(cells: Sequence[object], reps: Sequence[int]) -> None:
     if len(cells) != len(reps):
         raise ModuleError(
             f"Hücre ve tekrar listeleri aynı uzunlukta olmalı "
-            f"({len(cells)} ≠ {len(reps)})"
+            f"({len(cells)} != {len(reps)})"
         )
 
 

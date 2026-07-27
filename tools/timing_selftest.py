@@ -436,7 +436,7 @@ def demo(config: ExperimentConfig) -> int:
             ear="left",
         ),
         TrialSpec(
-            label="AV, SOA −200 ms (ses önce)",
+            label="AV, SOA -200 ms (ses önce)",
             video_path=congruent_video.file.resolve(stimuli_root),
             video_burst_s=congruent_video.burst_time_s,
             audio_path=congruent.file.resolve(stimuli_root),

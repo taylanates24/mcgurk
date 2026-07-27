@@ -158,8 +158,12 @@ class TimingRecord:
     video_onset_s: float | None = None
     audio_onset_s: float | None = None
     actual_soa_ms: float | None = None
-    #: Wall-clock (reference-relative) time of the acoustic burst.  Adım 4
-    #: measures ``rt_from_burst_ms`` from here.
+    #: Wall-clock (reference-relative) time of the burst.  Adım 4 measures
+    #: ``rt_from_burst_ms`` from here.  In a trial with audio it is the
+    #: acoustic burst; in a V-only trial (Adım 5) there is none, so it is the
+    #: *visual* one — the release the manifest measured on the original take.
+    #: Without it, a V-only RT would have no reference other than the prompt
+    #: and could not be compared with the AV trials it is the baseline for.
     burst_onset_s: float | None = None
     dropped_frames: int = 0
     max_frame_interval_ms: float = 0.0
@@ -509,6 +513,9 @@ class AVPresenter:
         burst: float | None = None
         if audio_onset is not None:
             burst = burst_onset_s(audio_onset, spec.audio_burst_s) - self.reference_time_s
+        elif video_onset is not None:
+            # V-only: the visual release stands in for the acoustic burst.
+            burst = burst_onset_s(video_onset, spec.video_burst_s) - self.reference_time_s
 
         flip_error_ms = (
             (video_onset - plan_video_flip_s) * 1000.0 if video_onset is not None else None

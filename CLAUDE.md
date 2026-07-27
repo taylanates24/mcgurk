@@ -57,6 +57,7 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── schema.py                # Pydantic models, §G — extra="forbid"
 │   ├── loader.py                # load, validate, design summary
 │   ├── calibration.py           # 02_kalibrasyon.md JSON (Turkish keys → aliases)
+│   ├── word_lists.py            # AVSR word-list schema + reader (Adım 5)
 │   └── __main__.py              # python -m mcgurk.config
 ├── db/
 │   ├── schema.sql               # 6 tables + v_trials_flat + §A.10 trigger
@@ -78,11 +79,12 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── av_presenter.py          # TrialSpec -> presentation -> TimingRecord
 │   ├── loopback.py              # level-2 jitter analysis (pure numpy)
 │   └── psychopy_prefs.py        # must run before psychopy.sound is imported
-├── modules/                     # Adım 4 (mcgurk); 5–7c to come
+├── modules/                     # Adım 4 (mcgurk), 5 (avsr); 6–7c to come
 │   ├── base.py                  # seeding, ordering, PlannedTrial — no PsychoPy
 │   ├── mcgurk.py                # design + categorisation — no PsychoPy
+│   ├── avsr.py                  # design + scoring + measures — no PsychoPy
 │   ├── response.py              # option grid, keyboard, two RTs, free text
-│   └── block.py                 # trial loop + DB writes, block boundaries
+│   └── block.py                 # shared trial loop + per-module TrialPolicy
 ├── analysis/                    # Adım 9 (empty)
 ├── ui/                          # Adım 8 (empty)
 ├── logging_setup.py
@@ -161,11 +163,11 @@ to get wrong:
 - The device's stream rate is checked against `audio.sample_rate`: PsychoPy
   resamples at load time otherwise, undoing the 48 kHz the set was prepared at.
 
-### Assessment modules (`mcgurk/modules/`, from Adım 4)
+### Assessment modules (`mcgurk/modules/`, from Adım 4–5)
 
-The split follows the engine's: `base.py` and `mcgurk.py` are PsychoPy-free, so
-the design and the categorisation are tested in CI. Things that are easy to get
-wrong:
+The split follows the engine's: `base.py`, `mcgurk.py` and `avsr.py` are
+PsychoPy-free, so the design, the categorisation and the scoring are tested in
+CI. Things that are easy to get wrong:
 
 - **The RNG seed is derived per module**, not shared. One stream would make
   McGurk's trial order depend on where it sits in `session.module_order`.
@@ -197,6 +199,38 @@ wrong:
 - Categorisation order is fixed (auditory > visual > fusion > combination) and
   the config validation depends on it: a map listing the pair's own token is a
   rule that can never fire, so it is rejected at load.
+
+**One loop, one policy per module (Adım 5).** `block.py` sequences fixation →
+stimulus → response → database for every module that takes one forced choice;
+what differs arrives as a `TrialPolicy` (which grid, what a response means,
+whether there is a correct answer). `run_mcgurk`/`run_avsr` are thin wrappers.
+Copying the loop per module is how two copies drift apart.
+
+**Modül 2 — AVSR** (`avsr.py`) adds:
+
+- **V-only is not crossed with noise or ear.** A silent video has no SNR and no
+  side; those trials write `snr_db`, `noise_condition` and `ear` as **NULL** —
+  *not applicable*, which is a different statement from "quiet, both ears".
+  Crossing them would quadruple the cell for physically identical trials.
+- **There is a correct answer here**, unlike Modül 1: `responses.is_correct` is
+  written and `category` is left NULL. One fact in two columns is one fact that
+  can disagree.
+- **A timeout counts as incorrect**, not as a missing observation — excluding it
+  would raise the accuracy of exactly the participants who could not answer in
+  time. `Accuracy.n_missing` carries the timeout count alongside so a condition
+  that is mostly timeouts is visible rather than merely low.
+- **The V-only RT reference is the *visual* burst.** There is no acoustic one,
+  and without a reference the mode could not be compared with the AV trials it
+  is the baseline for; `TimingRecord.burst_onset_s` falls back to
+  `video_onset + video_burst_s`.
+- **`mode_questions` overrides the prompt per presentation mode.** "Ne
+  duydunuz?" is the wrong question in V-only.
+- **Word sets are data, not code** (§F.2). `config/word_lists/*.yaml` is read by
+  the loader — the schema never touches the disk — and the items are attached to
+  the `StimulusSet`. An enabled word set that is empty, missing from
+  `stimulus_prep.tokens`, or missing from the manifest fails at **load**, each
+  with its own message. `response_mode: open_set` raises
+  `OpenSetNotImplemented`.
 
 ### Legacy Structure (src/, Adım 0)
 ```
@@ -292,7 +326,11 @@ Validated by `mcgurk/config/schema.py`; **unknown fields are an error**.
   onto `response_set` by position, `free_text_response` names the option that
   opens a text field, and `prompts.{question,other,timeout}` carries every
   string the participant reads. `fixation_duration_ms` and `post_response_ms`
-  are the trial structure.
+  are the trial structure. These live on `ResponseUIConfig`, shared by `mcgurk`
+  and `avsr`; AVSR adds `mode_questions` (per presentation mode).
+- `modules.avsr.stimulus_sets[].list` points at a `config/word_lists/*.yaml`
+  file, read by the loader (§F.2 — the recording session has not happened, so
+  the shipped list is an empty template with `enabled: false`).
 - `stimulus_prep.*`: everything `tools/prepare_stimuli.py` needs — the seed,
   the `speaker_id` → source-folder map, the token list, and the video/audio/
   burst/noise/GIN parameters. The SNRs to prepare are **derived** from the
@@ -309,9 +347,12 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
   OS, audio backend, measured refresh, `system_av_offset_ms`, status
 - `blocks` — module, index, planned trial count, status
 - `trials` — shared design columns + realised timing; module-specific fields in
-  `design_extra` (JSON), validated by `mcgurk/db/design.py`. `mcgurk` trials
-  carry `speaker_id` (required) and `noise_instance`; `v_trials_flat` exposes
-  both as columns.
+  `design_extra` (JSON), validated by `mcgurk/db/design.py`. `mcgurk` and `avsr`
+  trials carry `speaker_id` (required) and `noise_instance`; `avsr` adds
+  `stimulus_type` and `item`. `v_trials_flat` exposes `speaker_id`,
+  `noise_instance` and `avsr_item` as columns (`stimulus_type` is only in the
+  JSON — adding it to the VIEW is a schema-version bump, and the occasion for
+  that is the word set arriving).
 - `responses` — **0..n per trial**: none on timeout, several for a GIN segment
 - A trigger refuses `is_correct` on `mcgurk`/`dichotic` trials (§A.10)
 - A module may write several blocks; use `db.next_block_index(session_id)`
@@ -354,8 +395,8 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Monitor setup (ilk kurulumda bir kez): `python scripts/setup_monitor.py`
 - Validate config + design cost: `python -m mcgurk.config`
 - Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
-- Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk --dry-run`
-- Run a module: `python tools/run_module.py --module mcgurk [--limit N] [--seed N]`
+- Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr --dry-run`
+- Run a module: `python tools/run_module.py --module mcgurk|avsr [--limit N] [--seed N]`
 - Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
 - Verify stimuli: `python tools/verify_stimuli.py [--quick]`
 - Verify a backup: `python tools/verify_backup.py <yedek> --compare-with data/mcgurk.sqlite`
@@ -399,6 +440,10 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't back up SQLite by copying the file — use `VACUUM INTO`; a WAL-mode copy is silently inconsistent
 - Don't commit inside a trial (§A.5) — `add_trial`/`add_response` defer, `finish_block` commits
 - Don't add a module to `modules.*` without also adding it to `blocks.module`'s CHECK list and `design.py`
-- Don't import PsychoPy at module level in `modules/base.py` or `modules/mcgurk.py` — the design and the categorisation are CI-tested, and a test enforces it
+- Don't import PsychoPy at module level in `modules/base.py`, `modules/mcgurk.py` or `modules/avsr.py` — the design, the categorisation and the scoring are CI-tested, and a test enforces it
 - Don't give the participant correctness feedback in any module — the McGurk effect must not be taught mid-session (demand characteristics)
 - Don't derive a category from `free_text`; the participant declined the options that were on screen
+- Don't put a character outside cp1254 in a printed, logged or raised string (`−`, `≠`, `→`) — the Turkish Windows console raises `UnicodeEncodeError` instead of degrading, so the traceback replaces the message. Docstrings and comments are fine; `tests/mcgurk/test_console_encoding.py` enforces the rest
+- Don't copy `block.py`'s loop into a new module — give it a `TrialPolicy`; two copies of a trial loop drift apart
+- Don't cross AVSR's V-only cells with noise or ear, and don't write "quiet"/"both" on them — NULL means *not applicable*
+- Don't drop AVSR timeouts from an accuracy figure — they are incorrect answers, and excluding them flatters the participants who ran out of time

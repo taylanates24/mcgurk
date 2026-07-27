@@ -173,7 +173,9 @@ def test_stale_backup_is_reported(populated_db: Database, tmp_path: Path) -> Non
 
     ok, report = verify(target, populated_db.path)
     assert not ok
-    assert "≠ canlı" in report
+    # "!=" rather than "≠": the report is printed on a cp1254 console
+    # (tests/mcgurk/test_console_encoding.py).
+    assert "!= canlı" in report
 
 
 def test_missing_comparison_target_is_reported(

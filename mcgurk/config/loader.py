@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from .calibration import CalibrationError, load_calibration
 from .schema import ExperimentConfig
+from .word_lists import WordListError, load_word_list
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +77,62 @@ def load_config(
             f"{_format_validation_error(exc)}"
         ) from exc
 
+    _resolve_word_lists(config, root, config_path)
+
     if check_filesystem:
         _check_filesystem(config, root, config_path)
 
     return config
+
+
+def _resolve_word_lists(
+    config: ExperimentConfig, root: Path, config_path: Path
+) -> None:
+    """Read the AVSR word lists and re-check the design against them.
+
+    Unconditional, unlike the ``data_collection`` gates below: without the
+    items the module's trial count is not computable at all, so a word set that
+    cannot be read has to fail here rather than produce a smaller design.
+    Disabled sets are left alone — a list that is not being presented does not
+    have to exist yet, which is exactly the state §F.2 is in.
+    """
+    if not config.modules.avsr.enabled:
+        return
+
+    resolved = False
+    for index, stimulus_set in enumerate(config.modules.avsr.stimulus_sets):
+        if not stimulus_set.enabled or stimulus_set.type != "word":
+            continue
+        assert stimulus_set.word_list is not None  # the schema guarantees it
+        path = resolve_path(root, stimulus_set.word_list)
+        try:
+            word_list = load_word_list(path)
+        except WordListError as exc:
+            raise ConfigError(
+                f"modules.avsr.stimulus_sets[{index}] okunamadı: {config_path}\n{exc}"
+            ) from exc
+        stimulus_set.attach_items(word_list.items)
+        resolved = True
+        logger.info(
+            "AVSR kelime listesi: %s (%d kelime, %s)",
+            word_list.name,
+            len(word_list.items),
+            path,
+        )
+
+    if not resolved:
+        return
+
+    # The schema could not check these words: it never touches the disk, so at
+    # validation time the set reported no items at all.
+    problems = config.design_problems()
+    if problems:
+        raise ConfigError(
+            "Kelime listesi tasarımla uyuşmuyor:\n  - "
+            + "\n  - ".join(problems)
+            + "\n  Kelimeler stimulus_prep.tokens'a eklenip "
+            "'python tools/prepare_stimuli.py' ile hazırlanmalı."
+        )
 
 
 def _check_filesystem(

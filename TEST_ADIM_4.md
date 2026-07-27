@@ -161,9 +161,12 @@ Yanıt ekranında **hiçbir tuşa basmayın.**
 **Beklenen:**
 ```
 Zaman aşımı            : 1
-Kategoriler:
+Yanıtlar:
   NONE            1  (%100.0)
 ```
+
+*(Adım 5'te başlık "Kategoriler:" → "Yanıtlar:" oldu: özet artık AVSR'nin
+DOĞRU/YANLIŞ sayımını da basıyor ve o bir kategori değil.)*
 
 **Kontrol edilecek:** 5 saniye sonra ekranda kısa süre **"Yanıt alınamadı"**
 görünüyor ve deneme bitiyor. Veritabanında bu deneme **yanıt satırı olmadan**

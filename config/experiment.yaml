@@ -134,8 +134,27 @@ modules:
     presentation_modes: [A, V, AV]
     noise_conditions: [null, 5.0]
     ears: [left, right]
+    # V-only is NOT crossed with noise and ear: a silent video has no SNR and
+    # no side.  The trial count above already reflects that (steps.md §C Adım 5).
     response_mode: closed_set          # closed_set | open_set
+    # Forced choice over the three syllables.  No "other" option here, unlike
+    # McGurk: this module has a correct answer, and an escape hatch would put
+    # trials outside the accuracy figure that the visual benefit index is
+    # computed from.
+    response_set: [BA, DA, GA]
+    response_keys: ["1", "2", "3"]
+    free_text_response: null
     response_timeout_s: 6.0
+    fixation_duration_ms: 1000
+    post_response_ms: 300
+    randomization: block_shuffle
+    prompts:
+      question: "Ne duydunuz?"
+      other: "Duyduğunuz sesi yazıp Enter'a basın:"
+      timeout: "Yanıt alınamadı"
+    # "Ne duydunuz?" is the wrong question when there is no sound.
+    mode_questions:
+      V: "Ne söyledi?"
 
   # ---- Modül 3: TBW ----
   tbw:

@@ -449,20 +449,24 @@ Kademe 3 bu araçta gerçeklenmez; `docs/01_av_gecikme_olcumu.md` scriptleriyle,
 ### Bir modülü tek başına koşmak (Adım 4→)
 
 Oturum akışı Adım 8'de geliyor; o zamana kadar bir modül `tools/run_module.py`
-ile koşuluyor. Önce tasarımı donanım açmadan denetleyin — deneme sayısını
-config'in hesabıyla karşılaştırır, hücre tablosunu basar ve her uyaran
-dosyasının yerinde olduğunu doğrular:
+ile koşuluyor. Koşulabilen modüller: `mcgurk` (Adım 4) ve `avsr` (Adım 5).
+Önce tasarımı donanım açmadan denetleyin — deneme sayısını config'in hesabıyla
+karşılaştırır, hücre tablosunu basar ve her uyaran dosyasının yerinde olduğunu
+doğrular:
 
 ```bash
-python tools/run_module.py --module mcgurk --dry-run
+python tools/run_module.py --module avsr --dry-run
 ```
 
 Sonra gerçek koşu. `--limit` kısa bir kontrol için, `--seed` sırayı tekrar
 üretmek için:
 
 ```bash
-python tools/run_module.py --module mcgurk --limit 8
+python tools/run_module.py --module avsr --limit 12 --seed 3
 ```
+
+AVSR koşusunun sonunda modülün kendi ölçütleri de basılır: mod başına
+doğruluk, görsel fayda indeksi (AV − A) ve lipreading (V).
 
 Bu bir **geliştirme aracıdır**: yönerge, alıştırma bloğu, mola ve katılımcı
 girişi yok, veritabanına `DEV01` kodlu bir geliştirme katılımcısı yazıyor.
@@ -533,15 +537,21 @@ gürültüsü biriktirmesini engeller. Manifest her dosyanın kaynak codec'ini v
 - Kesilen oturuma kaldığı yerden devam etme yok.
 
 **Yeni pakette henüz gelmeyenler:**
-- `mcgurk/modules/` yalnızca McGurk'ü içeriyor (Adım 4); AVSR, TBW, oddball,
-  dikotik ve GIN sırasıyla Adım 5–7c'de. `ui/` ve `analysis/` hâlâ boş
+- `mcgurk/modules/` McGurk (Adım 4) ve AVSR'yi (Adım 5) içeriyor; TBW, oddball,
+  dikotik ve GIN sırasıyla Adım 6–7c'de. `ui/` ve `analysis/` hâlâ boş
   (Adım 8 ve 9).
 - Oddball tonları henüz üretilmiyor: `steps.md` onları Adım 7'ye koyuyor. Orada
   da çevrimdışı üretilecek (§A.12).
 - Yeni config ve veritabanı henüz hiçbir deneyi çalıştırmıyor; `main.py` Adım
   8'e kadar `src/` yolunu kullanmaya devam ediyor.
-- AVSR kelime seti (`type: word`) yalnızca şema düzeyinde var; `enabled: true`
-  yapılırsa deneme sayısı hesabı açık hata verir (§F.2, Adım 5).
+- AVSR kelime seti (`type: word`) **içerik olarak boş**: kayıt seansı yapılmadı
+  (§F.2). Şema ve okuyucu hazır (`config/word_lists/`), liste dosyası şablon
+  hâlinde. `enabled: true` yapılırsa config yüklenirken açık hata verir —
+  listenin boş olduğunu, kelimelerin `stimulus_prep.tokens`'a eklenmesi ve
+  hazırlanması gerektiğini söyleyerek.
+- AVSR'nin `response_mode: open_set` seçeneği tanımlı ama gerçeklenmedi;
+  seçilirse `NotImplementedError`. Açık set puanlama kuralları (transkripsiyon,
+  kısmi kredi) karara bağlanmadı.
 - Dikotik ve GIN modülleri **yöntem dokümanında tanımlı değil** — config ve
   veritabanı yerleri açıldı, ancak protokole eklenmeden veri toplanmamalı.
   İkisi için de taslak bölüm hazır ve danışman onayı bekliyor:

@@ -119,13 +119,28 @@ def test_word_set_needs_a_list(write_config, config_dict) -> None:
     assert "list" in str(exc.value)
 
 
-def test_enabled_word_set_is_not_supported_yet(write_config, config_dict) -> None:
-    # §F.2: the recording session has not happened.  Counting the trials of a
-    # word set we cannot read would be a guess, so it is an explicit error.
+def test_enabling_the_shipped_word_set_says_it_is_empty(
+    write_config, config_dict
+) -> None:
+    """§F.2: the recording session has not happened, so the shipped list is a
+    template with no items.  Turning it on has to fail at load — a set that
+    silently contributed zero trials would shrink the design in silence."""
     config_dict["modules"]["avsr"]["stimulus_sets"][1]["enabled"] = True
-    config = _load(write_config, config_dict)
-    with pytest.raises(ValueError, match="Adım 5"):
-        config.modules.avsr.total_trials()
+    with pytest.raises(ConfigError) as exc:
+        _load(write_config, config_dict)
+    assert "items boş" in str(exc.value)
+
+
+def test_an_unresolved_word_set_refuses_to_be_counted(config_dict) -> None:
+    """The schema never reads the disk, so a word set validated on its own has
+    no items — and says so rather than reporting zero."""
+    from mcgurk.config.schema import StimulusSet
+
+    stimulus_set = StimulusSet.model_validate(
+        config_dict["modules"]["avsr"]["stimulus_sets"][1] | {"enabled": True}
+    )
+    with pytest.raises(ValueError, match="yüklenmedi"):
+        stimulus_set.n_items()
 
 
 # -------------------------------------------------------------------- tbw

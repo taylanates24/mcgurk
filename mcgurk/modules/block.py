@@ -1,4 +1,10 @@
-"""Running McGurk trials: fixation, stimulus, response, database.
+"""Running trials: fixation, stimulus, response, database.
+
+One loop serves every module that presents a stimulus and takes one
+forced-choice response.  What differs between them — the response grid, what a
+response *means*, whether there is a correct answer — arrives as a
+:class:`TrialPolicy`; the sequencing and the database writes are the same, and
+duplicating them per module is how the two copies drift apart.
 
 The loop's shape is set by three rules from §A:
 
@@ -10,18 +16,20 @@ The loop's shape is set by three rules from §A:
   blocks of at most ``session.break_every_n_trials``.  One block would mean a
   crash costs the whole module; Adım 8 puts its break screens at the same
   boundaries.
-* **§A.10 — no correct answer.**  ``is_correct`` stays None for every trial
-  here, congruent controls included.  The database enforces it too.
+* **§A.10 — no correct answer where there is none.**  ``is_correct`` comes from
+  the policy, and for ``mcgurk`` the policy never produces one.  The database
+  enforces it too.
 
-Everything that decides *what* to present lives in ``mcgurk.py`` and everything
-that decides *when* lives in ``engine/``; this file only sequences them and
-writes the result down.
+Everything that decides *what* to present lives in the module files and
+everything that decides *when* lives in ``engine/``; this file only sequences
+them and writes the result down.
 """
 
 from __future__ import annotations
 
 import logging
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,14 +40,53 @@ from ..db.models import (
     SESSION_COMPLETED,
     Block,
     Response,
+    Trial,
 )
 from ..engine import AbortSession
 from ..engine.av_presenter import AVPresenter, TimingRecord, check_abort
+from . import avsr as avsr_module
+from . import mcgurk as mcgurk_module
 from .base import PlannedTrial, chunk
-from .mcgurk import MODULE_NAME, categorise_for
 from .response import Choice, ResponseGrid, collect_choice, collect_free_text, show_message
 
 logger = logging.getLogger(__name__)
+
+#: What a timeout is counted as in the operator's summary.  No ``responses``
+#: row is written for it (Adım 1 decision), so this is a tally, not a category.
+TIMEOUT_TALLY = "NONE"
+
+
+@dataclass(frozen=True)
+class Evaluation:
+    """What one response means to the module that asked for it.
+
+    ``tally`` is the key it is counted under in the operator's summary; it is
+    separate from ``category`` because AVSR has no categories — it has right
+    and wrong — and a summary of "None: 135" would say nothing.
+    """
+
+    tally: str
+    category: str | None = None
+    is_correct: bool | None = None
+
+
+@dataclass(frozen=True)
+class TrialPolicy:
+    """Everything the loop needs that differs between modules."""
+
+    module: str
+    fixation_s: float
+    post_response_s: float
+    timeout_s: float
+    timeout_message: str
+    #: The response-set entry that opens a free-text field, or None.
+    free_text_label: str | None
+    free_text_prompt: str
+    #: The grid to show for a given trial.  A callable rather than a single
+    #: grid because AVSR asks a different question in V-only, where there is
+    #: nothing to have heard.
+    grid_for: Callable[[Trial], ResponseGrid]
+    evaluate: Callable[[str | None, Trial], Evaluation]
 
 
 @dataclass
@@ -49,15 +96,105 @@ class BlockOutcome:
     block_id: int
     block_index: int
     n_planned: int
+    module: str = ""
     n_presented: int = 0
     n_timeouts: int = 0
     categories: Counter[str] = field(default_factory=Counter)
+    #: Only meaningful where the module scores responses (AVSR); McGurk leaves
+    #: both at zero because there is no correct answer to count (§A.10).
+    n_scored: int = 0
+    n_correct: int = 0
     dropped_frame_trials: int = 0
     audio_glitch_trials: int = 0
     status: str = SESSION_COMPLETED
 
 
-def run_mcgurk(
+# ------------------------------------------------------------------ policies
+
+
+def mcgurk_policy(config: ExperimentConfig, win: Any) -> TrialPolicy:
+    module = config.modules.mcgurk
+    grid = ResponseGrid(
+        win,
+        labels=list(module.response_set),
+        keys=list(module.response_keys),
+        question=module.prompts.question,
+    )
+
+    def evaluate(label: str | None, trial: Trial) -> Evaluation:
+        category = mcgurk_module.categorise_for(module, label, trial)
+        # §A.10 — and the database refuses anything else here.
+        return Evaluation(tally=category, category=category, is_correct=None)
+
+    return TrialPolicy(
+        module=mcgurk_module.MODULE_NAME,
+        fixation_s=module.fixation_duration_ms / 1000.0,
+        post_response_s=module.post_response_ms / 1000.0,
+        timeout_s=module.response_timeout_s,
+        timeout_message=module.prompts.timeout,
+        free_text_label=module.free_text_response,
+        free_text_prompt=module.prompts.other,
+        grid_for=lambda _trial: grid,
+        evaluate=evaluate,
+    )
+
+
+#: Tallies for a scored module.  Turkish, like the rest of the operator's
+#: console; they never reach the participant.
+CORRECT_TALLY = "DOĞRU"
+INCORRECT_TALLY = "YANLIŞ"
+
+
+def avsr_policy(config: ExperimentConfig, win: Any) -> TrialPolicy:
+    module = config.modules.avsr
+    avsr_module.check_response_mode(module)
+
+    # One grid per distinct question, built once per block: rebuilding four
+    # TextStims per trial would put font work in the inter-trial interval,
+    # which is where the next trial's media are being loaded (§A.12).
+    grids = {
+        mode: ResponseGrid(
+            win,
+            labels=list(module.response_set),
+            keys=list(module.response_keys),
+            question=module.question_for(mode),
+        )
+        for mode in module.presentation_modes
+    }
+
+    def evaluate(label: str | None, trial: Trial) -> Evaluation:
+        correct = avsr_module.score_for(label, trial)
+        return Evaluation(
+            tally=CORRECT_TALLY if correct else INCORRECT_TALLY,
+            # Scored modules leave `category` empty: is_correct already says
+            # it, and one fact in two columns is one fact that can disagree.
+            category=None,
+            is_correct=correct,
+        )
+
+    def grid_for(trial: Trial) -> ResponseGrid:
+        mode = trial.presentation_mode or ""
+        if mode not in grids:  # pragma: no cover - the design cannot produce it
+            raise KeyError(f"AVSR denemesinde bilinmeyen sunum modu: {mode!r}")
+        return grids[mode]
+
+    return TrialPolicy(
+        module=avsr_module.MODULE_NAME,
+        fixation_s=module.fixation_duration_ms / 1000.0,
+        post_response_s=module.post_response_ms / 1000.0,
+        timeout_s=module.response_timeout_s,
+        timeout_message=module.prompts.timeout,
+        free_text_label=module.free_text_response,
+        free_text_prompt=module.prompts.other,
+        grid_for=grid_for,
+        evaluate=evaluate,
+    )
+
+
+# -------------------------------------------------------------------- the loop
+
+
+def run_blocks(
     *,
     config: ExperimentConfig,
     db: Database,
@@ -66,6 +203,7 @@ def run_mcgurk(
     win: Any,
     kb: Any,
     planned: list[PlannedTrial],
+    policy: TrialPolicy,
 ) -> list[BlockOutcome]:
     """Present *planned* and record every trial.
 
@@ -74,16 +212,6 @@ def run_mcgurk(
     salvage, and :class:`AbortSession` propagates so the caller can close the
     session as ``aborted``.
     """
-    module = config.modules.mcgurk
-    grid = ResponseGrid(
-        win,
-        labels=list(module.response_set),
-        keys=list(module.response_keys),
-        question=module.prompts.question,
-    )
-    fixation_s = module.fixation_duration_ms / 1000.0
-    post_response_s = module.post_response_ms / 1000.0
-
     outcomes: list[BlockOutcome] = []
     trial_index = 0
     for chunk_number, trials in enumerate(
@@ -93,14 +221,17 @@ def run_mcgurk(
         block_id = db.add_block(
             Block(
                 session_id=session_id,
-                module=MODULE_NAME,
+                module=policy.module,
                 block_index=block_index,
-                label=f"{MODULE_NAME} {chunk_number + 1}",
+                label=f"{policy.module} {chunk_number + 1}",
                 n_trials_planned=len(trials),
             )
         )
         outcome = BlockOutcome(
-            block_id=block_id, block_index=block_index, n_planned=len(trials)
+            block_id=block_id,
+            block_index=block_index,
+            n_planned=len(trials),
+            module=policy.module,
         )
         outcomes.append(outcome)
         logger.info(
@@ -110,17 +241,14 @@ def run_mcgurk(
         try:
             for item in trials:
                 _run_one_trial(
-                    config=config,
                     db=db,
                     presenter=presenter,
                     win=win,
                     kb=kb,
-                    grid=grid,
+                    policy=policy,
                     item=item,
                     block_id=block_id,
                     trial_index=trial_index,
-                    fixation_s=fixation_s,
-                    post_response_s=post_response_s,
                     outcome=outcome,
                 )
                 trial_index += 1
@@ -141,7 +269,7 @@ def run_mcgurk(
 
         db.finish_block(block_id, SESSION_COMPLETED)
         logger.info(
-            "Blok %d tamamlandı: %d deneme, %d zaman aşımı, kategoriler %s",
+            "Blok %d tamamlandı: %d deneme, %d zaman aşımı, %s",
             block_index,
             outcome.n_presented,
             outcome.n_timeouts,
@@ -151,37 +279,79 @@ def run_mcgurk(
     return outcomes
 
 
+def run_mcgurk(
+    *,
+    config: ExperimentConfig,
+    db: Database,
+    session_id: int,
+    presenter: AVPresenter,
+    win: Any,
+    kb: Any,
+    planned: list[PlannedTrial],
+) -> list[BlockOutcome]:
+    """Modül 1 — see :func:`run_blocks`."""
+    return run_blocks(
+        config=config,
+        db=db,
+        session_id=session_id,
+        presenter=presenter,
+        win=win,
+        kb=kb,
+        planned=planned,
+        policy=mcgurk_policy(config, win),
+    )
+
+
+def run_avsr(
+    *,
+    config: ExperimentConfig,
+    db: Database,
+    session_id: int,
+    presenter: AVPresenter,
+    win: Any,
+    kb: Any,
+    planned: list[PlannedTrial],
+) -> list[BlockOutcome]:
+    """Modül 2 — see :func:`run_blocks`."""
+    return run_blocks(
+        config=config,
+        db=db,
+        session_id=session_id,
+        presenter=presenter,
+        win=win,
+        kb=kb,
+        planned=planned,
+        policy=avsr_policy(config, win),
+    )
+
+
 def outcome_label(outcome: BlockOutcome) -> str:
-    return f"{MODULE_NAME} #{outcome.block_index}"
+    return f"{outcome.module} #{outcome.block_index}"
 
 
 def _run_one_trial(
     *,
-    config: ExperimentConfig,
     db: Database,
     presenter: AVPresenter,
     win: Any,
     kb: Any,
-    grid: ResponseGrid,
+    policy: TrialPolicy,
     item: PlannedTrial,
     block_id: int,
     trial_index: int,
-    fixation_s: float,
-    post_response_s: float,
     outcome: BlockOutcome,
 ) -> None:
-    module = config.modules.mcgurk
-
     # Loading first, fixation second: the fixation is the participant's cue that
     # a trial is starting, and it should not be the interval that stutters.
     prepared = presenter.prepare(item.spec)
     try:
-        _hold_fixation(presenter, win, fixation_s)
+        _hold_fixation(presenter, win, policy.fixation_s)
 
         # The design row goes in before the presentation, so a trial that fails
         # to present is visible as a trial with no timing rather than not
         # visible at all.  Nothing is committed until the block closes (§A.5).
-        trial_id = db.add_trial(item.for_block(block_id, trial_index))
+        trial = item.for_block(block_id, trial_index)
+        trial_id = db.add_trial(trial)
 
         record = presenter.present(prepared)
         db.set_trial_timing(trial_id, record.to_trial_timing())
@@ -191,40 +361,43 @@ def _run_one_trial(
         if record.audio_time_failed or record.audio_xruns:
             outcome.audio_glitch_trials += 1
 
-        choice = collect_choice(
-            win, grid, kb, timeout_s=module.response_timeout_s
-        )
+        grid = policy.grid_for(trial)
+        choice = collect_choice(win, grid, kb, timeout_s=policy.timeout_s)
         free_text: str | None = None
         if (
             choice.label is not None
-            and module.free_text_response is not None
-            and choice.label.casefold() == module.free_text_response.casefold()
+            and policy.free_text_label is not None
+            and choice.label.casefold() == policy.free_text_label.casefold()
         ):
             free_text = collect_free_text(
                 win,
                 kb,
-                prompt=module.prompts.other,
-                timeout_s=module.response_timeout_s,
+                prompt=policy.free_text_prompt,
+                timeout_s=policy.timeout_s,
             )
 
         if choice.timed_out:
             outcome.n_timeouts += 1
-            outcome.categories["NONE"] += 1
+            outcome.categories[TIMEOUT_TALLY] += 1
             show_message(
-                win, module.prompts.timeout, duration_s=min(1.0, post_response_s + 0.7)
+                win,
+                policy.timeout_message,
+                duration_s=min(1.0, policy.post_response_s + 0.7),
             )
         else:
-            category = categorise_for(module, choice.label, item.trial)
-            outcome.categories[category] += 1
+            evaluation = policy.evaluate(choice.label, trial)
+            outcome.categories[evaluation.tally] += 1
+            if evaluation.is_correct is not None:
+                outcome.n_scored += 1
+                outcome.n_correct += int(evaluation.is_correct)
             db.add_response(
                 Response(
                     trial_id=trial_id,
                     response_index=0,
                     raw_response=choice.label,
                     free_text=free_text or None,
-                    category=category,
-                    # §A.10 — and the database refuses anything else here.
-                    is_correct=None,
+                    category=evaluation.category,
+                    is_correct=evaluation.is_correct,
                     rt_from_burst_ms=_rt_from_burst_ms(presenter, record, choice),
                     rt_from_prompt_ms=choice.rt_from_prompt_ms,
                     input_device="keyboard",
@@ -233,18 +406,19 @@ def _run_one_trial(
     finally:
         presenter.release(prepared)
 
-    _blank(win, post_response_s)
+    _blank(win, policy.post_response_s)
 
 
 def _rt_from_burst_ms(
     presenter: AVPresenter, record: TimingRecord, choice: Choice
 ) -> float | None:
-    """RT measured from the acoustic burst rather than from the prompt.
+    """RT measured from the burst rather than from the prompt.
 
     Composed from the response's own RT and the known interval between the burst
     and the prompt flip, both on the ptb clock.  ``burst_onset_s`` is relative to
     the presenter's reference time, so it is put back on the absolute clock
-    first.
+    first.  In a V-only trial the "burst" is the visual one (see
+    ``TimingRecord.burst_onset_s``).
     """
     if choice.rt_from_prompt_ms is None or record.burst_onset_s is None:
         return None
@@ -283,6 +457,7 @@ def summarise(outcomes: list[BlockOutcome]) -> str:
     """A short report of a run, for the operator's console."""
     total: Counter[str] = Counter()
     presented = timeouts = planned = dropped = glitches = 0
+    scored = correct = 0
     for outcome in outcomes:
         total.update(outcome.categories)
         planned += outcome.n_planned
@@ -290,6 +465,8 @@ def summarise(outcomes: list[BlockOutcome]) -> str:
         timeouts += outcome.n_timeouts
         dropped += outcome.dropped_frame_trials
         glitches += outcome.audio_glitch_trials
+        scored += outcome.n_scored
+        correct += outcome.n_correct
 
     lines = [
         f"Blok sayısı            : {len(outcomes)}",
@@ -297,9 +474,16 @@ def summarise(outcomes: list[BlockOutcome]) -> str:
         f"Zaman aşımı            : {timeouts}",
         f"Kare düşen deneme      : {dropped}",
         f"Ses zamanlaması bozulan: {glitches}",
-        "Kategoriler:",
     ]
-    for category, count in sorted(total.items(), key=lambda item: -item[1]):
+    if scored:
+        # Timeouts are outside `scored` because they produce no response; the
+        # line above is where they are visible.
+        lines.append(
+            f"Doğruluk (yanıtlanan)  : {correct} / {scored} "
+            f"(%{100 * correct / scored:.1f})"
+        )
+    lines.append("Yanıtlar:")
+    for tally, count in sorted(total.items(), key=lambda item: -item[1]):
         share = 100.0 * count / presented if presented else 0.0
-        lines.append(f"  {category:<12}{count:>5}  (%{share:.1f})")
+        lines.append(f"  {tally:<12}{count:>5}  (%{share:.1f})")
     return "\n".join(lines)

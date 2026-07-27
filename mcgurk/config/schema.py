@@ -14,9 +14,9 @@ from __future__ import annotations
 import re
 from datetime import date
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 Mode = Literal["development", "data_collection"]
 Ear = Literal["left", "right", "both"]
@@ -178,12 +178,20 @@ class PromptTexts(StrictModel):
     timeout: str = Field(min_length=1)
 
 
-class McGurkConfig(ModuleBase):
-    speaker_id: int = Field(ge=1)
-    av_pairs: list[AVPair] = Field(min_length=1)
-    #: ``null`` = quiet, a number = SNR in dB.
-    noise_conditions: list[float | None] = Field(min_length=1)
-    ears: list[Ear] = Field(min_length=1)
+class ResponseUIConfig(ModuleBase):
+    """The forced-choice response screen, for the modules that show one.
+
+    Shared by McGurk (Adım 4) and AVSR (Adım 5): both put a labelled grid on
+    the screen, take one key press and time out the same way, and every string
+    the participant reads has to come from the config (§A.9).  What differs is
+    what a response *means*, and that stays in the modules.
+
+    ``config_path`` only names the section in the error messages, so a mistake
+    in the AVSR block does not send the operator to the McGurk block.
+    """
+
+    config_path: ClassVar[str] = "modules.<modül>"
+
     response_set: list[str] = Field(min_length=2)
     #: Key that selects each entry of ``response_set``, in the same order.
     response_keys: list[str] = Field(min_length=2)
@@ -196,6 +204,47 @@ class McGurkConfig(ModuleBase):
     post_response_ms: float = Field(ge=0)
     prompts: PromptTexts
     randomization: Literal["block_shuffle", "full_shuffle"]
+
+    @model_validator(mode="after")
+    def _keys_match_the_response_set(self) -> ResponseUIConfig:
+        where = self.config_path
+        if len(self.response_keys) != len(self.response_set):
+            raise ValueError(
+                f"{where}.response_keys ile response_set aynı uzunlukta "
+                f"olmalı ({len(self.response_keys)} tuş, "
+                f"{len(self.response_set)} yanıt) — eşleme sıraya dayanıyor"
+            )
+        if len(set(self.response_keys)) != len(self.response_keys):
+            raise ValueError(f"{where}.response_keys tekrarlı tuş içeriyor")
+        if len({r.casefold() for r in self.response_set}) != len(self.response_set):
+            raise ValueError(f"{where}.response_set tekrarlı yanıt içeriyor")
+        # An empty label would be an option the participant cannot read and a
+        # response the scoring cannot interpret — AVSR would record it with a
+        # NULL is_correct, which is reserved for the modules that have no
+        # correct answer at all.
+        if any(not label.strip() for label in self.response_set):
+            raise ValueError(f"{where}.response_set boş bir yanıt içeriyor")
+        if any(not key.strip() for key in self.response_keys):
+            raise ValueError(f"{where}.response_keys boş bir tuş içeriyor")
+        if self.free_text_response is not None and self.free_text_response.casefold() not in {
+            r.casefold() for r in self.response_set
+        }:
+            raise ValueError(
+                f"{where}.free_text_response '{self.free_text_response}' "
+                "response_set içinde yok — seçilemeyen bir seçenek serbest metin "
+                "alanını hiç açmaz"
+            )
+        return self
+
+
+class McGurkConfig(ResponseUIConfig):
+    config_path: ClassVar[str] = "modules.mcgurk"
+
+    speaker_id: int = Field(ge=1)
+    av_pairs: list[AVPair] = Field(min_length=1)
+    #: ``null`` = quiet, a number = SNR in dB.
+    noise_conditions: list[float | None] = Field(min_length=1)
+    ears: list[Ear] = Field(min_length=1)
     #: "visual|audio" -> accepted responses.  Kept out of the code (§A.9) so
     #: the categorisation can be revised without touching the module.
     fusion_map: dict[str, list[str]] = Field(default_factory=dict)
@@ -248,28 +297,6 @@ class McGurkConfig(ModuleBase):
         return self
 
     @model_validator(mode="after")
-    def _keys_match_the_response_set(self) -> McGurkConfig:
-        if len(self.response_keys) != len(self.response_set):
-            raise ValueError(
-                "modules.mcgurk.response_keys ile response_set aynı uzunlukta "
-                f"olmalı ({len(self.response_keys)} tuş, "
-                f"{len(self.response_set)} yanıt) — eşleme sıraya dayanıyor"
-            )
-        if len(set(self.response_keys)) != len(self.response_keys):
-            raise ValueError("modules.mcgurk.response_keys tekrarlı tuş içeriyor")
-        if len({r.casefold() for r in self.response_set}) != len(self.response_set):
-            raise ValueError("modules.mcgurk.response_set tekrarlı yanıt içeriyor")
-        if self.free_text_response is not None and self.free_text_response.casefold() not in {
-            r.casefold() for r in self.response_set
-        }:
-            raise ValueError(
-                f"modules.mcgurk.free_text_response '{self.free_text_response}' "
-                "response_set içinde yok — seçilemeyen bir seçenek serbest metin "
-                "alanını hiç açmaz"
-            )
-        return self
-
-    @model_validator(mode="after")
     def _duplicate_noise_or_ears(self) -> McGurkConfig:
         if len(set(self.ears)) != len(self.ears):
             raise ValueError("modules.mcgurk.ears tekrarlı değer içeriyor")
@@ -291,6 +318,12 @@ class StimulusSet(StrictModel):
     reps: int = Field(gt=0)
     enabled: bool
 
+    #: Items read from ``word_list``.  Filled in by the loader, which is the
+    #: only layer allowed to touch the disk; it stays private so the words
+    #: cannot also be written inline in the YAML, which would give the design
+    #: two sources that could disagree.
+    _items: list[str] | None = PrivateAttr(default=None)
+
     @model_validator(mode="after")
     def _shape_matches_type(self) -> StimulusSet:
         if self.type == "syllable":
@@ -305,29 +338,56 @@ class StimulusSet(StrictModel):
                 raise ValueError("type: word ile 'tokens' birlikte kullanılamaz")
         return self
 
-    def n_items(self) -> int:
-        """How many distinct items this set contributes.
+    def attach_items(self, items: list[str]) -> None:
+        """Record the words read from ``word_list`` (loader only)."""
+        self._items = list(items)
 
-        Word lists are not read here.  Loading them is Adım 5's job (steps.md
-        §C Adım 5) and the recording session has not happened yet (§F.2), so an
-        enabled word set is reported as an error rather than guessed at.
-        """
+    def resolved_items(self) -> list[str] | None:
+        """The items, or None while a word list is still unread."""
         if self.type == "syllable":
-            return len(self.tokens or [])
-        raise ValueError(
-            f"Kelime listesi ({self.word_list}) henüz yüklenemiyor — kelime seti "
-            "desteği Adım 5'te geliyor (§F.2). Şimdilik 'enabled: false' bırakın."
-        )
+            return list(self.tokens or [])
+        return None if self._items is None else list(self._items)
+
+    def items(self) -> list[str]:
+        """The distinct items this set presents, in config order.
+
+        Word lists live in their own file, so they are read by the loader and
+        attached here.  A word set that was never resolved raises rather than
+        reporting zero items: zero would quietly shrink the design.
+        """
+        items = self.resolved_items()
+        if items is None:
+            raise ValueError(
+                f"Kelime listesi ({self.word_list}) yüklenmedi — config'i "
+                "mcgurk.config.loader.load_config ile açın (şema diske dokunmaz)"
+            )
+        return items
+
+    def n_items(self) -> int:
+        """How many distinct items this set contributes."""
+        return len(self.items())
 
 
-class AVSRConfig(ModuleBase):
+class AVSRConfig(ResponseUIConfig):
+    config_path: ClassVar[str] = "modules.avsr"
+
     speaker_id: int = Field(ge=1)
     stimulus_sets: list[StimulusSet] = Field(min_length=1)
     presentation_modes: list[PresentationMode] = Field(min_length=1)
     noise_conditions: list[float | None] = Field(min_length=1)
     ears: list[Ear] = Field(min_length=1)
     response_mode: Literal["closed_set", "open_set"]
-    response_timeout_s: float = Field(gt=0)
+    #: Question per presentation mode, overriding ``prompts.question``.
+    #: "Ne duydunuz?" is the wrong question in a V-only trial, where there is
+    #: nothing to hear — and the wording is a protocol detail, so it belongs in
+    #: the snapshot rather than in a branch in the code (§A.9).
+    mode_questions: dict[PresentationMode, str] = Field(default_factory=dict)
+
+    def question_for(self, mode: str) -> str:
+        for presented, question in self.mode_questions.items():
+            if presented == mode:
+                return question
+        return self.prompts.question
 
     def total_trials(self) -> int:
         total = 0
@@ -353,6 +413,18 @@ class AVSRConfig(ModuleBase):
             )
         if len(set(self.presentation_modes)) != len(self.presentation_modes):
             raise ValueError("modules.avsr.presentation_modes tekrarlı değer içeriyor")
+        if len(set(self.ears)) != len(self.ears):
+            raise ValueError("modules.avsr.ears tekrarlı değer içeriyor")
+        keys = [("null" if n is None else n) for n in self.noise_conditions]
+        if len(set(keys)) != len(keys):
+            raise ValueError("modules.avsr.noise_conditions tekrarlı değer içeriyor")
+        unused = sorted(set(self.mode_questions) - set(self.presentation_modes))
+        if unused:
+            raise ValueError(
+                f"modules.avsr.mode_questions sunulmayan mod içeriyor: {unused} "
+                f"(presentation_modes: {self.presentation_modes}) — hiç görünmeyecek "
+                "bir metin yazılmış demektir"
+            )
         return self
 
 
@@ -549,7 +621,7 @@ class GINConfig(ModuleBase):
         if presentations != self.reps_per_gap:
             raise ValueError(
                 "modules.gin.threshold_criterion sunum sayısı reps_per_gap ile "
-                f"eşleşmeli ({presentations} ≠ {self.reps_per_gap})"
+                f"eşleşmeli ({presentations} != {self.reps_per_gap})"
             )
 
         capacity = self.n_segments * self.max_gaps_per_segment
@@ -557,7 +629,7 @@ class GINConfig(ModuleBase):
             raise ValueError(
                 f"modules.gin: {self.total_gaps()} boşluk {self.n_segments} "
                 f"segmente sığmıyor (segment başına en fazla "
-                f"{self.max_gaps_per_segment} → kapasite {capacity})"
+                f"{self.max_gaps_per_segment} -> kapasite {capacity})"
             )
 
         # The gaps plus the silence that has to separate them must physically
@@ -796,8 +868,11 @@ class ExperimentConfig(StrictModel):
         if self.modules.avsr.enabled:
             tokens: set[str] = set()
             for stimulus_set in self.modules.avsr.stimulus_sets:
-                if stimulus_set.enabled and stimulus_set.type == "syllable":
-                    tokens.update(stimulus_set.tokens or [])
+                if not stimulus_set.enabled:
+                    continue
+                # A word set contributes nothing until the loader has read its
+                # file; the loader re-runs this check once it has.
+                tokens.update(stimulus_set.resolved_items() or [])
             needed["avsr"] = sorted(tokens)
         if self.modules.tbw.enabled:
             stimulus = self.modules.tbw.stimulus
@@ -874,11 +949,23 @@ class ExperimentConfig(StrictModel):
 
     @model_validator(mode="after")
     def _design_matches_the_stimulus_set(self) -> ExperimentConfig:
+        problems = self.design_problems()
+        if problems:
+            raise ValueError(
+                "Tasarım ile uyaran seti uyuşmuyor:\n  - " + "\n  - ".join(problems)
+            )
+        return self
+
+    def design_problems(self) -> list[str]:
         """Every speaker and token the design uses must be preparable.
 
         Without this, a typo in ``av_pairs`` or a ``speaker_id`` with no
         recording folder surfaces as a missing file — either when the stimuli
         are prepared, or worse, halfway through a session.
+
+        Returned rather than raised so the loader can run it a second time,
+        after it has read the AVSR word lists: those items are not knowable at
+        schema-validation time, and this layer never touches the disk.
         """
         problems: list[str] = []
 
@@ -913,11 +1000,7 @@ class ExperimentConfig(StrictModel):
                     "düşebilir"
                 )
 
-        if problems:
-            raise ValueError(
-                "Tasarım ile uyaran seti uyuşmuyor:\n  - " + "\n  - ".join(problems)
-            )
-        return self
+        return problems
 
     @model_validator(mode="after")
     def _data_collection_requirements(self) -> ExperimentConfig:

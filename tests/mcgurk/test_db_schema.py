@@ -288,7 +288,11 @@ def test_congruent_module_may_be_scored(db: Database) -> None:
             module="avsr",
             audio_token="ba",
             presentation_mode="A",
-            design_extra={"stimulus_type": "syllable", "item": "ba"},
+            design_extra={
+                "speaker_id": 1,
+                "stimulus_type": "syllable",
+                "item": "ba",
+            },
         )
     )
     response_id = db.add_response(

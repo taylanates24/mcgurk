@@ -32,7 +32,14 @@ from ..config.schema import AVPair, ExperimentConfig, McGurkConfig
 from ..db.models import Trial
 from ..engine.av_presenter import TrialSpec
 from ..stimuli.manifest import ManifestError, NoisyTokenEntry, StimulusManifest
-from .base import ModuleError, PlannedTrial, balanced_cycle, derive_seed, order_cells
+from .base import (
+    QUIET,
+    ModuleError,
+    PlannedTrial,
+    balanced_cycle,
+    derive_seed,
+    order_cells,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +56,6 @@ OTHER = "OTHER"
 NONE = "NONE"
 
 CATEGORIES = (AUDITORY, VISUAL, FUSION, COMBINATION, OTHER, NONE)
-
-#: ``trials.noise_condition`` in the quiet condition.  The noisy one is named
-#: after ``stimulus_prep.noise.type``, so the column says what was mixed in.
-QUIET = "quiet"
 
 #: Identifies a design cell for the per-cell bookkeeping (noise instances).
 CellKey = tuple[str, str, float | None, str]

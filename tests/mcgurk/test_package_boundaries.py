@@ -34,6 +34,7 @@ ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY = (
     "mcgurk.engine.psychopy_prefs",
     "mcgurk.modules.base",
     "mcgurk.modules.mcgurk",
+    "mcgurk.modules.avsr",
 )
 
 

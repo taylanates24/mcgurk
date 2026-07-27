@@ -261,8 +261,8 @@ def _write_video(
     frames = ffmpeg.count_frames(destination)
     if frames != source_frames:
         raise StimulusError(
-            f"{destination}: kare sayısı {source_frames} → {frames} değişti. "
-            f"{source_fps:g} → {prep.video.target_fps:g} fps dönüşümü bu klip "
+            f"{destination}: kare sayısı {source_frames} -> {frames} değişti. "
+            f"{source_fps:g} -> {prep.video.target_fps:g} fps dönüşümü bu klip "
             "uzunluğunda kare eklememeli/atmamalı."
         )
     info = ffmpeg.probe(destination)

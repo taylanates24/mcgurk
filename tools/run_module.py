@@ -1,4 +1,4 @@
-"""Run one assessment module on its own (steps.md §C Adım 4).
+"""Run one assessment module on its own (steps.md §C Adım 4–5).
 
 This is a **development harness**, not the session flow.  Adım 8 owns the real
 thing — participant login, the pre-session checklist, instructions, practice,
@@ -27,6 +27,7 @@ import argparse
 import random
 import sys
 from pathlib import Path
+from typing import Any
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
@@ -39,7 +40,7 @@ from mcgurk.config.loader import (  # noqa: E402
     resolve_path,
     summarise_design,
 )
-from mcgurk.config.schema import ExperimentConfig  # noqa: E402
+from mcgurk.config.schema import ExperimentConfig, ResponseUIConfig  # noqa: E402
 from mcgurk.db.database import Database, DatabaseError  # noqa: E402
 from mcgurk.db.models import (  # noqa: E402
     SESSION_ABORTED,
@@ -48,13 +49,19 @@ from mcgurk.db.models import (  # noqa: E402
     SessionRecord,
 )
 from mcgurk.logging_setup import setup_logging  # noqa: E402
+from mcgurk.modules import avsr as avsr_module  # noqa: E402
+from mcgurk.modules import mcgurk as mcgurk_module  # noqa: E402
 from mcgurk.modules.base import ModuleError, PlannedTrial  # noqa: E402
-from mcgurk.modules.mcgurk import cell_counts, plan_trials  # noqa: E402
 from mcgurk.provenance import collect as collect_provenance  # noqa: E402
 from mcgurk.stimuli import manifest as manifest_module  # noqa: E402
 from mcgurk.stimuli.manifest import ManifestError  # noqa: E402
 
-MODULES = ("mcgurk",)
+#: Modules this harness can run, and where their design comes from.  Adım 6–7c
+#: add their own entries here; nothing else in the tool is module-specific.
+MODULES = {
+    "mcgurk": mcgurk_module,
+    "avsr": avsr_module,
+}
 
 #: Development participant.  An anonymous code and nothing else (§A.6); the age
 #: has to satisfy the database's 18–60 CHECK.
@@ -78,11 +85,13 @@ def build_plan(
 ) -> list[PlannedTrial]:
     stimuli_root = resolve_path(_PROJECT_ROOT, config.paths.stimuli)
     manifest = manifest_module.load(stimuli_root)
-    if module != "mcgurk":  # pragma: no cover - argparse restricts this
-        raise ModuleError(f"Bu araç henüz yalnızca 'mcgurk' modülünü koşuyor: {module}")
-    return plan_trials(
+    implementation = MODULES.get(module)
+    if implementation is None:  # pragma: no cover - argparse restricts this
+        raise ModuleError(f"Bu araç bu modülü henüz koşmuyor: {module}")
+    planned: list[PlannedTrial] = implementation.plan_trials(
         config, manifest, seed=seed, stimuli_root=stimuli_root, speaker_id=speaker_id
     )
+    return planned
 
 
 def dry_run(config: ExperimentConfig, module: str, planned: list[PlannedTrial], seed: int) -> int:
@@ -97,19 +106,25 @@ def dry_run(config: ExperimentConfig, module: str, planned: list[PlannedTrial], 
 
     _rule("Hücreler")
     print(f"  {'Etiket':<20}{'Uyaran':<22}{'Kulak':<8}{'Gürültü':<10}{'n':>4}")
-    for (label, tokens, ear, noise), count in sorted(cell_counts(planned).items()):
+    for (label, tokens, ear, noise), count in sorted(
+        MODULES[module].cell_counts(planned).items()
+    ):
         print(f"  {label:<20}{tokens:<22}{ear:<8}{noise:<10}{count:>4}")
 
     _rule("İlk 12 deneme")
-    print(f"  {'#':>3}  {'Etiket':<20}{'Kulak':<8}{'Gürültü':<10}{'Örnek':<7}Ses dosyası")
+    print(f"  {'#':>3}  {'Etiket':<20}{'Kulak':<8}{'Gürültü':<10}{'Örnek':<7}Dosya")
     for index, item in enumerate(planned[:12]):
         trial = item.trial
         noise = "sessiz" if trial.snr_db is None else f"{trial.snr_db:g} dB"
+        if trial.presentation_mode == "V":
+            noise = "—"
         instance = trial.design_extra.get("noise_instance")
-        assert item.spec.audio_path is not None
+        # V-only carries a video and no audio; A-only the other way round.
+        media = item.spec.audio_path or item.spec.video_path
+        assert media is not None
         print(
-            f"  {index:>3}  {trial.condition_label:<20}{str(trial.ear):<8}"
-            f"{noise:<10}{str(instance or '—'):<7}{item.spec.audio_path.name}"
+            f"  {index:>3}  {trial.condition_label:<20}{str(trial.ear or '—'):<8}"
+            f"{noise:<10}{str(instance or '—'):<7}{media.name}"
         )
 
     _rule("Dosya kontrolü")
@@ -133,7 +148,8 @@ def dry_run(config: ExperimentConfig, module: str, planned: list[PlannedTrial], 
     print(f"  {len(unique)} ayrı dosya, tamamı yerinde.")
 
     _rule("Yanıt seti")
-    module_config = config.modules.mcgurk
+    module_config = config.modules.by_name()[module]
+    assert isinstance(module_config, ResponseUIConfig)
     for key, label in zip(module_config.response_keys, module_config.response_set, strict=True):
         marker = ""
         if (
@@ -190,8 +206,10 @@ def live_run(
         measure_refresh_hz,
         open_window,
     )
-    from mcgurk.modules.block import run_mcgurk, summarise
+    from mcgurk.modules.block import run_avsr, run_mcgurk, summarise
     from mcgurk.modules.response import make_keyboard
+
+    runners = {"mcgurk": run_mcgurk, "avsr": run_avsr}
 
     configure_psychopy(audio_device=config.audio.device)
     require_ptb_backend()
@@ -249,7 +267,7 @@ def live_run(
             alignment_tolerance_ms=config.stimulus_prep.burst.alignment_tolerance_ms,
             fixation=make_fixation(win),
         )
-        outcomes = run_mcgurk(
+        outcomes = runners[module](
             config=config,
             db=db,
             session_id=session_id,
@@ -281,7 +299,26 @@ def live_run(
     if outcomes:
         _rule("Koşu özeti")
         print(summarise(outcomes))
+        if module == "avsr":
+            print()
+            print(avsr_module.summarise_measures(_flat_rows(db_path, session_id)))
     return exit_code
+
+
+def _flat_rows(db_path: Path, session_id: int | None) -> list[Any]:
+    """Read the session back for the module's own measures.
+
+    After the run, not during it: the measures are a report on what was
+    collected, and computing them from the same objects that wrote the rows
+    would not notice a row that never arrived.
+    """
+    if session_id is None:
+        return []
+    db = Database(db_path)
+    try:
+        return list(db.flat_rows(session_id))
+    finally:
+        db.close()
 
 
 # ------------------------------------------------------------------ plumbing
@@ -292,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Tek bir modülü koştur (geliştirme aracı, steps.md §C Adım 4)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--module", choices=MODULES, default="mcgurk")
+    parser.add_argument("--module", choices=sorted(MODULES), default="mcgurk")
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--db", type=Path, default=None, help="config'teki veritabanını ez")
     parser.add_argument(
@@ -334,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
     print(summarise_design(config))
     try:
         planned = build_plan(config, args.module, seed, speaker_id=args.speaker_id)
-    except (ManifestError, ModuleError) as exc:
+    except (ManifestError, ModuleError, NotImplementedError) as exc:
         print(f"\nHATA: {exc}", file=sys.stderr)
         return 1
 
