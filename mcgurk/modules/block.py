@@ -45,6 +45,7 @@ from ..db.models import (
 from ..engine import AbortSession
 from ..engine.av_presenter import AVPresenter, TimingRecord, check_abort
 from . import avsr as avsr_module
+from . import dichotic as dichotic_module
 from . import mcgurk as mcgurk_module
 from . import tbw as tbw_module
 from .base import PlannedTrial, chunk
@@ -233,6 +234,39 @@ def tbw_policy(config: ExperimentConfig, win: Any) -> TrialPolicy:
     )
 
 
+def dichotic_policy(config: ExperimentConfig, win: Any) -> TrialPolicy:
+    """Modül 5 — one report of a syllable heard under binaural competition.
+
+    The same screen as McGurk with four options instead of nine, and the same
+    absence of a correct answer: what is recorded is which ear's syllable was
+    reported (``category``), never whether the participant was right (§A.10 —
+    and the database refuses ``is_correct`` on ``dichotic`` trials).
+    """
+    module = config.modules.dichotic
+    grid = ResponseGrid(
+        win,
+        labels=list(module.response_set),
+        keys=list(module.response_keys),
+        question=module.prompts.question,
+    )
+
+    def evaluate(label: str | None, trial: Trial) -> Evaluation:
+        category = dichotic_module.categorise_for(label, trial)
+        return Evaluation(tally=category, category=category, is_correct=None)
+
+    return TrialPolicy(
+        module=dichotic_module.MODULE_NAME,
+        fixation_s=module.fixation_duration_ms / 1000.0,
+        post_response_s=module.post_response_ms / 1000.0,
+        timeout_s=module.response_timeout_s,
+        timeout_message=module.prompts.timeout,
+        free_text_label=module.free_text_response,
+        free_text_prompt=module.prompts.other,
+        grid_for=lambda _trial: grid,
+        evaluate=evaluate,
+    )
+
+
 # -------------------------------------------------------------------- the loop
 
 
@@ -387,6 +421,29 @@ def run_tbw(
         kb=kb,
         planned=planned,
         policy=tbw_policy(config, win),
+    )
+
+
+def run_dichotic(
+    *,
+    config: ExperimentConfig,
+    db: Database,
+    session_id: int,
+    presenter: AVPresenter,
+    win: Any,
+    kb: Any,
+    planned: list[PlannedTrial],
+) -> list[BlockOutcome]:
+    """Modül 5 — see :func:`run_blocks`."""
+    return run_blocks(
+        config=config,
+        db=db,
+        session_id=session_id,
+        presenter=presenter,
+        win=win,
+        kb=kb,
+        planned=planned,
+        policy=dichotic_policy(config, win),
     )
 
 

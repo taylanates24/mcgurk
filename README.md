@@ -450,7 +450,7 @@ Kademe 3 bu araçta gerçeklenmez; `docs/01_av_gecikme_olcumu.md` scriptleriyle,
 
 Oturum akışı Adım 8'de geliyor; o zamana kadar bir modül `tools/run_module.py`
 ile koşuluyor. Koşulabilen modüller: `mcgurk` (Adım 4), `avsr` (Adım 5),
-`tbw` (Adım 6) ve `oddball` (Adım 7).
+`tbw` (Adım 6), `oddball` (Adım 7) ve `dichotic` (Adım 7b).
 Önce tasarımı donanım açmadan denetleyin — deneme sayısını config'in hesabıyla
 karşılaştırır, hücre tablosunu basar ve her uyaran dosyasının yerinde olduğunu
 doğrular:
@@ -478,6 +478,11 @@ yalnızca sabitleme haçı durur ve tonlar kendi saatlerine göre akar. Sonunda
 sinyal tespiti tablosu basılır — isabet, kaçırma, yanlış alarm, doğru ret,
 d′, kriter ve isabet RT'si. Pencere dışında kalan tuş basımları ayrı sayılır:
 kaydedilirler ama hiçbir orana girmezler.
+
+Dikotik koşuda video yoktur: iki kulağa aynı anda farklı hece gelir ve ekranda
+yalnızca sabitleme haçı durur. Sonunda kulak başına bildirim oranı, karışım
+yanıtı oranı ve kulak avantajı indeksi (KAİ = [(Sağ - Sol) / (Sağ + Sol)] x 100)
+basılır. Doğru cevap yoktur; yanıtsız deneme indekse girmez, ayrıca sayılır.
 
 Bu bir **geliştirme aracıdır**: yönerge, alıştırma bloğu, mola ve katılımcı
 girişi yok, veritabanına `DEV01` kodlu bir geliştirme katılımcısı yazıyor.
@@ -548,8 +553,8 @@ gürültüsü biriktirmesini engeller. Manifest her dosyanın kaynak codec'ini v
 - Kesilen oturuma kaldığı yerden devam etme yok.
 
 **Yeni pakette henüz gelmeyenler:**
-- `mcgurk/modules/` McGurk (Adım 4), AVSR (Adım 5), TBW (Adım 6) ve oddball'ı
-  (Adım 7) içeriyor; dikotik ve GIN sırasıyla Adım 7b–7c'de. `ui/` ve
+- `mcgurk/modules/` McGurk (Adım 4), AVSR (Adım 5), TBW (Adım 6), oddball
+  (Adım 7) ve dikotiği (Adım 7b) içeriyor; GIN Adım 7c'de. `ui/` ve
   `analysis/` hâlâ boş (Adım 8 ve 9).
 - Yeni config ve veritabanı henüz hiçbir deneyi çalıştırmıyor; `main.py` Adım
   8'e kadar `src/` yolunu kullanmaya devam ediyor.

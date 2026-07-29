@@ -630,21 +630,27 @@ class DichoticPair(StrictModel):
     right: str = Field(min_length=1)
 
 
-class DichoticConfig(ModuleBase):
-    """Dichotic listening.
+class DichoticConfig(ResponseUIConfig):
+    """Modül 5 — dichotic listening (Adım 7b).
 
-    Not part of the reference method document yet — see progress.md, "Kullanıcıya
-    bekleyen aksiyonlar".  The stimuli are 48 kHz stereo PCM WAVs produced by
-    ``scripts/generate_dichotic_stimuli.py``; there is no video, so no ear or
-    presentation-mode crossing: the pair itself is the lateralisation.
+    Drafted for the method document as §6.5 (``docs/EK_DIKOTIK_DINLEME.docx``),
+    where it is still awaiting the supervisor's approval — see progress.md,
+    "Kullanıcıya bekleyen aksiyonlar".
+
+    The response screen is the shared one, so everything about showing it and
+    timing it is inherited.  What this module adds is the stimulus: a 48 kHz
+    stereo WAV carrying a different syllable in each ear (prepared in Adım 2).
+    There is no video, no noise condition — the competition between the ears is
+    the difficult condition — and no ear factor either: both ears receive a
+    token on every trial and which one is the pair itself, so nothing is crossed
+    with ``reps``.
     """
+
+    config_path: ClassVar[str] = "modules.dichotic"
 
     speaker_id: int = Field(ge=1)
     pairs: list[DichoticPair] = Field(min_length=1)
     reps: int = Field(gt=0)
-    response_set: list[str] = Field(min_length=2)
-    response_timeout_s: float = Field(gt=0)
-    randomization: Literal["block_shuffle", "full_shuffle"]
 
     def total_trials(self) -> int:
         return len(self.pairs) * self.reps

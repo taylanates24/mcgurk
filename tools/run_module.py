@@ -50,6 +50,7 @@ from mcgurk.db.models import (  # noqa: E402
 )
 from mcgurk.logging_setup import setup_logging  # noqa: E402
 from mcgurk.modules import avsr as avsr_module  # noqa: E402
+from mcgurk.modules import dichotic as dichotic_module  # noqa: E402
 from mcgurk.modules import mcgurk as mcgurk_module  # noqa: E402
 from mcgurk.modules import oddball as oddball_module  # noqa: E402
 from mcgurk.modules import tbw as tbw_module  # noqa: E402
@@ -58,13 +59,14 @@ from mcgurk.provenance import collect as collect_provenance  # noqa: E402
 from mcgurk.stimuli import manifest as manifest_module  # noqa: E402
 from mcgurk.stimuli.manifest import ManifestError  # noqa: E402
 
-#: Modules this harness can run, and where their design comes from.  Adım 7b–7c
-#: add their own entries here; nothing else in the tool is module-specific.
+#: Modules this harness can run, and where their design comes from.  Adım 7c
+#: adds its own entry here; nothing else in the tool is module-specific.
 MODULES = {
     "mcgurk": mcgurk_module,
     "avsr": avsr_module,
     "tbw": tbw_module,
     "oddball": oddball_module,
+    "dichotic": dichotic_module,
 }
 
 #: Modules presented as a continuous stream rather than as discrete trials.
@@ -146,6 +148,19 @@ def dry_run(config: ExperimentConfig, module: str, planned: list[PlannedTrial], 
         print(
             f"  Yanıt penceresi      : {oddball.response_window_ms[0]:g}-"
             f"{oddball.response_window_ms[1]:g} ms (ton başlangıcından)"
+        )
+
+    if module == "dichotic":
+        _rule("Dikotik sunum")
+        dichotic = config.modules.dichotic
+        print(f"  Konuşmacı            : {dichotic.speaker_id}")
+        print(f"  Çift x tekrar        : {len(dichotic.pairs)} x {dichotic.reps}")
+        print("  Görsel uyaran        : yok — ekranda yalnızca sabitleme haçı")
+        print("  Kulak                : her denemede ikisi de (dosya stereo)")
+        print("  Gürültü koşulu       : yok — yarışmanın kendisi zor koşuldur")
+        print(
+            "  Doğru cevap          : yok (§A.10) — kategori LEFT / RIGHT / "
+            "OTHER (karışım)"
         )
 
     if module == "tbw":
@@ -258,11 +273,22 @@ def live_run(
         measure_refresh_hz,
         open_window,
     )
-    from mcgurk.modules.block import run_avsr, run_mcgurk, run_tbw, summarise
+    from mcgurk.modules.block import (
+        run_avsr,
+        run_dichotic,
+        run_mcgurk,
+        run_tbw,
+        summarise,
+    )
     from mcgurk.modules.response import make_keyboard
     from mcgurk.modules.stream import run_oddball
 
-    runners = {"mcgurk": run_mcgurk, "avsr": run_avsr, "tbw": run_tbw}
+    runners = {
+        "mcgurk": run_mcgurk,
+        "avsr": run_avsr,
+        "tbw": run_tbw,
+        "dichotic": run_dichotic,
+    }
 
     configure_psychopy(audio_device=config.audio.device)
     require_ptb_backend()
@@ -379,6 +405,9 @@ def live_run(
         if module == "oddball":
             print()
             print(oddball_module.summarise_measures(_flat_rows(db_path, session_id)))
+        if module == "dichotic":
+            print()
+            print(dichotic_module.summarise_measures(_flat_rows(db_path, session_id)))
     return exit_code
 
 

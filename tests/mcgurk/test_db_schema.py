@@ -270,7 +270,11 @@ def test_dichotic_trial_cannot_be_scored(db: Database) -> None:
             trial_index=0,
             module="dichotic",
             ear="both",
-            design_extra={"left_token": "ba", "right_token": "da"},
+            design_extra={
+                "speaker_id": 1,
+                "left_token": "ba",
+                "right_token": "da",
+            },
         )
     )
     with pytest.raises(sqlite3.IntegrityError, match="A.10"):

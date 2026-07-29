@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
-Son güncelleme: 2026-07-28
-Aktif adım: 7b (Adım 7 tamamlandı)
+Son güncelleme: 2026-07-29
+Aktif adım: 7c (Adım 7b kodu bitti, manuel test bekliyor)
 
 ## Durum tablosu
 
@@ -15,7 +15,7 @@ Aktif adım: 7b (Adım 7 tamamlandı)
 | 5 | Modül 2: AVSR | TAMAMLANDI | 2026-07-27 | `79fec8b` |
 | 6 | Modül 3: TBW | TAMAMLANDI | 2026-07-27 | `3974aee` |
 | 7 | Modül 4: Oddball | TAMAMLANDI | 2026-07-28 | `d6f5340` |
-| 7b | Modül 5: Dikotik dinleme | BEKLİYOR | | |
+| 7b | Modül 5: Dikotik dinleme | TESTTE | 2026-07-29 | |
 | 7c | Modül 6: GIN | BEKLİYOR | | |
 | 8 | Oturum akışı ve arayüz | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
@@ -26,6 +26,16 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
 (2026-07-26). Dikotik kodda zaten vardı; GIN (Gaps-In-Noise) yeni bir istek.
 İkisi de Adım 8'den önce bitmeli, çünkü Adım 8 modülleri oturuma bağlıyor.
 `steps.md` §C'ye karşılık gelen iki bölümün yazılması gerekiyor.
+
+**Manuel testler 7b ve 7c için sona bırakıldı (kullanıcı kararı, 2026-07-29).**
+§B.2 adım 4 normalde manuel test onayı gelmeden commit edilmemesini söyler; bu
+iki adımda kod commit ediliyor, manuel testler ikisi birden bitince yapılıyor
+(ikisi de kulaklık gerektiriyor, bir oturumda koşulabilirler). Karşılığında
+adımlar `TAMAMLANDI` değil **`TESTTE`** olarak işaretleniyor: otomatik testler
+yeşil, insan doğrulaması bekliyor. Düzeltme gerekirse ilgili adımın dosyalarına
+ayrı bir commit gelir. **`TEST_ADIM_7B.md` Test 1 (kanal yönü) bir istisna
+sayılmalı** — sol kanalın sol kulaktan çıkması Modül 1 ve 2'nin
+lateralizasyonunu da ilgilendiriyor ve bir dakika sürüyor.
 
 ## Dal politikası — master'a ne zaman merge edilir
 
@@ -1390,16 +1400,140 @@ Branches); bu, master'ın "sürüm" anlamını korur.
     onları güvenilir biçimde göstermez).
 
 ### Adım 7b — Modül 5: Dikotik dinleme
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
+- **Durum:** TESTTE (kod bitti, otomatik testler yeşil; `TEST_ADIM_7B.md`
+  kullanıcı onayı bekliyor)
+- **Tamamlanma:** Kod 2026-07-29
 - **Commit:** —
-- **Ne yapıldı:** (Adım 1'de config ve DB yeri açıldı: `modules.dichotic`,
-  `trials.design_extra` → `left_token`/`right_token`, `blocks.module` CHECK
-  listesi. Modül gerçeklemesi bu adımda.)
+
+- **Ne yapıldı:**
+  - **`mcgurk/modules/dichotic.py`** — tasarım (çift × tekrar, tohumlanmış
+    sıra), hazırlanmış stereo dosyaya çözümleme, yanıtın hangi kulağa ait
+    olduğunun türetilmesi, kulak avantajı indeksi ve operatör raporu.
+    **PsychoPy yok** (paket sınırı testine eklendi).
+  - **`block.py` paylaşıldı, kopyalanmadı:** `dichotic_policy()` +
+    `run_dichotic()`. Tek zorunlu seçim, tek yanıt ekranı — oddball'ın akış
+    koşucusu değil, McGurk/AVSR/TBW'nin döngüsü. Sarmalayıcı 12 satır.
+  - **Config:** `DichoticConfig` artık `ResponseUIConfig`'ten türüyor.
+    Eklenenler: `response_keys`, `free_text_response`, `fixation_duration_ms`,
+    `post_response_ms`, `prompts`. Yanıt seti ve zaman aşımı zaten vardı ve
+    tekrar tanımlanmıyor; `config_path` hata mesajlarının `modules.dichotic`'i
+    göstermesini sağlıyor.
+  - **`db/design.py` → `DichoticExtra`** artık `_SpeakerExtra`'dan türüyor,
+    yani `speaker_id` zorunlu (`noise_instance` her zaman None). **Şema sürümü
+    değişmedi (3):** `v_trials_flat` `speaker_id`, `dichotic_left_token` ve
+    `dichotic_right_token`'ı zaten sütun olarak açıyordu, `blocks.module` CHECK
+    listesinde `dichotic` zaten vardı ve §A.10 tetikleyicisi onu Adım 1'den
+    beri reddediyordu.
+  - **`tools/run_module.py --module dichotic`**: kuru koşuda çift tablosu ve
+    sunum özeti, canlı koşunun sonunda kulak avantajı raporu.
+  - **Uyaran tarafında değişiklik yok** — 12 stereo WAV Adım 2'de üretilmişti.
+    Ölçümle doğrulandı (aşağıda).
+  - **Test: 48 yeni test** (688 → **721**; CI'da koşan 655, donanımda 66,
+    ffmpeg gerektirdiği için atlanan 18). CI'da 43 test: deneme sayısı
+    `config.trial_counts()` ile birebir, aynı tohum → aynı sıra, sıranın
+    `module_order`'dan bağımsız olduğu, her turda her çiftin bir kez geçtiği,
+    dosya çözümlemesi, `design_extra` doğrulaması, kategorizasyon (sekiz
+    durum), KAİ aritmetiği (elle hesaplanmış), zaman aşımının indekse
+    girmemesi, karışım yanıtının paydada olup indekste olmaması, tanımsız
+    indeks, config kapıları. Donanımda 5 test: yanıt doğru kulağa atfediliyor,
+    iki token da kayda giriyor, karışım yanıtı, zaman aşımı satır üretmiyor,
+    stereo dosya yönlendirilmeden aygıta gidiyor.
+  - **Canlı duman testi** (3 deneme, tam ekran, 75 Hz, monitör HD Audio
+    çıkışı): 3/3 sunuldu, **0 düşen kare**, **0 ses zamanlaması bozulması**,
+    zaman aşımları doğru raporlandı, yedek yazıldı.
+
+- **Uyaran ölçümü (2026-07-29, `stimuli/dichotic/speaker_1/`):**
+  - Aynı hece farklı dosyalarda **birebir aynı**: `Left-ba_Right-da` ile
+    `Left-ba_Right-ga`'nın sol kanalları örnek örnek özdeş (altı hece × kanal
+    kombinasyonunun tamamında).
+  - Simetrik çiftler **tam kanal takası**: `Left-ba_Right-da`'nın sol kanalı
+    `Left-da_Right-ba`'nın sağ kanalıyla birebir aynı. Kulak avantajı ölçümü
+    içerik farkından değil yalnızca taraftan geliyor.
+  - Kanallar arası korelasyon **|r| < 0.06**; iki kulak arasındaki seviye farkı
+    **≤ 0.2 dB**.
+  - Bunların söyleyemediği tek şey: dosyanın 0. kanalı gerçekten sol
+    kulaktan mı çıkıyor. `TEST_ADIM_7B.md` Test 1 tam olarak onu ölçüyor
+    (ilk iki deneme bilerek birbirinin aynası: sol=ba, sonra sol=da).
+
 - **Alınan kararlar:**
-- **Bilinen sınırlar:** Yöntem dokümanında tanımlı değil — bkz. bekleyen
-  aksiyonlar.
+  - **`trials.ear = 'both'`, NULL değil.** Sütun *hangi kulaklara ses gitti*
+    sorusunu yanıtlar — ikisine de gitti. *Ne* gittiği `left_token`/
+    `right_token`'da. NULL "uygulanamaz" demek olurdu (AVSR'nin V-only'si gibi)
+    ve bu burada yanlış olur. **`trials.audio_token` ise NULL**: iki eşzamanlı
+    token var, birini sütuna yazmak diğerini görünmez kılardı.
+  - **Doğru cevap yok (§A.10).** `category` ∈ `LEFT`/`RIGHT`/`OTHER`,
+    `is_correct` NULL. Sağa sunulanı bildirmek "doğru" değil, bir algı
+    kategorisidir; veritabanı Adım 1'den beri aksini reddediyor.
+  - **Zaman aşımı kayıp gözlemdir, indekse girmez.** TBW kuralıyla aynı ve aynı
+    gerekçeyle: doğru cevabı olmayan bir görevde yanıtsız denemeyi iki taraftan
+    birine yazmak indeksi kaydırır. AVSR'nin kuralının tersi, çünkü orada bir
+    doğru cevap var ve zaman aşımı onu vermemektir.
+  - **`OTHER` = §6.5'in "karışım yanıtı"**: sunulan iki heceden hiçbirine
+    karşılık gelmeyen bildirim — üçüncü hece de, `DİĞER` seçeneği de. Oranların
+    **paydasında** (bir yanıttır) ama **indekste değil** (bir kulak adlandırmaz).
+    Üçüncü heceyi ayrı bir kategori yapmadım: ikisi de aynı şeyi söylüyor ve ham
+    yanıt zaten kayıtta, ayrım gerektiğinde analizde yapılabilir.
+  - **Kategori seçilen seçenekten türüyor, yazılan metinden değil** (Adım 4
+    kuralı). `DİĞER` seçen katılımcı ekrandaki heceleri reddetmiştir; yazdığı
+    metni bir kulağa geri okumak vermediği bir bildirimi uydurmak olurdu.
+  - **KAİ hiçbir kulak bildirilmediyse `None`, 0 değil.** 0, yalnızca karışım
+    yanıtı vermiş bir katılımcı için "tam simetrik" diye okunurdu — oysa indeksin
+    hiçbir şey söylemediği tek durum tam olarak odur.
+  - **Oranların paydası yanıtlanan denemeler.** Zaman aşımı hiçbir paydaya
+    girmiyor, `n_missing`'de ayrıca duruyor; çoğunlukla zaman aşımından oluşan
+    bir koşu böylece "düşük oran" yerine "az gözlem" olarak görünüyor.
+  - **Yönerge serbest bildirim** (taslak §6.5). `prompts.question` tekil:
+    "Hangi heceyi duydunuz?". İki hece sunulduğu söylenmiyor, bir kulağa
+    odaklanma istenmiyor — yönlendirilmiş dikkat ölçümü uyuma kontrolüne
+    çevirirdi.
+  - **`speaker_id` deneme başına yazılıyor**, diğer üç konuşmacılı modülle aynı
+    gerekçeyle: config anlık görüntüsü konuşmacıyı yalnızca
+    `speaker_selection.strategy: fixed` iken sabitler (§F.4 açık), ve
+    `plan_trials(..., speaker_id=...)` Adım 8'in seçimini kabul ediyor.
+  - **Çift bazında tablo rapora eklendi** (ölçüt değil, QC). §6.5 indeksi tüm
+    denemeler üzerinden hesaplıyor; çift bazında dağılım bir uyaran
+    artefaktının görüneceği tek yer: /ga/ içeren her çift hangi kulaktan
+    gelirse gelsin /ga/ bildiriliyorsa asimetri kulaklarda değil token'larda.
+
+- **Bilinen sınırlar:**
+  - **Çapraz duyma ölçütü bu adımda config'e girmedi.** §6.5 "SSD grubunda
+    sağır kulağa sunulan hecenin şans düzeyinin üzerinde bildirilmesi" diyor;
+    bu ölçüt katılımcının sağır kulağını bilmeyi gerektiriyor ve o bilgi
+    katılımcı akışıyla (Adım 8) geliyor, raporu da QC raporu (Adım 9). Modül
+    tarafında gereken ham sayılar üretiliyor (kulak başına bildirim oranı,
+    `ear_advantage()`); eşik ve işaretleme Adım 9'a not düşüldü. **Ölçüt veri
+    toplanmadan önce kesinleşmeli** — sonradan seçilmesi, hangi katılımcının
+    çapraz duyduğuna sonuca bakarak karar vermek olur.
+  - **Taslaktaki beş danışman maddesi hâlâ açık** (deneme sayısı, görevin SSD
+    grubuna uygulanıp uygulanmayacağı, KAİ'nin birincil sonuç mu QC ölçütü mü
+    olduğu, yönerge biçimi, kovaryat kullanımı). Hiçbiri kodu engellemedi:
+    sayılar config'ten, yönerge metni config'ten, kalanlar analiz kararı.
+  - Modül tek başına koşuyor; yönerge ("her denemede duyduğunuz heceyi
+    bildirin"), alıştırma, mola ve katılımcı girişi Adım 8'de.
+  - Duman testi monitörün HD Audio çıkışında yapıldı (Bluetooth kulaklık
+    kapalıydı). Kanal yönü — 0. kanalın gerçekten sol kulaktan çıkması —
+    yalnızca kulakla doğrulanabilir; `TEST_ADIM_7B.md` Test 1.
+  - 30 deneme tek bloğa sığıyor (`break_every_n_trials: 60`), yani bu modülde
+    §A.5'in commit sınırı modülün sonu. Deneme sayısı yükseltilirse
+    kendiliğinden bölünür.
+
 - **Sonraki adıma not:**
+  - **Adım 7c (GIN) `stream.py`'yi paylaşacak**, `block.py`'yi değil (Adım 7'nin
+    notu geçerli). Dikotik `block.py`'yi paylaştı ve `TrialPolicy` bunun için
+    yeterli oldu — yeni bir modülün döngüyü kopyalaması hâlâ gereksiz.
+  - **Adım 8** dikotik yönerge ekranını vermeli ve orada **iki heceden söz
+    etmemeli**; serbest bildirim yönergesi ölçümün parçası. Kulaklık yönü
+    (L sol kulakta) oturum öncesi kontrol listesine girmeli — kanal yönü tersse
+    tüm lateralizasyon verisi etkilenir.
+  - **Adım 8** ayrıca çapraz dinleme kontrolüyle (`cross_hearing_check`)
+    dikotik görevin ilişkisini kurmalı: ikisi de aynı varsayımı sınıyor, biri
+    sessizlik/ses tespitiyle, diğeri yarışma altında.
+  - **Adım 9** `v_trials_flat`'tan okurken dikotik için `dichotic_left_token`,
+    `dichotic_right_token`, `category` ve iki RT sütununu bulacak;
+    `dichotic.ear_advantage()` doğrudan çağrılabilir. QC raporu iki şeye
+    bakmalı: **karışım yanıtı oranı** (yüksekse görev anlaşılmamış ya da seviye
+    düşük) ve **SSD katılımcılarında sağır kulak bildirim oranı** (çapraz duyma
+    — yukarıdaki açık ölçüt).
 
 ### Adım 7c — Modül 6: GIN (Gaps-In-Noise)
 - **Durum:** BEKLİYOR
@@ -1510,6 +1644,19 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   sayısı, görevin SSD grubuna uygulanıp uygulanmayacağı, indeksin birincil mi
   kalite kontrol ölçütü mü olduğu, yönerge biçimi, kovaryat kullanımı).
   Kaynak numaraları mevcut kaynakçaya göre yeniden numaralandırılmalı.
+  **Adım 7b bunu engellemedi** (2026-07-29): modül taslaktaki tasarımla
+  gerçeklendi, beş maddenin hiçbiri kodu değiştirmiyor — deneme sayısı ve
+  yönerge metni config'ten, kalanlar analiz kararı.
+- **Dikotik çapraz duyma ölçütü — veri toplamadan önce sabitlenmeli (Adım 7b).**
+  §6.5, SSD katılımcısının **sağır kulağa sunulan heceyi şans düzeyinin
+  üzerinde bildirmesini** çapraz duyma göstergesi sayıyor ve o katılımcının
+  Modül 1–2 uzamsal yön verisinin QC raporunda işaretlenmesini istiyor. Eşiğin
+  kendisi ("şans düzeyinin üzerinde" ne demek: 30 denemede kaç bildirim,
+  binomial test mi sabit oran mı) config'e **girmedi** — ölçüt katılımcının
+  sağır kulağını bilmeyi gerektiriyor, o bilgi Adım 8'in katılımcı girişinden
+  geliyor ve rapor Adım 9'un işi. Modül tarafında gereken sayılar üretiliyor.
+  Oddball ve GIN yanıt pencereleriyle aynı kural: **sonradan seçilmesi, hangi
+  katılımcının çapraz duyduğuna sonuca bakarak karar vermek olur.**
 - **GIN — taslak bölüm hazır, danışman onayı bekliyor.**
   `docs/EK_GIN.docx`, yöntem dokümanına **6.6** olarak eklenmek üzere yazıldı
   (2026-07-26). Gerekçe, görevin TBW ölçütü için bir kontrol olması üzerine

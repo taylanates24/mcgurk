@@ -38,6 +38,7 @@ ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY = (
     "mcgurk.modules.avsr",
     "mcgurk.modules.tbw",
     "mcgurk.modules.oddball",
+    "mcgurk.modules.dichotic",
 )
 
 

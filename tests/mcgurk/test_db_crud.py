@@ -298,7 +298,11 @@ def test_flat_view_joins_everything(db: Database, session: tuple[int, int]) -> N
             trial_index=0,
             module="dichotic",
             ear="both",
-            design_extra={"left_token": "ba", "right_token": "da"},
+            design_extra={
+                "speaker_id": 1,
+                "left_token": "ba",
+                "right_token": "da",
+            },
         )
     )
     db.add_response(
@@ -320,6 +324,9 @@ def test_flat_view_joins_everything(db: Database, session: tuple[int, int]) -> N
     # design_extra is expanded into columns, so analysis never parses JSON.
     assert row["dichotic_left_token"] == "ba"
     assert row["dichotic_right_token"] == "da"
+    # A dichotic trial carries its speaker too (Adım 7b), through the same
+    # column as the other speaker-based modules.
+    assert row["speaker_id"] == 1
     assert row["rt_from_burst_ms"] == pytest.approx(812.5)
 
 

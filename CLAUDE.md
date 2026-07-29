@@ -79,12 +79,13 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── av_presenter.py          # TrialSpec -> presentation -> TimingRecord
 │   ├── loopback.py              # level-2 jitter analysis (pure numpy)
 │   └── psychopy_prefs.py        # must run before psychopy.sound is imported
-├── modules/                     # Adım 4 (mcgurk), 5 (avsr), 6 (tbw), 7 (oddball); 7b–7c to come
+├── modules/                     # Adım 4–7b: mcgurk, avsr, tbw, oddball, dichotic; 7c to come
 │   ├── base.py                  # seeding, ordering, PlannedTrial — no PsychoPy
 │   ├── mcgurk.py                # design + categorisation — no PsychoPy
 │   ├── avsr.py                  # design + scoring + measures — no PsychoPy
 │   ├── tbw.py                   # design + Gaussian fit + bootstrap — no PsychoPy
 │   ├── oddball.py               # stream design + attribution + d' — no PsychoPy
+│   ├── dichotic.py              # design + ear attribution + KAİ — no PsychoPy
 │   ├── response.py              # option grid, keyboard, two RTs, free text
 │   ├── block.py                 # shared trial loop + per-module TrialPolicy
 │   └── stream.py                # continuous-stream loop (oddball; GIN in 7c)
@@ -316,6 +317,43 @@ jittered ISI, and it does not use `block.py` or `AVPresenter` at all:
   can be told from another one by its click alone, which would make the task
   solvable without hearing a pitch.
 
+**Modül 5 — Dikotik dinleme** (`dichotic.py`, Adım 7b) is back on `block.py` —
+one forced choice, one `TrialPolicy`. It is drafted for the method document as
+§6.5 (`docs/EK_DIKOTIK_DINLEME.docx`), still with the danışman. What is specific
+to it:
+
+- **The lateralisation is inside the file.** A dichotic WAV is stereo with a
+  different token per channel, so `ear` is `both` and the engine hands it over
+  untouched — `prepare_samples` refuses to route a stereo file anywhere, because
+  routing it would destroy exactly what it was prepared for.
+- **`trials.ear = 'both'`, not NULL.** The column says which ears received
+  sound; *what* each one received is `design_extra.left_token` /
+  `right_token`, which `v_trials_flat` exposes as columns. `audio_token` is NULL
+  — there are two of them, and picking one would hide the other.
+- **There is no correct answer** (§A.10, and the trigger already covered
+  `dichotic` from Adım 1). `responses.category` holds `LEFT`/`RIGHT`/`OTHER`;
+  reporting the right ear is a percept, not a success.
+- **A timeout is a missing observation**, as in TBW and for the same reason:
+  with no correct answer, assigning an unanswered trial to either ear moves the
+  index. `EarAdvantage.n_missing` carries them.
+- **`OTHER` is §6.5's intrusion rate** — a report matching neither presented
+  syllable, whether the third syllable or the free-text option. It is in the
+  denominator of the rates and outside the index, which names an ear.
+- **KAİ = [(Sağ − Sol) / (Sağ + Sol)] × 100**, and it is `None` — never 0 —
+  when neither ear was reported: 0 would read as "perfectly symmetrical" for a
+  participant who in fact reported neither syllable.
+- **The instruction is a free report.** `prompts.question` is singular ("Hangi
+  heceyi duydunuz?") and never says that two syllables were presented; a
+  directed-attention instruction would replace the measurement with a
+  compliance check.
+- **Both ears sit on one burst time** (Adım 2). Speaker 2's tokens differ by up
+  to 248 ms naturally, and an ear advantage measured with asynchronous onsets
+  would partly be an onset effect.
+- In the SSD groups the presentation is functionally monotic, so the index
+  measures the *absence* of competition rather than hemispheric lateralisation.
+  Same numbers, different reading — §6.5 requires the asymmetry to be stated
+  whenever the groups are compared.
+
 ### Legacy Structure (src/, Adım 0)
 ```
 mcgurk/
@@ -412,10 +450,11 @@ Validated by `mcgurk/config/schema.py`; **unknown fields are an error**.
   string the participant reads. `prompts.other` is required exactly when
   `free_text_response` is set — a prompt for a screen that never opens is text
   nobody reads. `fixation_duration_ms` and `post_response_ms` are the trial
-  structure. These live on `ResponseUIConfig`, shared by `mcgurk`, `avsr` and
-  `tbw`; AVSR adds `mode_questions` (per presentation mode), TBW adds
-  `response_labels` (which of its two options means "simultaneous"),
-  `tbw_definition` and `bootstrap_samples`/`bootstrap_ci`. **Oddball has none
+  structure. These live on `ResponseUIConfig`, shared by `mcgurk`, `avsr`,
+  `tbw` and `dichotic`; AVSR adds `mode_questions` (per presentation mode), TBW
+  adds `response_labels` (which of its two options means "simultaneous"),
+  `tbw_definition` and `bootstrap_samples`/`bootstrap_ci`, and dichotic adds
+  only `pairs` and `reps` — nothing is crossed with them. **Oddball has none
   of it**: no grid, no prompt, one `response_key` — plus
   `response_window_ms` (which press answers which tone), `lead_in_s`, and
   `ears` restricted to exactly one entry because `n_trials` is the total and
@@ -441,10 +480,12 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
   OS, audio backend, measured refresh, `system_av_offset_ms`, status
 - `blocks` — module, index, planned trial count, status
 - `trials` — shared design columns + realised timing; module-specific fields in
-  `design_extra` (JSON), validated by `mcgurk/db/design.py`. `mcgurk`, `avsr`
-  and `tbw` trials carry `speaker_id` (required) and `noise_instance`; `avsr`
-  adds `stimulus_type` and `item`; `oddball` carries `tone_type`, `tone_hz` and
+  `design_extra` (JSON), validated by `mcgurk/db/design.py`. `mcgurk`, `avsr`,
+  `tbw` and `dichotic` trials carry `speaker_id` (required) and
+  `noise_instance`; `avsr` adds `stimulus_type` and `item`; `dichotic` adds
+  `left_token` and `right_token`; `oddball` carries `tone_type`, `tone_hz` and
   the nominal `isi_ms`. `v_trials_flat` exposes `speaker_id`, `noise_instance`,
+  `dichotic_left_token`, `dichotic_right_token`,
   `avsr_item` and `oddball_tone_type` as columns (`stimulus_type` and `isi_ms`
   are only in the JSON — adding either to the VIEW is a schema-version bump,
   and the occasion for that is the word set arriving; the realised interval is
@@ -492,8 +533,8 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Monitor setup (ilk kurulumda bir kez): `python scripts/setup_monitor.py`
 - Validate config + design cost: `python -m mcgurk.config`
 - Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
-- Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw|oddball --dry-run`
-- Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw|oddball [--limit N] [--seed N]`
+- Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic --dry-run`
+- Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic [--limit N] [--seed N]`
 - Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
 - Verify stimuli: `python tools/verify_stimuli.py [--quick]`
 - Verify a backup: `python tools/verify_backup.py <yedek> --compare-with data/mcgurk.sqlite`
@@ -537,7 +578,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't back up SQLite by copying the file — use `VACUUM INTO`; a WAL-mode copy is silently inconsistent
 - Don't commit inside a trial (§A.5) — `add_trial`/`add_response` defer, `finish_block` commits
 - Don't add a module to `modules.*` without also adding it to `blocks.module`'s CHECK list and `design.py`
-- Don't import PsychoPy at module level in `modules/base.py`, `modules/mcgurk.py`, `modules/avsr.py` or `modules/tbw.py` — the design, the categorisation, the scoring and the psychometric fit are CI-tested, and a test enforces it
+- Don't import PsychoPy at module level in `modules/base.py`, `modules/mcgurk.py`, `modules/avsr.py`, `modules/tbw.py`, `modules/oddball.py` or `modules/dichotic.py` — the design, the categorisation, the scoring, the psychometric fit and the signal-detection measures are CI-tested, and a test enforces it
 - Don't give the participant correctness feedback in any module — the McGurk effect must not be taught mid-session (demand characteristics)
 - Don't derive a category from `free_text`; the participant declined the options that were on screen
 - Don't put a character outside cp1254 in a printed, logged or raised string (`−`, `≠`, `→`) — the Turkish Windows console raises `UnicodeEncodeError` instead of degrading, so the traceback replaces the message. Docstrings and comments are fine; `tests/mcgurk/test_console_encoding.py` enforces the rest
@@ -551,3 +592,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't drop an oddball press that fell outside every window — record it with `category = OUTSIDE_WINDOW` and no correctness; a participant pressing at random must be visible without being counted as a hit or a false alarm
 - Don't write a `responses` row for an oddball miss or correct rejection — both are the absence of a press, and inventing a row puts the analyst's reading into the data
 - Don't schedule an oddball tone relative to the previous *realised* onset — the whole stream comes off one origin, or the scheduler's error accumulates over five minutes
+- Don't lateralise a dichotic file — it is stereo and already carries a different token per ear; `ear` is `both` and the engine refuses anything else
+- Don't count a dichotic timeout as a report — with no correct answer, assigning it to either ear moves the laterality index; it is a missing observation
+- Don't report a laterality index of 0 when neither ear was reported — the index is undefined there, and 0 reads as "perfectly symmetrical"
+- Don't tell the dichotic participant that two syllables are presented, or ask them to attend to one ear — the free report *is* the measurement

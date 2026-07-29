@@ -105,6 +105,7 @@ def build_manifest(config: Any) -> Any:
     from datetime import datetime
 
     from mcgurk.stimuli.manifest import (
+        DichoticEntry,
         MediaFile,
         NoisyTokenEntry,
         SourceRef,
@@ -176,6 +177,30 @@ def build_manifest(config: Any) -> Any:
                                 peak_dbfs=-3.0,
                             )
                         )
+
+        # Dichotic files: every ordered pair of two different tokens.  Both ears
+        # share one burst time, as the real pipeline imposes — an ear advantage
+        # measured with asynchronous onsets would partly be an onset effect.
+        common_burst = max(bursts.values())
+        for left in tokens:
+            for right in tokens:
+                if left == right:
+                    continue
+                manifest.dichotic.append(
+                    DichoticEntry(
+                        speaker_id=speaker.id,
+                        left_token=left,
+                        right_token=right,
+                        file=media(
+                            f"dichotic/speaker_{speaker.id}/"
+                            f"Left-{left}_Right-{right}.wav"
+                        ),
+                        duration_s=2.567,
+                        sample_rate=config.audio.sample_rate,
+                        burst_time_s=common_burst,
+                        peak_dbfs=-6.0,
+                    )
+                )
 
     for frequency in config.required_tones():
         manifest.tones.append(

@@ -89,7 +89,20 @@ class OddballExtra(_Extra):
     isi_ms: float | None = Field(default=None, gt=0)
 
 
-class DichoticExtra(_Extra):
+class DichoticExtra(_SpeakerExtra):
+    """The two simultaneous tokens, and which speaker they came from.
+
+    ``trials.audio_token`` is NULL on a dichotic trial: there are two of them,
+    and picking one for the column would make the other invisible to anything
+    reading it.  Both are exposed by ``v_trials_flat`` as
+    ``dichotic_left_token`` / ``dichotic_right_token``.
+
+    ``noise_instance`` is always None here — the module is presented in quiet,
+    because the competition between the ears is itself the difficult condition —
+    but it comes with the base rather than being forbidden, exactly as in TBW:
+    the field means "which noise waveform", and "none" is the honest answer.
+    """
+
     left_token: str = Field(min_length=1)
     right_token: str = Field(min_length=1)
 
