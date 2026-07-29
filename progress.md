@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-29
-Aktif adım: 7c (Adım 7b kodu bitti, manuel test bekliyor)
+Aktif adım: 7c (Adım 7b tamamlandı)
 
 ## Durum tablosu
 
@@ -15,7 +15,7 @@ Aktif adım: 7c (Adım 7b kodu bitti, manuel test bekliyor)
 | 5 | Modül 2: AVSR | TAMAMLANDI | 2026-07-27 | `79fec8b` |
 | 6 | Modül 3: TBW | TAMAMLANDI | 2026-07-27 | `3974aee` |
 | 7 | Modül 4: Oddball | TAMAMLANDI | 2026-07-28 | `d6f5340` |
-| 7b | Modül 5: Dikotik dinleme | TESTTE | 2026-07-29 | `160f663` |
+| 7b | Modül 5: Dikotik dinleme | TAMAMLANDI | 2026-07-29 | `160f663` |
 | 7c | Modül 6: GIN | BEKLİYOR | | |
 | 8 | Oturum akışı ve arayüz | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
@@ -27,15 +27,13 @@ Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAM
 İkisi de Adım 8'den önce bitmeli, çünkü Adım 8 modülleri oturuma bağlıyor.
 `steps.md` §C'ye karşılık gelen iki bölümün yazılması gerekiyor.
 
-**Manuel testler 7b ve 7c için sona bırakıldı (kullanıcı kararı, 2026-07-29).**
+**Commit sırası 7b ve 7c'de gevşetildi (kullanıcı kararı, 2026-07-29).**
 §B.2 adım 4 normalde manuel test onayı gelmeden commit edilmemesini söyler; bu
-iki adımda kod commit ediliyor, manuel testler ikisi birden bitince yapılıyor
-(ikisi de kulaklık gerektiriyor, bir oturumda koşulabilirler). Karşılığında
-adımlar `TAMAMLANDI` değil **`TESTTE`** olarak işaretleniyor: otomatik testler
-yeşil, insan doğrulaması bekliyor. Düzeltme gerekirse ilgili adımın dosyalarına
-ayrı bir commit gelir. **`TEST_ADIM_7B.md` Test 1 (kanal yönü) bir istisna
-sayılmalı** — sol kanalın sol kulaktan çıkması Modül 1 ve 2'nin
-lateralizasyonunu da ilgilendiriyor ve bir dakika sürüyor.
+iki adımda kod önce commit ediliyor, manuel test sonra yapılıyor. Karşılığında
+adım manuel test onayı gelene kadar `TAMAMLANDI` değil **`TESTTE`** olarak
+işaretleniyor ve düzeltme gerekirse ayrı bir commit geliyor. Adım 7b'de bu
+gecikme kısa sürdü: kod `160f663` ile commit edildi, manuel testler aynı gün
+yürütüldü ve geçti.
 
 ## Dal politikası — master'a ne zaman merge edilir
 
@@ -1400,9 +1398,14 @@ Branches); bu, master'ın "sürüm" anlamını korur.
     onları güvenilir biçimde göstermez).
 
 ### Adım 7b — Modül 5: Dikotik dinleme
-- **Durum:** TESTTE (kod bitti, otomatik testler yeşil; `TEST_ADIM_7B.md`
-  kullanıcı onayı bekliyor)
-- **Tamamlanma:** Kod 2026-07-29
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-29. Otomatik testler yeşil (**721 test**; CI'da koşan
+  655, donanımda 66, ffmpeg gerektirdiği için atlanan 18; ruff + mypy temiz).
+  `TEST_ADIM_7B.md`'deki üç test kullanıcı tarafından yürütüldü ve geçti.
+  **Kanal yönü doğrulandı** (Test 1): dosyanın 0. kanalı sol kulaktan çıkıyor,
+  yani `Left-*` adlandırması gerçekte sol kulağa karşılık geliyor. Bu bulgu
+  yalnızca bu modülü değil, Modül 1 ve 2'nin lateralizasyonunu da doğruluyor —
+  ikisi de aynı kanal eşlemesine dayanıyor.
 - **Commit:**
   - `160f663` — mcgurk/modules/dichotic.py, block.py'ye dichotic policy,
     DichoticConfig → ResponseUIConfig, DichoticExtra'ya speaker_id
@@ -1513,8 +1516,7 @@ Branches); bu, master'ın "sürüm" anlamını korur.
   - Modül tek başına koşuyor; yönerge ("her denemede duyduğunuz heceyi
     bildirin"), alıştırma, mola ve katılımcı girişi Adım 8'de.
   - Duman testi monitörün HD Audio çıkışında yapıldı (Bluetooth kulaklık
-    kapalıydı). Kanal yönü — 0. kanalın gerçekten sol kulaktan çıkması —
-    yalnızca kulakla doğrulanabilir; `TEST_ADIM_7B.md` Test 1.
+    kapalıydı); kanal yönü kullanıcının kulaklıklı testiyle ayrıca doğrulandı.
   - 30 deneme tek bloğa sığıyor (`break_every_n_trials: 60`), yani bu modülde
     §A.5'in commit sınırı modülün sonu. Deneme sayısı yükseltilirse
     kendiliğinden bölünür.
