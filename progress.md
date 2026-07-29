@@ -1,6 +1,6 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
-Son güncelleme: 2026-07-27
+Son güncelleme: 2026-07-28
 Aktif adım: 7b (Adım 7 tamamlandı)
 
 ## Durum tablosu
@@ -14,7 +14,7 @@ Aktif adım: 7b (Adım 7 tamamlandı)
 | 4 | Modül 1: McGurk | TAMAMLANDI | 2026-07-27 | `709958e` |
 | 5 | Modül 2: AVSR | TAMAMLANDI | 2026-07-27 | `79fec8b` |
 | 6 | Modül 3: TBW | TAMAMLANDI | 2026-07-27 | `3974aee` |
-| 7 | Modül 4: Oddball | TESTTE | 2026-07-27 | `d6f5340` |
+| 7 | Modül 4: Oddball | TAMAMLANDI | 2026-07-28 | `d6f5340` |
 | 7b | Modül 5: Dikotik dinleme | BEKLİYOR | | |
 | 7c | Modül 6: GIN | BEKLİYOR | | |
 | 8 | Oturum akışı ve arayüz | BEKLİYOR | | |
@@ -1238,11 +1238,11 @@ Branches); bu, master'ın "sürüm" anlamını korur.
     kazanır; kod değişmiyor, yalnızca `timing.system_av_offset_ms` doluyor.
 
 ### Adım 7 — Modül 4: Oddball
-- **Durum:** TESTTE — kod ve otomatik testler bitti, `TEST_ADIM_7.md`'deki tek
-  manuel test (kulakla dinleme + gerçek klavye) kullanıcıda.
-- **Tamamlanma:** 2026-07-27 (kod). Otomatik testler yeşil (614 → **688 test**;
-  CI'da koşan 610, donanımda 61, ffmpeg gerektirdiği için atlanan 17; ruff +
-  mypy temiz).
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** Kod 2026-07-27, manuel test 2026-07-28. Otomatik testler
+  yeşil (614 → **688 test**; CI'da koşan 610, donanımda 61, ffmpeg gerektirdiği
+  için atlanan 17; ruff + mypy temiz). `TEST_ADIM_7.md`'deki tek manuel test
+  (kulakla dinleme + gerçek klavye) kullanıcı tarafından yürütüldü ve geçti.
 - **Commit:**
   - `d6f5340` — mcgurk/modules/oddball.py + stream.py, çevrimdışı ton üretimi,
     config'e response_window_ms/lead_in_s/tones.level_dbfs, OddballExtra.isi_ms
