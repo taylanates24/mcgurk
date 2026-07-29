@@ -15,7 +15,7 @@ Aktif adım: 7c (Adım 7b kodu bitti, manuel test bekliyor)
 | 5 | Modül 2: AVSR | TAMAMLANDI | 2026-07-27 | `79fec8b` |
 | 6 | Modül 3: TBW | TAMAMLANDI | 2026-07-27 | `3974aee` |
 | 7 | Modül 4: Oddball | TAMAMLANDI | 2026-07-28 | `d6f5340` |
-| 7b | Modül 5: Dikotik dinleme | TESTTE | 2026-07-29 | |
+| 7b | Modül 5: Dikotik dinleme | TESTTE | 2026-07-29 | `160f663` |
 | 7c | Modül 6: GIN | BEKLİYOR | | |
 | 8 | Oturum akışı ve arayüz | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
@@ -1403,7 +1403,9 @@ Branches); bu, master'ın "sürüm" anlamını korur.
 - **Durum:** TESTTE (kod bitti, otomatik testler yeşil; `TEST_ADIM_7B.md`
   kullanıcı onayı bekliyor)
 - **Tamamlanma:** Kod 2026-07-29
-- **Commit:** —
+- **Commit:**
+  - `160f663` — mcgurk/modules/dichotic.py, block.py'ye dichotic policy,
+    DichoticConfig → ResponseUIConfig, DichoticExtra'ya speaker_id
 
 - **Ne yapıldı:**
   - **`mcgurk/modules/dichotic.py`** — tasarım (çift × tekrar, tohumlanmış
