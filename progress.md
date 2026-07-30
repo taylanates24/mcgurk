@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 8 (Adım 7c kodu bitti, manuel test bekliyor)
+Aktif adım: 8 (Adım 7c tamamlandı — Adım 8 planı onay bekliyor)
 
 ## Durum tablosu
 
@@ -16,7 +16,7 @@ Aktif adım: 8 (Adım 7c kodu bitti, manuel test bekliyor)
 | 6 | Modül 3: TBW | TAMAMLANDI | 2026-07-27 | `3974aee` |
 | 7 | Modül 4: Oddball | TAMAMLANDI | 2026-07-28 | `d6f5340` |
 | 7b | Modül 5: Dikotik dinleme | TAMAMLANDI | 2026-07-29 | `160f663` |
-| 7c | Modül 6: GIN | TESTTE | 2026-07-30 | `0294156` |
+| 7c | Modül 6: GIN | TAMAMLANDI | 2026-07-30 | `0294156` |
 | 8 | Oturum akışı ve arayüz | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
 
@@ -1540,9 +1540,10 @@ Branches); bu, master'ın "sürüm" anlamını korur.
     — yukarıdaki açık ölçüt).
 
 ### Adım 7c — Modül 6: GIN (Gaps-In-Noise)
-- **Durum:** TESTTE (kod bitti, otomatik testler yeşil; `TEST_ADIM_7C.md`
-  kullanıcı onayı bekliyor — 7b ile aynı gevşetme, bkz. dal politikası notu)
-- **Tamamlanma:** Kod 2026-07-30
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-30. Otomatik testler yeşil (**787 test**; CI'da koşan
+  716, donanımda 71, ffmpeg gerektirdiği için atlanan 19; ruff + mypy temiz).
+  `TEST_ADIM_7C.md`'deki üç test kullanıcı tarafından yürütüldü ve geçti.
 - **Commit:**
   - `0294156` — mcgurk/modules/gin.py, stream.py'ye run_gin, şema sürümü 4
     (responses.event_index), GINExtra'ya segment_index, config'e
