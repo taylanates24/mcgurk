@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
-Son güncelleme: 2026-07-29
-Aktif adım: 7c (Adım 7b tamamlandı)
+Son güncelleme: 2026-07-30
+Aktif adım: 8 (Adım 7c kodu bitti, manuel test bekliyor)
 
 ## Durum tablosu
 
@@ -16,7 +16,7 @@ Aktif adım: 7c (Adım 7b tamamlandı)
 | 6 | Modül 3: TBW | TAMAMLANDI | 2026-07-27 | `3974aee` |
 | 7 | Modül 4: Oddball | TAMAMLANDI | 2026-07-28 | `d6f5340` |
 | 7b | Modül 5: Dikotik dinleme | TAMAMLANDI | 2026-07-29 | `160f663` |
-| 7c | Modül 6: GIN | BEKLİYOR | | |
+| 7c | Modül 6: GIN | TESTTE | 2026-07-30 | `0294156` |
 | 8 | Oturum akışı ve arayüz | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
 
@@ -1540,28 +1540,145 @@ Branches); bu, master'ın "sürüm" anlamını korur.
     — yukarıdaki açık ölçüt).
 
 ### Adım 7c — Modül 6: GIN (Gaps-In-Noise)
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
-- **Commit:** —
-- **Ne yapıldı:** (Adım 1'de config ve DB yeri açıldı: `modules.gin`,
-  `trials.design_extra` → `gap_onsets_s`/`gap_durations_ms`, deneme başına
-  0..n yanıt. Uyaran üretimi Adım 2'de, modül gerçeklemesi bu adımda.)
-- **Alınan kararlar:** Standart GIN parametreleri (Musiek ve ark., 2005)
-  config varsayılanı olarak girildi; eşik ölçütü `4_of_6`.
-- **Bilinen sınırlar:** Yöntem dokümanında tanımlı değil — taslak bölüm
-  `docs/EK_GIN.docx`, danışman onayı bekliyor. Kulak seçimi katılımcıya bağlı
-  (`ear_selection: good_ear`), seçim mantığı Adım 8'de.
+- **Durum:** TESTTE (kod bitti, otomatik testler yeşil; `TEST_ADIM_7C.md`
+  kullanıcı onayı bekliyor — 7b ile aynı gevşetme, bkz. dal politikası notu)
+- **Tamamlanma:** Kod 2026-07-30
+- **Commit:**
+  - `0294156` — mcgurk/modules/gin.py, stream.py'ye run_gin, şema sürümü 4
+    (responses.event_index), GINExtra'ya segment_index, config'e
+    response_window_ms/lead_in_s
+
+- **Ne yapıldı:**
+  - **`mcgurk/modules/gin.py`** — segment sırası (tohumlanmış), tuş basımının
+    hangi boşluğa atfedildiği, eşik hesabı (4/6 ölçütünü sağlayan en kısa süre)
+    ve operatör raporu. **PsychoPy yok** (paket sınırı testine eklendi).
+  - **`stream.py` paylaşıldı, kopyalanmadı:** `run_gin()` oddball'la aynı
+    dosyada. Planlama (`_schedule`), ekran bekleme (`_hold`), sağlık sayacı
+    okuma (`_health_delta`) ortak; döngü gövdesi ayrı çünkü şekil farklı —
+    oddball ton başına bir deneme yazar ve basımı **tona** atfeder, GIN altı
+    saniyelik segment başına bir deneme yazar ve basımı segmentin **içindeki
+    boşluğa** atfeder. `_SegmentCache` ve `_flush_gin` GIN'e özgü.
+  - **Şema sürümü 3 → 4: `responses.event_index`.** GIN, analiz birimi
+    denemeden küçük olan ilk modül — bir segment 3 boşluk taşıyor ve eşik boşluk
+    süresi başına hesaplanıyor, dolayısıyla bir isabet **hangi boşluğu**
+    saptadığını söylemeli. `event_index` `design_extra.gap_onsets_s`'e indeks;
+    başka her modülde deneme zaten olay olduğu için NULL. `v_trials_flat`'a
+    `event_index` ve `gin_segment_index` eklendi.
+  - **`db/design.py` → `GINExtra`** artık `segment_index` de taşıyor (hazırlanan
+    dosyaya `stimuli/gin/segment_<nn>.wav` bağlanıyor).
+  - **Config:** `modules.gin`'e `response_window_ms` ([100, 900] ms), `lead_in_s`
+    (1.0 s) eklendi. Şema, pencerenin üst sınırının `min_gap_separation_s`'ten
+    kısa olmasını zorluyor (aksi hâlde bir basım iki boşluğa ait olurdu; ölçülen
+    en dar ayrım 1.029 s). `ear_selection: both` artık modülü ikiye katlıyor
+    (`ears_tested()` → `total_trials()`), `fixed_ear: both` reddediliyor (GIN
+    monaural).
+  - **`tools/run_module.py --module gin`** kuru koşuda boşluk dağılımını ve
+    yakalama segmentini, canlı koşunun sonunda eşik raporunu basıyor.
+    `--ear left|right` **zorunlu** (`good_ear` iken kulak katılımcıya bağlı).
+  - **Uyaran tarafında değişiklik yok** — 30 segment / 60 boşluk Adım 2'de
+    üretilmişti. Ölçümle doğrulandı (aşağıda).
+  - **Test: 68 yeni test** (721 → **787**; CI'da koşan 716, donanımda 71,
+    ffmpeg gerektirdiği için atlanan 19; ruff + mypy temiz). CI'da 49 tasarım/
+    atfetme/eşik testi (deneme sayısı `config.trial_counts()` ile birebir, aynı
+    tohum → aynı sıra, boşlukların manifest'ten geldiği, yakalama segmentinin
+    korunması, pencere kenarları, iki boşluk arası basım, eşik aritmetiği —
+    elle kurulmuş monoton olmayan ve hiç sağlanmayan durumlar dâhil, kulak
+    seçimi kapıları, config kapıları) + 7 flush testi (basımın veritabanına
+    doğru satır olarak inmesi, donanımsız) + 5 donanım testi + 7 `event_index`
+    şema testi.
+  - **Canlı duman testi** (3 segment, tam ekran, 75 Hz): 3/3 sunuldu, 0 düşen
+    kare, 0 ses zamanlaması bozulması, eşik raporu doğru bastı.
+
+- **Yol boyunca çıkan iki gerçek hata (donanım testinde yakalandı):**
+  - **İlk segment saat başladıktan sonra yükleniyordu.** Altı saniyelik dosyanın
+    diskten okunması giriş süresini yiyor ve akış zaten geçmiş bir başlangıç anı
+    istiyordu (`StreamError`, ~11 ms geç). İlk segment artık saat başlamadan
+    önce yükleniyor — oddball'ın tüm setini önden yüklemesinin GIN'deki
+    karşılığı. `lead_in_s` bir sabitleme süresidir, yükleme penceresi değil.
+  - **Segment kuyruk bekleyişi bir sonraki segmentin planlama payını yiyordu.**
+    Bekleyiş artık bir sonraki segmentten `SCHEDULE_LEAD_S` (0.25 s) önce
+    kesiliyor; o çeyrek saniyedeki basımlar bir sonraki turun baş bekleyişinde
+    toplanıp flush anında onset'e göre kovalanıyor, hiçbir şey kaybolmuyor.
+
+- **Uyaran ölçümü (2026-07-30, `stimuli/gin/`):**
+  - Her boşluk **gerçek seviye düşüşü**: 12 ms boşlukta −22.9 dB, 4 ms'te
+    −21.6 dB, 3 ms'te −15.8 dB. Kısa boşlukta düşüş daha az çünkü kenar
+    rampaları boşluğun içine giriyor — bu beklenen ve görevin özü.
+  - Segment seviyesi −23.2 dBFS (config hedefiyle uyumlu). Segment başında
+    yumuşak rampa var (Adım 2'de 200 ms'e çıkarılmıştı).
+  - Segment başına boşluk dağılımı `{0:1, 1:7, 2:13, 3:9}` — **bir yakalama
+    segmenti** (0 boşluk) rastlantısal olarak var; standart GIN'de garanti
+    edilir, burada değil (Adım 2 bilinen sınırı hâlâ geçerli).
+
+- **Alınan kararlar:**
+  - **Analiz birimi boşluk, deneme değil.** Bu, `event_index` ve şema sürümü 4
+    kararının gerekçesi: eşik boşluk süresi başına hesaplanıyor, isabet hangi
+    boşluğu saptadığını söylemezse veritabanından eşik yeniden kurulamaz.
+    Alternatif (RT'den boşluğu geri hesaplamak) kırılgan ve sessiz olurdu.
+  - **Pencere dışı basım `OUTSIDE_WINDOW` değil, düz `FALSE_ALARM`.** Oddball'da
+    bir tonu takip eden geç basım o tona yanıt olabilirdi (`OUTSIDE_WINDOW`);
+    GIN'de her boşluğun penceresi dışındaki basım hiçbir boşluğu yanıtlamadı ve
+    "duyulacak bir şey yokken basmak" burada yanlış alarmın **tanımı**.
+    `event_index` NULL, RT NULL.
+  - **Kaçırma satır üretmiyor** (oddball kuralı): basımın yokluğu. Denemenin
+    taşıdığı boşluklarla dönen `event_index`'ler farkından türüyor.
+  - **Eşik ulaşılamazsa `None`, en uzun boşluk değil.** Hiçbir süre 4/6'yı
+    sağlamıyorsa "eşik test aralığının dışında" bir bulgudur; en uzunu yazmak
+    ölçülmemiş bir eşik uydurmak olur. Eşik **her zaman yanlış alarmla birlikte**
+    basılıyor (taslak §"Yorumlama Sınırları").
+  - **En kısa niteleyen süre, en kısa niteleyen dizi değil.** Katılımcı 4 ms'i
+    kaçırıp 3 ms'i şansla yakalayabilir; ölçüt "4/6 saptanan en kısa süre",
+    "en kısa saptanan süreler dizisi" değil. Monoton olmayan durum süre başına
+    tabloda sayının yanında görünüyor.
+  - **GIN monaural, kulak katılımcının.** `good_ear` iken `plan_trials`'a kulak
+    verilmezse **açık hata** — sessizce bir taraf seçmek ölçüm gibi görünürdü.
+    `both` segment listesini iki kez sunuyor (taslağın alternatifi, oturumu ~4 dk
+    uzatır); her kulakta sıra farklı (aynı sıra ikinci kez ezberden
+    yanıtlanabilirdi).
+  - **`trials.noise_condition = NULL`, `quiet` değil.** Uyaranın kendisi
+    gürültü; "gürültüde sunuldu" burada bir koşul tarif etmiyor. NULL =
+    uygulanamaz (AVSR V-only kuralı).
+  - **Segmentler bir ileriden yükleniyor**, oddball gibi hepsi birden değil:
+    30 × 6 saniyelik dosya yüzlerce MB tutardı. Segmentler arası 2 saniyelik ara
+    yükleme için bol bol yeter (§A.12: hazırlık uyaran arası boşlukta).
+
+- **Bilinen sınırlar:**
+  - **GIN yöntem dokümanında tanımlı değil** — taslak `docs/EK_GIN.docx` §6.6,
+    danışman onayı bekliyor. Standart parametreler (boşluk süreleri, 6 tekrar,
+    4/6 eşik; Musiek ve ark. 2005) korundu — değiştirmek norm değerleriyle
+    karşılaştırılabilirliği bozar.
+  - **Yanıt penceresi ([100, 900] ms) danışman onayı bekliyor.** Taslak sayı
+    vermiyor; bu bir başlangıç noktası. Oddball penceresiyle aynı kural: veri
+    toplanmadan önce sabitlenmeli, sonradan seçilmesi oranları sonuca göre
+    ayarlamak olur.
+  - **Kontrol grubunda kulak dengeleme kuralı Adım 8'de.** Taslak, kontrol
+    kulağının SSD gruplarının iyi kulak dağılımına oranlı dengelenmesini öneriyor
+    (`ear_selection: both`'a alternatif). Bu, katılımcı akışını gerektiriyor;
+    modül `plan_trials(..., ear=...)` ile hangi kulağı verirseniz onu sunuyor,
+    dengeleme mantığı Adım 8'in.
+  - **Kayıtlı onset planlanan onsettir**, ölçülen değil (motorun geri kalanı
+    gibi). Aralık sapması aritmetiği doğrular, sesin o an çıktığını değil —
+    onu `TimeFailed`/`XRuns` = 0 ve kademe 2 loopback söyler.
+  - Modül tek başına koşuyor; yönerge, alıştırma bloğu ("yalnızca uzun
+    boşluklar"), mola ve katılımcı girişi Adım 8'de.
+
 - **Sonraki adıma not:**
-  - **Config'de eksik alan: yanıt penceresi.** Bir tuş basımının hangi zaman
-    aralığında isabet sayılacağı `modules.gin` altında tanımlı değil.
-    Puanlama bu adımın işi olduğu için Adım 1'de eklenmedi, ancak
-    `response_window_ms` alanı bu adımda şemaya girmeli. Değerin **veri
-    toplanmadan önce** sabitlenmesi gerekiyor; sonradan seçilmesi isabet ve
-    yanlış alarm oranlarının sonuçlara göre ayarlanabilmesi anlamına gelir.
-    `docs/EK_GIN.docx` bu maddeyi danışman kararına bırakıyor.
-  - Kontrol grubunda kulak seçimi kuralı (`ear_selection` için yeni bir
-    strateji gerekebilir: SSD gruplarının iyi kulak dağılımına oranlı
-    dengeleme) danışman kararına bağlı — bkz. `docs/EK_GIN.docx`.
+  - **Adım 8 GIN için kulak seçmeli.** SSD'de iyi kulak; kontrolde dengeleme
+    kuralı (yukarıda). `plan_trials(..., ear=...)` hazır; seçilen kulak deneme
+    kaydına (`trials.ear`) yazılıyor.
+  - **Adım 8 GIN yönergesini vermeli** ("gürültüde kısa bir kesinti duyunca
+    basın") ve **boşluk sayısını/sürelerini söylememeli** (taslak). Alıştırma
+    bloğu yalnızca uzun boşluklar içermeli (en kolay düzey), verisi analize
+    girmemeli.
+  - **Adım 9** `v_trials_flat`'tan okurken GIN için `gin_segment_index`,
+    `gin_gap_durations_ms`, `event_index`, `category` ve `rt_from_burst_ms`
+    sütunlarını bulacak; `gin.measures_from_rows()` doğrudan çağrılabilir. QC
+    raporu **eşiği yanlış alarmla birlikte** göstermeli ve yanlış alarm oranı
+    yüksek katılımcının eşiğinin yanıt eğilimini yansıtabileceğini işaretlemeli
+    (taslak §"Yorumlama Sınırları").
+  - **Adım 9 GIN eşiğini TBW analizlerinde kovaryat olarak** kullanmalı (taslak
+    §"Analiz"): geniş bir TBW'nin modaliteler arası entegrasyondan mı yoksa
+    düşük düzeyli işitsel zamansal keskinlikten mi geldiğini ayrıştırmak için.
 
 ### Adım 8 — Oturum akışı ve arayüz
 - **Durum:** BEKLİYOR
@@ -1603,9 +1720,12 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
     `python -m mcgurk.config` çıktısına bakılmalı (§F.1).
 - [ ] Kulaklık tipi (donanım, çapraz dinleme kontrolünü etkiler) — §F.3
 - [ ] Konuşmacı seçim stratejisi — §F.4
-- [ ] **Oddball yanıt penceresi** (Adım 7'de eklendi, `[100, 800]` ms) ve GIN
-  yanıt penceresi (Adım 7c) — ikisi de veri toplamadan önce sabitlenmeli;
-  ayrıntı aşağıdaki bekleyen aksiyonlarda.
+- [ ] **Oddball yanıt penceresi** (Adım 7'de eklendi, `[100, 800]` ms) ve **GIN
+  yanıt penceresi** (Adım 7c'de eklendi, `[100, 900]` ms) — ikisi de veri
+  toplamadan önce sabitlenmeli; ayrıntı aşağıdaki bekleyen aksiyonlarda.
+- [ ] **GIN kontrol grubunda kulak seçimi** (Adım 7c) — SSD gruplarının iyi
+  kulak dağılımına oranlı dengeleme; kod hazır, mantık Adım 8'de, karar
+  danışmanın. Ayrıntı aşağıdaki bekleyen aksiyonlarda.
 
 ### Ek açık kararlar (2026-07-26 depo incelemesinde çıktı)
 
@@ -1671,6 +1791,10 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   Danışmanın karara bağlaması gereken altı madde listelendi; en kritik ikisi
   **kontrol grubunda kulak seçimi** (taslak, SSD gruplarının iyi kulak
   dağılımına oranlı dengeleme öneriyor) ve **yanıt penceresi süresi**.
+  **Adım 7c bunu engellemedi** (2026-07-30): modül taslaktaki tasarımla
+  gerçeklendi, standart parametreler (boşluk süreleri, 6 tekrar, 4/6 eşik)
+  korundu. Altı maddenin hiçbiri kodu değiştirmiyor — pencere ve kulak seçimi
+  config'ten/Adım 8'den, kalanlar analiz kararı.
 - **Kablolu kulaklık geldiğinde iki madde birlikte kapatılacak:**
   `TEST_ADIM_3.md` Test 2 madde 7 ve `TEST_ADIM_5.md` Test 1 madde 3 — ikisi de
   "AV denemesinde dudak ile ses eşzamanlı mı" sorusu. Bluetooth'la yargılanamaz
@@ -1696,12 +1820,16 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   hiç girmiyor). Config'in isim kullanması bu yüzden. Listelemek için:
   `python tools/timing_selftest.py --devices`. Gerçek kulaklık kararı verilince
   (§F.3) config'teki değer değiştirilmeli.
-- **Veritabanı şema sürümü 3'e çıktı (Adım 6).** Eski `data/mcgurk.sqlite`
-  (14 geliştirme oturumu, 43 deneme, hepsi DEV01) `VACUUM INTO` ile
-  `backups/mcgurk_pre_adim6_schema2_20260727T222615.sqlite` olarak yedeklendi
-  ve silindi; ilk koşuda yeni şemayla oluşuyor. Başka bir makinede sürüm 2
-  dosyası varsa aynı şey gerekir — kod açık hata veriyor
-  (`SchemaVersionError`), sessizce açmıyor.
+- **Veritabanı şema sürümü 4'e çıktı (Adım 7c).** `responses.event_index`
+  eklendi (GIN'de bir yanıtın segmentin içindeki hangi boşluğa ait olduğu).
+  Eski `data/mcgurk.sqlite` (7 geliştirme oturumu, 187 deneme, 110 yanıt, hepsi
+  DEV01) `VACUUM INTO` ile
+  `backups/mcgurk_pre_adim7c_schema3_20260729T220000.sqlite` olarak yedeklendi
+  (satır sayıları `verify_backup.py` ile canlıyla birebir doğrulandı) ve
+  silindi; ilk koşuda yeni şemayla oluşuyor. Başka bir makinede eski sürüm
+  dosyası varsa aynı şey gerekir — kod açık hata veriyor (`SchemaVersionError`),
+  sessizce açmıyor. **Önceki bump (Adım 6, sürüm 2→3):**
+  `backups/mcgurk_pre_adim6_schema2_20260727T222615.sqlite`.
 - **Oddball yanıt penceresi — danışman kararı (Adım 7).**
   `modules.oddball.response_window_ms` config'e `[100, 800]` ms olarak girdi:
   ton başlangıcından sonra bu aralıkta gelen bir tuş basımı o tona verilmiş
@@ -1710,7 +1838,19 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   sınırın en kısa ISI'dan kısa olmasını zorluyor). **Veri toplama başlamadan
   önce kesinleşmeli** — sonradan değiştirmek isabet ve yanlış alarm oranlarını
   yeniden tanımlar, yani sonuca bakarak ayarlanabilir hâle getirir. GIN'in
-  yanıt penceresiyle (Adım 7c, `docs/EK_GIN.docx`) birlikte karara bağlanmalı.
+  yanıt penceresiyle (aşağıdaki madde) birlikte karara bağlanmalı.
+- **GIN yanıt penceresi ve kulak dengeleme — danışman kararı (Adım 7c).**
+  `modules.gin.response_window_ms` config'e `[100, 900]` ms olarak girdi: boşluk
+  başlangıcından sonra bu aralıkta gelen basım o boşluğun saptanması sayılıyor.
+  Şema üst sınırın `min_gap_separation_s`'ten (1.0 s) kısa olmasını zorluyor
+  (ölçülen en dar ayrım 1.029 s). Taslak `docs/EK_GIN.docx` sayı vermiyor;
+  oddball penceresiyle aynı kural — **veri toplamadan önce kesinleşmeli**.
+  İkinci açık madde: **kontrol grubunda kulak seçimi** — taslak, kontrol
+  kulağının SSD gruplarının iyi kulak dağılımına oranlı dengelenmesini öneriyor
+  (`ear_selection: both`'a alternatif). Modül `plan_trials(..., ear=...)` ile
+  verilen kulağı sunuyor; dengeleme mantığı Adım 8'in katılımcı akışında.
+  Diğer dört taslak maddesi (birincil sonuç mu kovaryat mı, alıştırma uzunluğu,
+  sunum seviyesi dB SL/HL, standart parametrelerin korunması) kodu engellemedi.
 - **Fotodiyot ölçümü (`01_av_gecikme_olcumu.md`) hâlâ bekliyor** — tasarım
   gereği tüm kod bittikten sonra. O ana kadar `timing.system_av_offset_ms`
   `null` ve motor 0 kabul edip uyarı basıyor.
