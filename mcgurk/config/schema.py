@@ -940,6 +940,32 @@ class CrossHearingCheck(StrictModel):
         return self
 
 
+class QCConfig(StrictModel):
+    """Thresholds for the quality-control report (steps.md §C Adım 9).
+
+    In the config rather than the code because they are QC parameters (§A.9):
+    which trials count as broken, and what "above chance" means for the
+    cross-hearing check, are decisions that must be fixed *before* data
+    collection — choosing them after seeing the data is choosing which trials to
+    drop and which participants to flag by their results.  The shipped values are
+    provisional, pending the danışman (same status as the oddball/GIN response
+    windows).
+
+    * ``max_dropped_frames`` — a trial whose ``dropped_frames`` exceeds this is
+      flagged as timing-compromised.
+    * ``soa_tolerance_ms`` — a trial whose realised SOA deviates from its nominal
+      SOA by more than this (absolute) is flagged.  Both are the *experienced*
+      SOA (``actual_soa_ms`` already carries the system offset), so the
+      comparison is direct.
+    * ``cross_hearing_alpha`` — the significance level of the one-sided binomial
+      test that decides whether the deaf-ear detection was above chance (§F.3).
+    """
+
+    max_dropped_frames: int = Field(default=3, ge=0)
+    soa_tolerance_ms: float = Field(default=20.0, gt=0.0)
+    cross_hearing_alpha: float = Field(default=0.05, gt=0.0, lt=1.0)
+
+
 class ChecklistConfig(StrictModel):
     """Thresholds for ``python -m mcgurk.checklist`` (steps.md §C Adım 8).
 
@@ -1102,6 +1128,9 @@ class ExperimentConfig(StrictModel):
     speaker_selection: SpeakerSelection
     cross_hearing_check: CrossHearingCheck
     checklist: ChecklistConfig
+    # Defaulted so a session snapshot written before Adım 9b (which has no `qc`
+    # block) still rebuilds through config_from_snapshot.
+    qc: QCConfig = Field(default_factory=QCConfig)
     stimulus_prep: StimulusPrep
 
     # -- what the stimulus set has to contain ------------------------------

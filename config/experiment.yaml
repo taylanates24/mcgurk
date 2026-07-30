@@ -351,6 +351,21 @@ checklist:
   # data/ diskinde bundan az boş alan KIRMIZI verir.
   min_free_disk_mb: 500
 
+# ---- Kalite kontrol raporu (tools/qc_report.py, Adım 9) ----
+# QC parametreleri (§A.9): hangi denemenin "bozuk" sayılacağı ve çapraz dinlemede
+# "şans üstü"nün ne demek olduğu veri toplamadan ÖNCE sabitlenir — sonuca bakarak
+# seçmek, hangi denemenin atılacağını/hangi katılımcının işaretleneceğini sonuca
+# göre seçmek olur. Aşağıdaki değerler GEÇİCİ, danışman onayına açık (oddball/GIN
+# yanıt pencereleriyle aynı statü).
+qc:
+  # dropped_frames bu sayıyı aşan deneme zamanlama açısından işaretlenir.
+  max_dropped_frames: 3
+  # Gerçekleşen SOA nominalinden bu kadar ms (mutlak) saparsa deneme işaretlenir.
+  soa_tolerance_ms: 20.0
+  # Sağır kulak tespitinin şans üstü olup olmadığına karar veren tek yönlü
+  # binomial testin anlamlılık düzeyi (§F.3).
+  cross_hearing_alpha: 0.05
+
 # ---- Stimulus preparation (tools/prepare_stimuli.py, Adım 2) ----
 # Offline only (§A.12): nothing below is read during a trial.  It lives in this
 # file rather than a separate one because the prepared set and the design have

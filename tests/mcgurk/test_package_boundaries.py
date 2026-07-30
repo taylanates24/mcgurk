@@ -115,6 +115,7 @@ PURE_LAYERS = (
     # view and each module's PsychoPy-free measures.
     "mcgurk.analysis.export",
     "mcgurk.analysis.measures",
+    "mcgurk.analysis.qc_report",
     *ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY,
 )
 
