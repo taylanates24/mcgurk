@@ -91,7 +91,13 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── block.py                 # shared trial loop + per-module TrialPolicy
 │   └── stream.py                # continuous-stream loop (oddball + GIN)
 ├── analysis/                    # Adım 9 (empty)
-├── ui/                          # Adım 8 (empty)
+├── ui/                          # Adım 8 — session flow (8b-i)
+│   ├── login.py                 # gui.DlgFromDict -> Participant; build_participant is pure
+│   ├── screens.py               # instruction / break / operator-checklist screens
+│   ├── runtime.py               # shared hardware open + start_session (also used by run_module)
+│   ├── session.py               # orchestrator: checklist -> login -> modules -> breaks -> end
+│   └── __main__.py              # python -m mcgurk.ui
+├── checklist.py                 # Adım 8a — python -m mcgurk.checklist (pre-session GREEN/RED)
 ├── logging_setup.py
 └── provenance.py                # git commit, OS, package versions
 config/experiment.yaml           # new single source of truth (§G)
@@ -588,6 +594,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
 - Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin --dry-run` (gin needs `--ear left|right`)
 - Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin [--limit N] [--seed N]` (gin needs `--ear left|right`)
+- Run a full session (Adım 8, new package): `python -m mcgurk.ui [--limit N] [--db PATH] [--device NAME]` — login → checklist confirm → instructions → modules → breaks → end; ESC aborts to `aborted` + backup. (Practice block and cross-hearing check land in Adım 8b-ii.)
 - Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
 - Verify stimuli: `python tools/verify_stimuli.py [--quick]`
 - Verify a backup: `python tools/verify_backup.py <yedek> --compare-with data/mcgurk.sqlite`

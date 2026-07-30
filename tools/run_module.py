@@ -46,7 +46,6 @@ from mcgurk.db.models import (  # noqa: E402
     SESSION_ABORTED,
     SESSION_COMPLETED,
     Participant,
-    SessionRecord,
 )
 from mcgurk.logging_setup import setup_logging  # noqa: E402
 from mcgurk.modules import avsr as avsr_module  # noqa: E402
@@ -56,7 +55,6 @@ from mcgurk.modules import mcgurk as mcgurk_module  # noqa: E402
 from mcgurk.modules import oddball as oddball_module  # noqa: E402
 from mcgurk.modules import tbw as tbw_module  # noqa: E402
 from mcgurk.modules.base import ModuleError, PlannedTrial  # noqa: E402
-from mcgurk.provenance import collect as collect_provenance  # noqa: E402
 from mcgurk.stimuli import manifest as manifest_module  # noqa: E402
 from mcgurk.stimuli.manifest import ManifestError  # noqa: E402
 
@@ -318,16 +316,8 @@ def live_run(
 ) -> int:
     """Open the hardware, run the block(s), write the session to the database."""
     from mcgurk.engine import AbortSession
-    from mcgurk.engine.audio import open_speaker, require_ptb_backend
     from mcgurk.engine.av_presenter import AVPresenter
-    from mcgurk.engine.psychopy_prefs import configure_psychopy
-    from mcgurk.engine.scheduling import TimingParams
-    from mcgurk.engine.window import (
-        check_refresh_hz,
-        make_fixation,
-        measure_refresh_hz,
-        open_window,
-    )
+    from mcgurk.engine.window import make_fixation
     from mcgurk.modules.block import (
         run_avsr,
         run_dichotic,
@@ -337,6 +327,7 @@ def live_run(
     )
     from mcgurk.modules.response import make_keyboard
     from mcgurk.modules.stream import run_gin, run_oddball
+    from mcgurk.ui.runtime import open_hardware, start_session
 
     runners = {
         "mcgurk": run_mcgurk,
@@ -345,50 +336,30 @@ def live_run(
         "dichotic": run_dichotic,
     }
 
-    configure_psychopy(audio_device=config.audio.device)
-    require_ptb_backend()
-    speaker = open_speaker(
-        device_name=config.audio.device,
-        latency_class=config.timing.audio_latency_mode,
-        sample_rate=config.audio.sample_rate,
-    )
+    # The same hardware setup and session row the real flow uses (mcgurk/ui):
+    # a timing difference between the harness and the session would be exactly
+    # the kind of bug this shares the code to avoid.
+    hardware = open_hardware(config)
+    win = hardware.win
+    speaker = hardware.speaker
+    params = hardware.params
 
     db = Database(db_path)
-    win = open_window(config.display)
     status = SESSION_COMPLETED
     exit_code = 0
     session_id: int | None = None
     try:
-        refresh_hz = measure_refresh_hz(win)
-        check_refresh_hz(refresh_hz, config.display)
-        params = TimingParams(
-            frame_period_s=1.0 / refresh_hz,
-            lead_frames=config.timing.lead_frames,
-            system_av_offset_ms=config.timing.system_av_offset_ms or 0.0,
-            dropped_frame_tolerance=config.timing.dropped_frame_tolerance,
-        )
-
-        provenance = collect_provenance(_PROJECT_ROOT)
         participant_id = _participant_id(
             db, participant_code, "tools/run_module.py geliştirme koşusu"
         )
-        session_id = db.start_session(
-            SessionRecord(
-                participant_id=participant_id,
-                seed=seed,
-                config_snapshot=db.snapshot_config(config.model_dump(mode="json")),
-                config_mode=config.experiment.mode,
-                app_version=provenance.app_version,
-                git_commit=provenance.git_commit,
-                psychopy_version=provenance.psychopy_version,
-                python_version=provenance.python_version,
-                os_name=provenance.os_name,
-                audio_backend="ptb",
-                audio_device=str(getattr(speaker, "name", "") or ""),
-                measured_refresh_hz=refresh_hz,
-                system_av_offset_ms=config.timing.system_av_offset_ms,
-                operator_notes=f"tools/run_module.py --module {module}",
-            )
+        session_id = start_session(
+            db,
+            config,
+            project_root=_PROJECT_ROOT,
+            participant_id=participant_id,
+            seed=seed,
+            hardware=hardware,
+            operator_notes=f"tools/run_module.py --module {module}",
         )
         print(f"  Oturum {session_id}, katılımcı {participant_code}, tohum {seed}")
 

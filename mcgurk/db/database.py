@@ -269,6 +269,14 @@ class Database:
         ).fetchone()
         return dict(row) if row else None
 
+    def count_sessions(self) -> int:
+        """Total number of sessions ever started.
+
+        The ``balanced`` speaker strategy rotates by this count, so a fresh
+        participant takes the next speaker in turn regardless of who ran before.
+        """
+        return int(self.conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0])
+
     # -- blocks -----------------------------------------------------------
 
     def add_block(self, block: Block) -> int:

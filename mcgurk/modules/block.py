@@ -280,6 +280,7 @@ def run_blocks(
     kb: Any,
     planned: list[PlannedTrial],
     policy: TrialPolicy,
+    on_break: Callable[[int, int], None] | None = None,
 ) -> list[BlockOutcome]:
     """Present *planned* and record every trial.
 
@@ -287,12 +288,17 @@ def run_blocks(
     raises: a trial that could not be presented as specified is not a trial to
     salvage, and :class:`AbortSession` propagates so the caller can close the
     session as ``aborted``.
+
+    *on_break*, if given, is called between blocks — after a block is committed
+    and before the next one starts, which is the §A.5 commit boundary and so a
+    safe point to pause.  It receives ``(blocks_done, blocks_total)``.  The
+    session flow (Adım 8) shows its break screen here; the dev harness passes
+    nothing and runs straight through.
     """
     outcomes: list[BlockOutcome] = []
     trial_index = 0
-    for chunk_number, trials in enumerate(
-        chunk(planned, config.session.break_every_n_trials)
-    ):
+    chunks = chunk(planned, config.session.break_every_n_trials)
+    for chunk_number, trials in enumerate(chunks):
         block_index = db.next_block_index(session_id)
         block_id = db.add_block(
             Block(
@@ -351,6 +357,8 @@ def run_blocks(
             outcome.n_timeouts,
             dict(outcome.categories),
         )
+        if on_break is not None and chunk_number < len(chunks) - 1:
+            on_break(chunk_number + 1, len(chunks))
 
     return outcomes
 
@@ -364,6 +372,7 @@ def run_mcgurk(
     win: Any,
     kb: Any,
     planned: list[PlannedTrial],
+    on_break: Callable[[int, int], None] | None = None,
 ) -> list[BlockOutcome]:
     """Modül 1 — see :func:`run_blocks`."""
     return run_blocks(
@@ -375,6 +384,7 @@ def run_mcgurk(
         kb=kb,
         planned=planned,
         policy=mcgurk_policy(config, win),
+        on_break=on_break,
     )
 
 
@@ -387,6 +397,7 @@ def run_avsr(
     win: Any,
     kb: Any,
     planned: list[PlannedTrial],
+    on_break: Callable[[int, int], None] | None = None,
 ) -> list[BlockOutcome]:
     """Modül 2 — see :func:`run_blocks`."""
     return run_blocks(
@@ -398,6 +409,7 @@ def run_avsr(
         kb=kb,
         planned=planned,
         policy=avsr_policy(config, win),
+        on_break=on_break,
     )
 
 
@@ -410,6 +422,7 @@ def run_tbw(
     win: Any,
     kb: Any,
     planned: list[PlannedTrial],
+    on_break: Callable[[int, int], None] | None = None,
 ) -> list[BlockOutcome]:
     """Modül 3 — see :func:`run_blocks`."""
     return run_blocks(
@@ -421,6 +434,7 @@ def run_tbw(
         kb=kb,
         planned=planned,
         policy=tbw_policy(config, win),
+        on_break=on_break,
     )
 
 
@@ -433,6 +447,7 @@ def run_dichotic(
     win: Any,
     kb: Any,
     planned: list[PlannedTrial],
+    on_break: Callable[[int, int], None] | None = None,
 ) -> list[BlockOutcome]:
     """Modül 5 — see :func:`run_blocks`."""
     return run_blocks(
@@ -444,6 +459,7 @@ def run_dichotic(
         kb=kb,
         planned=planned,
         policy=dichotic_policy(config, win),
+        on_break=on_break,
     )
 
 
