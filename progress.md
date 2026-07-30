@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 8c (8a + 8b tamamlandı — sıradaki: kesinti/devam + entegrasyon + master merge)
+Aktif adım: 8c-ii (8a + 8b + 8c-i tamamlandı — sıradaki: src emekliliği + master merge)
 
 ## Durum tablosu
 
@@ -20,7 +20,8 @@ Aktif adım: 8c (8a + 8b tamamlandı — sıradaki: kesinti/devam + entegrasyon 
 | 8a | Oturum metinleri + checklist | TAMAMLANDI | 2026-07-30 | `8683fa2` |
 | 8b-i | Oturum akışı iskeleti | TAMAMLANDI | 2026-07-30 | `1882dcb` |
 | 8b-ii | Alıştırma + çapraz dinleme + ESC onayı | TAMAMLANDI | 2026-07-30 | `82a9a4d` |
-| 8c | Devam + entegrasyon + master merge | BEKLİYOR | | |
+| 8c-i | Kesinti/devam (resume) | TAMAMLANDI | 2026-07-30 | `0602fbb` |
+| 8c-ii | src emekliliği + master merge | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
 
 Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAMAMLANDI
@@ -1891,14 +1892,66 @@ ikiye bölündü (kullanıcı, 2026-07-30).**
   - Çapraz dinleme `signal_present`'ı `v_trials_flat`'a eklemek (şema bump)
     Adım 9'un QC/analiz işiyle birlikte.
 
-### Adım 8c — Kesinti/devam + entegrasyon + master merge
+### Adım 8c — Kesinti/devam + emeklilik + master merge (iki tura bölündü)
+
+**8c, hacmi nedeniyle 8c-i (resume) ve 8c-ii (src emekliliği + master merge)
+diye ikiye bölündü (kullanıcı, 2026-07-30).**
+
+### Adım 8c-i — Kesinti/devam (resume)
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-30. Otomatik testler yeşil (794 CI alt kümesi, 10
+  yeni; ruff + mypy temiz). `TEST_ADIM_8C_I.md` kullanıcı tarafından yürütüldü
+  ve geçti (yarıda kes → devam, tamamlanan modüller atlandı; yeni/iptal/
+  `--new-session`).
+- **Commit:** `0602fbb`
+
+- **Ne yapıldı:**
+  - **DB yardımcıları** (`database.py`): `latest_resumable_session`
+    (`aborted`/`running` son oturum), `completed_trial_counts` (yalnız
+    `completed` bloklardaki deneme, modül başına), `session_speaker_id`
+    (konuşmacıyı denemeden geri okur), `set_session_status` (tekrar `running`).
+    Şema değişmedi.
+  - **`login.py`:** `ask_resume_or_new` (Devam et / Yeni oturum / İptal).
+  - **`session.py` yeniden yapılandırıldı:** girişten sonra yarım oturum aranır;
+    "Devam et"te **aynı `session_id`, tohum ve saklı config snapshot'ı**
+    (`config_from_snapshot`) kullanılır, durum `running`. Her modül yalnızca
+    **kalanını** koşar (`remaining_plan`): tamamlanan atlanır (yönergesiz),
+    forced-choice kısmi modül `plan[K:]`'ten sürer, stream/çapraz-dinleme tam
+    yeniden. Konuşmacı denemeden geri okunur (balanced/random'da yeniden
+    türetilemez).
+  - **`__main__.py`:** `--new-session` — yarım oturum olsa da teklifi atlar.
+  - **Test: 10 yeni** (`test_resume.py`): `remaining_plan` kuralları, config
+    snapshot round-trip, DB yardımcıları (bellek-içi DB).
+
+- **Alınan kararlar:**
+  - **Saklı snapshot'tan yeniden kurulum:** kalan tasarım orijinalle birebir
+    aynı olsun (mevcut config değişmiş olabilir) — round-trip testle doğrulandı.
+  - **Stream (oddball/GIN) ve çapraz dinleme tam yeniden** (kullanıcı): sürekli
+    akış ortadan sürdürülemez; yarım `aborted` blok DB'de kalır, analiz dışlar.
+  - **Forced-choice blok düzeyinde sürer:** completed bloklardaki K deneme
+    atlanır, `plan[K:]` yeni bloklar hâlinde koşulur; tohum sırayı sabitler.
+
+- **Bilinen sınırlar:**
+  - Resume orkestrasyonu donanım gerektirdiği için CI'da test edilmiyor; karar
+    mantığı (`remaining_plan`), DB sorguları ve snapshot round-trip ediliyor.
+  - Checklist yeni koşuda **mevcut** config'e karşı çalışır (makine durumu);
+    resume tasarımı snapshot'tan gelir. Farklı config mod'ları arası resume
+    (dev↔data_collection) beklenmiyor, ayrıca korunmadı.
+
+- **Sonraki adıma not (8c-ii):**
+  - **src/ emekliliği:** `main.py` yeni akışa (`mcgurk.ui`) yönlendirilir; eski
+    `src/` + `config.yaml` + `admin.py` + `data/mcgurk.db` `legacy/`'ye
+    (`git mv`, silme değil). `src/`'e bağlı testler taşınır/güncellenir. README +
+    CLAUDE.md: tek çalışan platform yeni paket.
+  - **`develop` → `master` merge + `git tag adim-8-oturum-akisi`** (dal
+    politikası; master hâlâ initial commit'te → fast-forward).
+
+### Adım 8c-ii — src emekliliği + master merge
 - **Durum:** BEKLİYOR
 - **Tamamlanma:** —
 - **Commit:** —
 - **Kapanışta ayrıca:** `develop` → `master` merge + `git tag
-  adim-8-oturum-akisi` (bkz. *Dal politikası*) ve **src/ emekliliği** (kullanıcı
-  kararı, 2026-07-30): main.py yeni akışa yönlenir, src/ + config.yaml +
-  data/mcgurk.db legacy'ye alınır.
+  adim-8-oturum-akisi` ve **src/ emekliliği** (kullanıcı kararı, 2026-07-30).
 - **Ne yapıldı:**
 - **Alınan kararlar:**
 - **Bilinen sınırlar:**
