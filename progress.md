@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 9 — 9a+9b TAMAMLANDI; 9c dokümanları yazıldı, **prova oturumu bekliyor** (prova → bug düzeltme → master merge + v1.0.0 → Adım 10)
+Aktif adım: 10 — Adım 9 TAMAMLANDI (kod + doküman, kullanıcı onayı 2026-07-30). Sıra: **Adım 10 (operatör paneli + paketleme) → prova oturumu → master merge + v1.0.0**
 
 ## Durum tablosu
 
@@ -25,22 +25,23 @@ Aktif adım: 9 — 9a+9b TAMAMLANDI; 9c dokümanları yazıldı, **prova oturumu
 | 8.5 | Arayüz cilası + uçtan uca gösterim | İPTAL | 2026-07-30 | (kullanıcı kararı) |
 | 9a | Analiz kütüphanesi (dışa aktarım + ölçümler) | TAMAMLANDI | 2026-07-30 | `d53b61e` |
 | 9b | QC + entegrasyon/başarısızlık testleri | TAMAMLANDI | 2026-07-30 | `e24c01a` |
-| 9c | Dokümantasyon + prova + master merge | TESTTE | 2026-07-30 | `94c90bc` |
-| 10 | Operatör paneli (PySide6) + paketleme (.exe) | BEKLİYOR (prova sonrası) | | |
+| 9c | Dokümantasyon (+ prova/merge en son kapıda) | TAMAMLANDI | 2026-07-30 | `94c90bc` |
+| 10 | Operatör paneli (PySide6) + paketleme (.exe) | BEKLİYOR | | |
 
-**9c dokümanları yazıldı; prova oturumu + master merge bekliyor.** Dokümanlar
-(`docs/PROTOKOL.md`, `docs/OPERATOR_SOP.md`, README yenilemesi) commit edildi;
-9c'nin kabul kapısı **gerçek kişiyle prova oturumudur** (henüz koşulmadı).
+**Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
+analiz kütüphanesi, 9b QC + testler, 9c dokümanlar. Prova oturumu ve master merge
+**en sona alındı** (aşağıdaki sıra).
 
-**Adım 10 eklendi (kullanıcı kararı, 2026-07-30):** operatör araçları (checklist/
+**Adım 10 eklendi (kullanıcı isteği, 2026-07-30):** operatör araçları (checklist/
 export/analiz/QC) için **buton temelli PySide6 paneli** + **PyInstaller ile Windows
-.exe paketleme**. steps.md dışı yeni kapsam; **prova sonrasına** bırakıldı.
+.exe paketleme**. steps.md dışı yeni kapsam; ayrıntılı prompt `docs/ADIM_10.md`.
 
-**Sıra (kullanıcı kararı, 2026-07-30):** prova oturumu → (bug çıkarsa) düzeltme →
-`develop → master` merge + `git tag v1.0.0` → Adım 10. Yani master merge yine
-**prova kapısından sonra** (steps.md'nin orijinal sırası; 9a/9b sırasında
-tartışılan "önce merge" fikri kullanıcıca geri alındı). Adım 10 kendi
-merge/etiketini (v1.1.0) sonra alır.
+**Sıra (kullanıcı kararı, 2026-07-30 — güncellendi):** Adım 9 kapat → **Adım 10
+(panel + paketleme)** → **prova oturumu** (paketlenmiş app üzerinde — provanın son
+teslim biçimini denemesi için) → (bug çıkarsa düzeltme) → `develop → master`
+merge + `git tag v1.0.0`. Yani prova ve master merge **en son**, Adım 10'dan
+sonra; v1.0.0 = dağıtılabilir Windows uygulaması. Prova kılavuzu `TEST_ADIM_9C.md`
+Adım 10 sonrası koşulacak biçime uyarlanacak.
 
 **Adım 8 (oturum akışı) tamamen tamamlandı** — 8a/8b-i/8b-ii/8c-i/8c-ii.
 `develop` → `master` merge + `git tag adim-8-oturum-akisi` yapıldı.
@@ -2169,8 +2170,9 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
   - Kapanışta `develop` → `master` merge + `git tag v1.0.0` (dal politikası).
 
 ### Adım 9c — Dokümantasyon + prova oturumu + master merge
-- **Durum:** TESTTE (dokümanlar yazıldı; prova oturumu kapısı bekliyor)
-- **Commit:** `94c90bc` (dokümanlar)
+- **Durum:** TAMAMLANDI (dokümanlar; prova oturumu + master merge **en son
+  kapıya**, Adım 10 sonrasına alındı — kullanıcı kararı 2026-07-30)
+- **Commit:** `94c90bc` (dokümanlar), `680d054` (prova kılavuzu)
 - **Ne yapıldı (dokümanlar):**
   - **`docs/PROTOKOL.md`** — yöntem dokümanı (`946383_YONTEM (3).docx`) ↔ kod
     eşleme tablosu. §4 (katılımcı/KVKK), §5 (platform + iki **sapma**:
@@ -2186,11 +2188,12 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     "Ne yapar" tablosu (eski 5 `src/` bölümü → doğru 6 modül), yeni "Analiz ve
     dışa aktarım" bölümü, şema v5, "Bilinen sınırlar" güncel gerçeğe göre yeniden
     yazıldı, kalan tüm `src/`/`config.yaml`/eski-bölüm atıfları temizlendi.
-- **Bekleyen (kapanış için):**
+- **Bekleyen (en son kapı — Adım 10 sonrası):**
   - **Prova oturumu** (steps.md Adım 9 kabul kapısı): gerçek kişiyle, SOP takip
     edilerek, baştan sona tam oturum; süre ölçümü; QC raporu incelenmesi.
-    Otomatik uçtan uca test bunun yerine geçmez. Mevcut CLI-tabanlı biçim
-    üzerinde koşulacak (panel/paketleme Adım 10, prova sonrası).
+    Otomatik uçtan uca test bunun yerine geçmez. **Adım 10'un ürettiği
+    paketlenmiş app + operatör paneli üzerinde** koşulacak (kullanıcı kararı:
+    prova son teslim biçimini denemeli). Kılavuz `TEST_ADIM_9C.md`.
   - Prova'da bug çıkarsa düzeltilir, sonra `develop → master` merge +
     `git tag v1.0.0`.
 
