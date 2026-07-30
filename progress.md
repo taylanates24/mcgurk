@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 10 — 10a (panel çekirdeği) TAMAMLANDI (kullanıcı onayı 2026-07-30). Sıra: **10b (PySide6 paneli) → 10c (.exe paketleme) → prova oturumu → master merge + v1.0.0**
+Aktif adım: 10 — 10a TAMAMLANDI; 10b (PySide6 paneli) kod olarak commit edildi, **manuel ekran testi bekliyor (TESTTE)**. Sıra: **10b manuel test → 10c (.exe paketleme) → prova oturumu → master merge + v1.0.0**
 
 ## Durum tablosu
 
@@ -27,7 +27,7 @@ Aktif adım: 10 — 10a (panel çekirdeği) TAMAMLANDI (kullanıcı onayı 2026-
 | 9b | QC + entegrasyon/başarısızlık testleri | TAMAMLANDI | 2026-07-30 | `e24c01a` |
 | 9c | Dokümantasyon (+ prova/merge en son kapıda) | TAMAMLANDI | 2026-07-30 | `94c90bc` |
 | 10a | Panel çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-07-30 | `15d428f` |
-| 10b | PySide6 paneli (GUI kabuğu) | BEKLİYOR | | |
+| 10b | PySide6 paneli (GUI kabuğu) | TESTTE | 2026-07-30 | |
 | 10c | PyInstaller ile Windows .exe | BEKLİYOR | | |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
@@ -2269,6 +2269,44 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
   - Panel çekirdeği analiz katmanını import ettiği için `soundfile`/`numpy`/
     `pandas` gerektirir (PsychoPy **gerektirmez**). PowerShell'de `python` base
     ortama düşerse bu bağımlılıklar bulunamaz — mcgurk ortamı kullanılmalı.
+
+### Adım 10b — PySide6 paneli (GUI kabuğu)
+- **Durum:** TESTTE (kod commit edildi; manuel ekran testi bekliyor —
+  kullanıcı kararı 2026-07-30: "şimdiki halini commit/push, sonra devam".
+  7b/7c precedent'i: commit önce, manuel test sonra; onaya kadar TAMAMLANDI değil.)
+- **Tamamlanma:** — (manuel test sonrası). Otomatik testler yeşil (872 test, CI
+  alt kümesi; +4 offscreen smoke), `ruff` + `mypy` temiz. `TEST_ADIM_10B.md`
+  ekran testi **bekliyor**.
+- **Commit:**
+- **Ne yapıldı:**
+  - **`mcgurk/panel/app.py`** — `QMainWindow` (`PanelWindow`), 10a `core`'u
+    üzerine ince Qt kabuğu. PsychoPy import etmez (§A10.2), yalnız PySide6.
+    Üst şerit (Oturum başlat / Kontrol listesi / Uyaranları doğrula / Yedek
+    doğrula), sol sonuç tablosu (anonim) + Yenile/Analiz/QC/Dışa aktar, sağ
+    canlı çıktı paneli, durum çubuğu.
+  - **`mcgurk/panel/__main__.py`** — `python -m mcgurk.panel`: runtime tespiti,
+    config yükle (hata diyalogla, traceback değil), DB yolu writable_root'a
+    göre, pencereyi aç.
+  - **`tests/mcgurk/test_panel_app.py`** — offscreen smoke (4 test); PySide6
+    yoksa (CI) atlanır — Qt UI CI bağımlılığı değil.
+- **Alınan kararlar:**
+  - **Deney *detached* süreç** (`QProcess.startDetached`): ~75 dk süren oturumu
+    panel kapanınca öldürmemek için. Kısa rapor araçları (checklist/verify)
+    **attached** — canlı çıktı + çıkış kodu. Panel PsychoPy'ye hiç dokunmaz
+    (§A10.1).
+  - **Arayüz donmaz:** alt-süreçler `QProcess` (async); in-process analiz
+    (export/measures/qc) `QThread` işçisinde; sürerken butonlar kilitli.
+    `core.run_tool` senkron/headless yardımcı olarak kaldı; GUI QProcess kullanır.
+  - Analiz/QC/dışa aktarım **seçili oturuma** etki eder; satır yoksa uyarı.
+  - `requirements.txt` zaten `PySide6==6.11.0` içeriyordu; CI'ya eklenmedi.
+- **Bilinen sınırlar / sonraki adıma not:**
+  - Manuel ekran testi (`TEST_ADIM_10B.md`) yapılmadı; özellikle "Oturum başlat"
+    ayrı-süreç davranışı ve checklist KIRMIZI gösterimi elle doğrulanmalı.
+  - Benim açılış denemem (offscreen, gerçek config + `data/mcgurk.sqlite`):
+    pencere açıldı, 8 buton, 1 oturum satırı, başlık doğru — davranışsal değil,
+    yalnız kurulum kontrolü.
+  - **10c (.exe):** `resolve_roots`/`detect_runtime` gerçek bundle'a bağlanır;
+    `--run` dağıtıcısı yazılır; PyInstaller spec; `stimuli/` exe yanına konur.
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 
