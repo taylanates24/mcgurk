@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 9 (ADIM 8 TAMAMLANDI — Adım 9 henüz başlatılmadı, kullanıcı kararı)
+Aktif adım: 9 — 9a TAMAMLANDI (analiz kütüphanesi); sıradaki 9b (QC + entegrasyon/başarısızlık testleri)
 
 ## Durum tablosu
 
@@ -23,10 +23,19 @@ Aktif adım: 9 (ADIM 8 TAMAMLANDI — Adım 9 henüz başlatılmadı, kullanıc�
 | 8c-i | Kesinti/devam (resume) | TAMAMLANDI | 2026-07-30 | `0602fbb` |
 | 8c-ii | src emekliliği + master merge | TAMAMLANDI | 2026-07-30 | `56c902e` |
 | 8.5 | Arayüz cilası + uçtan uca gösterim | İPTAL | 2026-07-30 | (kullanıcı kararı) |
-| 9 | Analiz ve entegrasyon | BEKLİYOR | | |
+| 9a | Analiz kütüphanesi (dışa aktarım + ölçümler) | TAMAMLANDI | 2026-07-30 | `d53b61e` |
+| 9b | QC + entegrasyon/başarısızlık testleri | BEKLİYOR | | |
+| 9c | Dokümantasyon + prova + master merge | BEKLİYOR | | |
 
 **Adım 8 (oturum akışı) tamamen tamamlandı** — 8a/8b-i/8b-ii/8c-i/8c-ii.
 `develop` → `master` merge + `git tag adim-8-oturum-akisi` yapıldı.
+
+**Adım 9 alt adımlara bölündü (kullanıcı kararı, 2026-07-30).** En büyük ve son
+kod adımı olduğu için 9a (analiz kütüphanesi: dışa aktarım + ölçümler), 9b (QC
+raporu + uçtan uca entegrasyon + başarısızlık modu testleri) ve 9c
+(dokümantasyon + prova oturumu kapısı + `master` merge + `v1.0.0`) diye üçe
+ayrıldı; her birinde 7b/7c/8 gibi ayrı plan-onay, test ve commit. `master`
+yalnızca 9c sonunda güncellenir (dal politikası değişmedi).
 
 Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAMAMLANDI
 
@@ -1994,16 +2003,95 @@ diye ikiye bölündü (kullanıcı, 2026-07-30).**
 config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor — platform
 `python main.py` ile uçtan uca koşuyor. Bu satır kararın kaydı için tutuluyor.
 
-### Adım 9 — Analiz, dışa aktarım ve entegrasyon
+### Adım 9a — Analiz kütüphanesi (dışa aktarım + ölçümler)
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-30. Otomatik testler yeşil (808 CI alt kümesi, ~30
+  yeni; ruff + mypy temiz). `TEST_ADIM_9A.md` kullanıcı tarafından yürütüldü ve
+  geçti (dışa aktarım dosya sayıları, `cross_hearing_signal_present` sütunu,
+  KVKK — `participants.csv`'de ad yok, parquet opsiyonel davranışı).
+- **Commit:** `d53b61e`
+
+- **Ne yapıldı:**
+  - **Şema v4 → v5.** `v_trials_flat`'e `cross_hearing_signal_present`
+    (`json_extract(design_extra,'$.signal_present')`): çapraz dinleme QC'sinin
+    (9b) sinyal denemesini yakalama denemesinden ayırması için — 8c-ii'nin Adım
+    9'a bıraktığı iş. Sinyal denemesi 1, yakalama 0, diğer modüller NULL.
+  - **Yeni paket `mcgurk/analysis/`** (PsychoPy'siz, sınır testine eklendi):
+    - `export.py` — `v_trials_flat` ve altı ham tabloyu pandas ile **CSV** yazar;
+      **parquet** yalnızca pyarrow kuruluysa (yoksa uyarıp atlar, hata değil).
+      Tablo/biçim adları sabit allow-list (SQL enjeksiyonu yok); 0 satırda bile
+      sütun başlıkları korunuyor (cursor.description'dan, `read_sql` değil).
+    - `measures.py` — `flat_rows`'u modül başına gruplar, config'i **oturum
+      snapshot'ından** kurar (canlı config'i değil), her modülün **var olan**
+      ölçüm fonksiyonuna dağıtır. Matematiği yeniden yazmaz (tek doğruluk kaynağı
+      modüllerde). Dejenere bir modül (ör. hedefsiz oddball → d′ yok) tüm raporu
+      düşürmez: `data=None` + hata mesajı, özet metni yine üretilir.
+  - **`modules/mcgurk.py`'ye eksik olan oran aggregator'ı** (`McGurkRates`,
+    `rates_from_rows`, `rates_by_condition`, `summarise_measures`). Diğer beş
+    modülde ölçüm fonksiyonları vardı, McGurk'te yoktu — "Modül 1 oranları"
+    (füzyon / görsel baskınlık / işitsel / kombinasyon / RT) buraya, modül
+    konvansiyonuna uygun, CI-testli olarak eklendi. NONE (zaman aşımı) satır
+    yokluğundan türetilir ve paydada kalır.
+  - **`config_from_snapshot` tekilleştirildi.** `ui/session.py`'deki kopya
+    `config/loader.py`'ye taşındı (PsychoPy'siz — analiz de kullanabilir);
+    session.py oradan re-export ediyor. `test_resume.py` importu korundu.
+  - **Araçlar:** `tools/export_data.py` (`--session`, `--format csv|parquet|both`,
+    `--out`, `--db`) ve `tools/analyse.py` (`--session`; yoksa tüm oturumlar).
+  - **CI:** `requirements-ci.txt`'e `pandas` eklendi (analiz katmanı CI-testli);
+    `pyarrow` **eklenmedi** — parquet opsiyonel (kullanıcı kararı).
+  - **Test: ~30 yeni** — `test_analysis_export.py` (CSV round-trip, parquet iki
+    dal, hata yolları, oturum filtresi, boş DB'de sütun korunması),
+    `test_analysis_measures.py` (modül dağıtımı, AvsrSummary, dejenere modül,
+    saf `measure_module`, bilinmeyen oturum), `test_modules_mcgurk.py` McGurk
+    oranları, `test_db_schema.py` v5 kolonu (sinyal/yakalama/NULL).
+
+- **Alınan kararlar:**
+  - **Parquet opsiyonel (CSV zorunlu)** — kullanıcı kararı. pyarrow ~100 MB'lık
+    indirme; zorunlu kılmak yerine kuruluysa yazılıyor. Tip/NULL koruması
+    (ör. `is_correct` NULL = "doğru cevap yok", boş dizeden farklı) isteyen
+    parquet'i açar. CI yalnız CSV'yi sınıyor.
+  - **Ölçüm matematiği modüllerde kalır; measures.py yalnız orkestrasyon.**
+    İkinci bir kopya birinciyle çelişebilirdi; her modülün sayısı zaten
+    `v_trials_flat` satırlarından ve CI'da elle hesaplanmış değerlere karşı
+    test ediliyor.
+  - **Analiz canlı config'i değil oturum snapshot'ını okur** (§G). Sonradan
+    `config/experiment.yaml` değişse bile bir veri seti toplandığı tasarımla
+    yorumlanır.
+  - **`cross_hearing` analiz-tarafı ölçümü 9b'ye** (QC raporu) — 9a yalnız VIEW
+    kolonunu açtı. Çapraz duyma "şans üstü mü" yargısı katılımcının sağır
+    kulağını gerektiriyor ve bir QC kararı; measures.py'nin altı ölçüm modülüne
+    girmedi.
+
+- **Bilinen sınırlar:**
+  - `qc_report.py`, uçtan uca entegrasyon testi ve başarısızlık modu testleri
+    9b'de; dokümantasyon (README yenilemesi, `docs/PROTOKOL.md`,
+    `docs/OPERATOR_SOP.md`) ve prova oturumu kapısı 9c'de.
+  - `analyse.py`/`export_data.py` oturum düzeyinde çalışıyor; katılımcılar arası
+    toplulaştırma (grup karşılaştırması) analiz tüketicisinin işi, 9a'da yok.
+  - Dev `data/mcgurk.sqlite` (v4) yedeklenip silindi — aşağıdaki bekleyen
+    aksiyon maddesine işlendi.
+
+- **Sonraki adıma not (9b):**
+  - QC raporu `v_trials_flat` üzerinden: düşen kare (`dropped_frames`), SOA
+    sapması (`actual_soa_ms − nominal_soa_ms`), zaman aşımı oranı (yanıtsız
+    deneme = response_id NULL), yanıt dağılımı; bozuk denemeler **nesnel**
+    ölçütle işaretlensin (post-hoc gerekçe değil).
+  - **Çapraz dinleme QC'si artık kolona sahip:** `cross_hearing_signal_present`
+    ile HIT/MISS/FALSE_ALARM/CORRECT_REJECTION türetilir; "şans üstü tespit →
+    o katılımcının Modül 1–2 uzamsal yön verisi işaretlensin" (§6.5). Eşik
+    (30 denemede kaç bildirim / binomial mi) hâlâ danışman kararı — aşağıdaki
+    bekleyen aksiyon.
+  - Başarısızlık modu testleri (steps.md Adım 9): kesme→`aborted`, yanıtsız→
+    zaman aşımı, eksik uyaran, ses aygıtı kaybı, disk dolu — her biri **açık
+    hata**.
+
+### Adım 9b — QC raporu + entegrasyon/başarısızlık testleri
 - **Durum:** BEKLİYOR
-- **Tamamlanma:** —
-- **Commit:** —
+
+### Adım 9c — Dokümantasyon + prova oturumu + master merge
+- **Durum:** BEKLİYOR
 - **Kapanışta ayrıca:** `develop` → `master` merge + `git tag v1.0.0`
   (bkz. *Dal politikası*). Prova oturumu kapısı geçilmeden yapılmaz.
-- **Ne yapıldı:**
-- **Alınan kararlar:**
-- **Bilinen sınırlar:**
-- **Sonraki adıma not:**
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 
@@ -2123,15 +2211,16 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   hiç girmiyor). Config'in isim kullanması bu yüzden. Listelemek için:
   `python tools/timing_selftest.py --devices`. Gerçek kulaklık kararı verilince
   (§F.3) config'teki değer değiştirilmeli.
-- **Veritabanı şema sürümü 4'e çıktı (Adım 7c).** `responses.event_index`
-  eklendi (GIN'de bir yanıtın segmentin içindeki hangi boşluğa ait olduğu).
-  Eski `data/mcgurk.sqlite` (7 geliştirme oturumu, 187 deneme, 110 yanıt, hepsi
-  DEV01) `VACUUM INTO` ile
-  `backups/mcgurk_pre_adim7c_schema3_20260729T220000.sqlite` olarak yedeklendi
-  (satır sayıları `verify_backup.py` ile canlıyla birebir doğrulandı) ve
-  silindi; ilk koşuda yeni şemayla oluşuyor. Başka bir makinede eski sürüm
-  dosyası varsa aynı şey gerekir — kod açık hata veriyor (`SchemaVersionError`),
-  sessizce açmıyor. **Önceki bump (Adım 6, sürüm 2→3):**
+- **Veritabanı şema sürümü 5'e çıktı (Adım 9a).** `v_trials_flat`'e
+  `cross_hearing_signal_present` sütunu eklendi (çapraz dinleme QC'si için).
+  Eski v4 `data/mcgurk.sqlite` (1 katılımcı, 3 oturum, 37 deneme — geliştirme
+  verisi) `VACUUM INTO` ile
+  `backups/mcgurk_pre_adim9a_schema4_20260730T175106.sqlite` olarak yedeklendi
+  (integrity ok, FK temiz, satır sayıları canlıyla birebir) ve silindi; ilk
+  koşuda v5 şemasıyla oluşuyor. Başka bir makinede eski sürüm dosyası varsa aynı
+  şey gerekir — kod açık hata veriyor (`SchemaVersionError`), sessizce açmıyor.
+  **Önceki bump (Adım 7c, sürüm 3→4):** `responses.event_index`;
+  `backups/mcgurk_pre_adim7c_schema3_20260729T220000.sqlite`. **Adım 6, 2→3:**
   `backups/mcgurk_pre_adim6_schema2_20260727T222615.sqlite`.
 - **Oddball yanıt penceresi — danışman kararı (Adım 7).**
   `modules.oddball.response_window_ms` config'e `[100, 800]` ms olarak girdi:
