@@ -27,7 +27,7 @@ Aktif adım: 10 — 10a TAMAMLANDI; 10b (PySide6 paneli) kod olarak commit edild
 | 9b | QC + entegrasyon/başarısızlık testleri | TAMAMLANDI | 2026-07-30 | `e24c01a` |
 | 9c | Dokümantasyon (+ prova/merge en son kapıda) | TAMAMLANDI | 2026-07-30 | `94c90bc` |
 | 10a | Panel çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-07-30 | `15d428f` |
-| 10b | PySide6 paneli (GUI kabuğu) | TESTTE | 2026-07-30 | |
+| 10b | PySide6 paneli (GUI kabuğu) | TESTTE | 2026-07-30 | `d276cc9` |
 | 10c | PyInstaller ile Windows .exe | BEKLİYOR | | |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
@@ -2277,7 +2277,7 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
 - **Tamamlanma:** — (manuel test sonrası). Otomatik testler yeşil (872 test, CI
   alt kümesi; +4 offscreen smoke), `ruff` + `mypy` temiz. `TEST_ADIM_10B.md`
   ekran testi **bekliyor**.
-- **Commit:**
+- **Commit:** `d276cc9`
 - **Ne yapıldı:**
   - **`mcgurk/panel/app.py`** — `QMainWindow` (`PanelWindow`), 10a `core`'u
     üzerine ince Qt kabuğu. PsychoPy import etmez (§A10.2), yalnız PySide6.
