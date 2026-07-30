@@ -22,6 +22,7 @@ Aktif adım: 8c-ii (8a + 8b + 8c-i tamamlandı — sıradaki: src emekliliği + 
 | 8b-ii | Alıştırma + çapraz dinleme + ESC onayı | TAMAMLANDI | 2026-07-30 | `82a9a4d` |
 | 8c-i | Kesinti/devam (resume) | TAMAMLANDI | 2026-07-30 | `0602fbb` |
 | 8c-ii | src emekliliği + master merge | BEKLİYOR | | |
+| 8.5 | Arayüz cilası + uçtan uca gösterim (danışman) | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
 
 Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAMAMLANDI
@@ -1956,6 +1957,26 @@ diye ikiye bölündü (kullanıcı, 2026-07-30).**
 - **Alınan kararlar:**
 - **Bilinen sınırlar:**
 - **Sonraki adıma not:**
+
+### Adım 8.5 — Arayüz cilası + uçtan uca gösterim (danışman)
+
+**`steps.md`'de yoktur — kullanıcı kararıyla eklendi (2026-07-30).** Adım 8 tam
+bitince, Adım 9'dan **önce** yapılacak. Amaç: platformu danışmana **uçtan uca**
+gösterebilecek düzeye getirmek ve katılımcı arayüzünü güzelleştirmek.
+
+- **Kapsam (taslak, tur başında netleşecek):**
+  - **Arayüz cilası:** `theme` config bölümü (font, renk paleti, boyutlar) +
+    `mcgurk/ui/screens.py` ve `mcgurk/modules/response.py`'de tipografi/renk/
+    yerleşim; yumuşak geçişler; operatör ilerleme göstergesi; karşılama/bitiş
+    görseli. Zamanlama-kritik yollara kare-başına maliyet **eklenmez**; §A
+    kuralları korunur (görsel merkezde, geri bildirim yok, tam ekran).
+  - **Uçtan uca gösterim:** danışmana kısaltılmış ama tam akışlı bir demo
+    koşusu (resmi prova/pilot Adım 9'da).
+  - **(İsteğe bağlı, ayrı konuşulacak):** daha şık giriş formu — `gui.DlgFromDict`
+    yerine **ayrı process** bir PySide6 başlatıcı (aynı process'te PsychoPy+
+    PySide6 karışmaz, CLAUDE.md).
+- **Neden burada:** kod davranışı Adım 8'de sabitlendikten sonra estetik tek
+  seferde yapılır; danışman gösterimi de arayüz oturmuşken anlamlı.
 
 ### Adım 9 — Analiz, dışa aktarım ve entegrasyon
 - **Durum:** BEKLİYOR
