@@ -692,13 +692,30 @@ class GINConfig(ModuleBase):
     ear_selection: Literal["good_ear", "fixed", "both"]
     fixed_ear: Ear | None = None
     response_key: str = Field(min_length=1)
+    #: Which press counts as a response to which gap, in ms from the gap's
+    #: onset.  Fixed before data collection on purpose (§F, EK_GIN §"Danışman
+    #: Onayı Gereken Noktalar"): choosing it afterwards means choosing the hit
+    #: and false-alarm rates after seeing them.
+    response_window_ms: tuple[float, float]
+    #: Fixation before the first segment, and the margin the first one is
+    #: scheduled in.
+    lead_in_s: float = Field(gt=0)
     #: "<hits>_of_<presentations>" — the threshold rule, written into the
     #: report.  Standard GIN uses 4 of 6.
     threshold_criterion: str
 
+    def ears_tested(self) -> int:
+        """How many ears one participant is tested on.
+
+        ``both`` presents the whole segment list twice, once per ear — the
+        draft's alternative, which it costs ~4 minutes.  ``good_ear`` and
+        ``fixed`` are monaural, which is what standard GIN is.
+        """
+        return 2 if self.ear_selection == "both" else 1
+
     def total_trials(self) -> int:
         # One trial = one noise segment.  Gaps are scored inside the segment.
-        return self.n_segments
+        return self.n_segments * self.ears_tested()
 
     def total_gaps(self) -> int:
         return len(self.gap_durations_ms) * self.reps_per_gap
@@ -710,7 +727,7 @@ class GINConfig(ModuleBase):
         return int(match.group(1)), int(match.group(2))
 
     def estimated_duration_s(self) -> float:
-        return self.n_segments * (
+        return self.total_trials() * (
             self.segment_duration_s + self.inter_segment_interval_s
         )
 
@@ -760,6 +777,31 @@ class GINConfig(ModuleBase):
                 "max_gaps_per_segment veya min_gap_separation_s düşürülmeli"
             )
 
+        low, high = self.response_window_ms
+        if low < 0 or high <= low:
+            raise ValueError(
+                "modules.gin.response_window_ms [alt, üst] ve artan olmalı, "
+                f"verilen: {list(self.response_window_ms)}"
+            )
+        # The window may not reach the next gap: a press inside one gap's window
+        # would then also be inside the previous gap's, and which one it counted
+        # for would depend on the code rather than on the design.
+        if high >= self.min_gap_separation_s * 1000.0:
+            raise ValueError(
+                f"modules.gin.response_window_ms üst sınırı ({high:g} ms) "
+                f"boşluklar arası en kısa ayrımdan ({self.min_gap_separation_s:g} "
+                "s) kısa olmalı — aksi hâlde bir tuş basımı iki boşluğa birden "
+                "ait olurdu"
+            )
+        # A gap can sit close to the end of the segment, so its window runs into
+        # the inter-segment interval.  Listening continues there, but not past
+        # the next segment's start.
+        if high >= (self.segment_duration_s + self.inter_segment_interval_s) * 1000.0:
+            raise ValueError(
+                f"modules.gin.response_window_ms üst sınırı ({high:g} ms) "
+                "segment + segmentler arası aradan kısa olmalı"
+            )
+
         if self.ear_selection == "fixed" and self.fixed_ear is None:
             raise ValueError(
                 "modules.gin.ear_selection 'fixed' ise fixed_ear verilmeli"
@@ -767,6 +809,13 @@ class GINConfig(ModuleBase):
         if self.ear_selection != "fixed" and self.fixed_ear is not None:
             raise ValueError(
                 "modules.gin.fixed_ear yalnızca ear_selection 'fixed' iken anlamlı"
+            )
+        if self.fixed_ear == "both":
+            # "both" as a *side* means diotic, which is not what a monaural test
+            # asks for; presenting to both ears at once is a different measure.
+            raise ValueError(
+                "modules.gin.fixed_ear 'both' olamaz — GIN monaural bir testtir. "
+                "İki kulağın da test edilmesi isteniyorsa ear_selection: both"
             )
         return self
 

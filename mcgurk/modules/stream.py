@@ -1,10 +1,16 @@
 """Running a continuous stimulus stream: schedule, listen, record.
 
 ``block.py`` sequences a trial at a time — fixation, stimulus, one forced
-choice — and every module that fits that shape shares it.  Oddball does not:
-there is no response screen, the stimuli arrive on a clock of their own, and a
-tone can collect no press or several.  Adım 7c's GIN has the same shape and can
-join here; what it must not do is grow a third copy of a trial loop.
+choice — and every module that fits that shape shares it.  Oddball and GIN do
+not: there is no response screen, the stimuli arrive on a clock of their own,
+and one stimulus can collect no press or several.
+
+The two runners here keep their own loop bodies because the shape genuinely
+differs — oddball writes one trial per tone and attributes presses to tones,
+GIN writes one trial per six-second segment and attributes presses to the gaps
+*inside* it — but everything underneath is shared: how a stimulus is scheduled,
+how the screen is held while presses are timestamped, and how the backend's
+health counters are read.  A third copy of those would drift.
 
 Two things make this file different from ``block.py``:
 
@@ -25,13 +31,14 @@ until the block closes.
 
 from __future__ import annotations
 
+import bisect
 import logging
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from ..config.calibration import Calibration
-from ..config.schema import ExperimentConfig, OddballConfig
+from ..config.schema import ExperimentConfig, GINConfig, OddballConfig
 from ..db.database import Database
 from ..db.models import (
     SESSION_ABORTED,
@@ -45,6 +52,7 @@ from ..engine.audio import load_audio, make_sound, playback_health
 from ..engine.av_presenter import check_abort
 from ..engine.scheduling import TimingParams
 from ..engine.window import FrameMonitor
+from . import gin as gin_module
 from . import oddball as oddball_module
 from .base import PlannedTrial, chunk
 from .block import BlockOutcome
@@ -251,6 +259,209 @@ def run_oddball(
     return outcomes
 
 
+def run_gin(
+    *,
+    config: ExperimentConfig,
+    db: Database,
+    session_id: int,
+    planned: list[PlannedTrial],
+    win: Any,
+    kb: Any,
+    params: TimingParams,
+    speaker: Any = None,
+    calibration: Calibration | None = None,
+    fixation: Any = None,
+) -> list[BlockOutcome]:
+    """Modül 6 — present the noise segments and record every press.
+
+    The segment onsets come off one origin like oddball's tones, because the run
+    is five minutes long and re-referencing each segment to the previous one's
+    realised onset would accumulate the scheduler's error.  What differs is
+    where a press lands: inside a segment there can be up to three gaps, and the
+    press is attributed to one of them (``gin.attribute_presses``) rather than to
+    the trial itself.
+
+    ``categories`` counts *presses* — detections and false alarms.  A missed gap
+    is the absence of a press and does not appear there; the authoritative tally
+    is ``gin.measures_from_rows`` reading the database back afterwards.
+
+    Raises:
+        StreamError: a segment could not be scheduled before its own onset.
+        AbortSession: the operator pressed the abort key.
+    """
+    import psychtoolbox as ptb
+
+    if not planned:
+        return []
+    module = config.modules.gin
+    if module.lead_in_s <= SCHEDULE_LEAD_S:
+        raise StreamError(
+            f"modules.gin.lead_in_s ({module.lead_in_s:g} s) planlama payından "
+            f"({SCHEDULE_LEAD_S:g} s) büyük olmalı — ilk segment bu payın içinde "
+            "planlanıyor."
+        )
+
+    # One sound at a time, loaded one segment ahead.  Oddball can buffer its two
+    # tones for the whole run; thirty six-second segments (sixty with
+    # ``ear_selection: both``) would be hundreds of megabytes, and §A.12 puts
+    # preparation in the gap between stimuli — which is two seconds long here.
+    #
+    # The first one is loaded **before the clock starts**, like oddball's whole
+    # set: reading six seconds of audio from a cold disk takes long enough to eat
+    # the lead-in, and the run would then ask for an onset that had already
+    # passed.  ``lead_in_s`` is a fixation period, not a loading window.
+    cache = _SegmentCache(
+        calibration=calibration, sample_rate=config.audio.sample_rate, speaker=speaker
+    )
+    cache.load(planned[0])
+
+    step_s = module.segment_duration_s + module.inter_segment_interval_s
+    reference_s = float(ptb.GetSecs())
+    start_s = reference_s + module.lead_in_s
+    onsets = [start_s + index * step_s for index in range(len(planned))]
+
+    monitor = FrameMonitor(win, params)
+    kb.getKeys(waitRelease=False, clear=True)
+    kb.clock.reset()
+    clock_zero_s = float(ptb.GetSecs())
+
+    presses: list[float] = []
+    trial_ids: list[int] = []
+    # Carried across flushes: a press that arrives after its own block has
+    # closed is still written against its own segment, and a response_index
+    # that restarted at zero would collide with a row already there.
+    response_counts: Counter[int] = Counter()
+    state = _FlushState()
+    outcomes: list[BlockOutcome] = []
+    index = 0
+
+    logger.info(
+        "GIN akışı: %d segment, %.1f s giriş, ~%.1f dk",
+        len(planned),
+        module.lead_in_s,
+        gin_module.stream_duration_s(planned, module) / 60.0,
+    )
+
+    for chunk_number, group in enumerate(
+        chunk(planned, config.session.break_every_n_trials)
+    ):
+        block_index = db.next_block_index(session_id)
+        block_id = db.add_block(
+            Block(
+                session_id=session_id,
+                module=gin_module.MODULE_NAME,
+                block_index=block_index,
+                label=f"{gin_module.MODULE_NAME} {chunk_number + 1}",
+                n_trials_planned=len(group),
+            )
+        )
+        outcome = BlockOutcome(
+            block_id=block_id,
+            block_index=block_index,
+            n_planned=len(group),
+            module=gin_module.MODULE_NAME,
+        )
+        outcomes.append(outcome)
+        logger.info("Blok %d (gin): %d segment", block_index, len(group))
+
+        try:
+            for item in group:
+                onset = onsets[index]
+                _hold(
+                    win, fixation, kb,
+                    until_s=onset - SCHEDULE_LEAD_S,
+                    key=module.response_key,
+                    clock_zero_s=clock_zero_s,
+                    presses=presses,
+                )
+
+                sound = cache.get(item)
+                _schedule(sound, onset, params, outcome)
+                trial_ids.append(db.add_trial(item.for_block(block_id, index)))
+                monitor.start()
+
+                # The next segment is read from disk while this one plays: six
+                # seconds of slack, and it is over long before the next
+                # scheduling margin opens.
+                if index + 1 < len(planned):
+                    cache.load(planned[index + 1])
+
+                last = index + 1 >= len(onsets)
+                _hold(
+                    win, fixation, kb,
+                    # Through the inter-segment interval, so a press answering a
+                    # gap near the end of the segment is still collected — the
+                    # config keeps the response window shorter than this.  But
+                    # it stops one scheduling margin before the next segment,
+                    # or that segment would be asked for after it was due; the
+                    # presses of that last quarter second are collected by the
+                    # next iteration's leading hold and bucketed by onset at
+                    # flush time, so nothing is lost.
+                    until_s=(
+                        onset + step_s
+                        if last
+                        else onsets[index + 1] - SCHEDULE_LEAD_S
+                    ),
+                    key=module.response_key,
+                    clock_zero_s=clock_zero_s,
+                    presses=presses,
+                )
+
+                stats = monitor.stop()
+                time_failed, xruns = cache.health_delta(item)
+                db.set_trial_timing(
+                    trial_ids[index],
+                    TrialTiming(
+                        # The scheduled onset, not a measured one — the same
+                        # statement as everywhere else in the engine
+                        # (engine/audio.reported_start_time).
+                        audio_onset_s=onset - reference_s,
+                        dropped_frames=stats.dropped_frames,
+                        max_frame_interval_ms=stats.max_interval_ms,
+                    ),
+                )
+                outcome.n_presented += 1
+                if stats.dropped_frames:
+                    outcome.dropped_frame_trials += 1
+                if time_failed or xruns:
+                    outcome.audio_glitch_trials += 1
+                    logger.warning(
+                        "Segment %d: ses zamanlaması bozuldu (TimeFailed %d, "
+                        "XRuns %d).", index, time_failed, xruns,
+                    )
+                cache.release(item)
+                index += 1
+        except AbortSession:
+            _flush_gin(db, module, planned, onsets, trial_ids, presses,
+                       response_counts, state, outcome)
+            outcome.status = SESSION_ABORTED
+            db.finish_block(block_id, SESSION_ABORTED)
+            logger.warning(
+                "Blok %d kesildi: %d/%d segment sunuldu.",
+                block_index, outcome.n_presented, outcome.n_planned,
+            )
+            raise
+        except Exception:
+            outcome.status = SESSION_ABORTED
+            db.finish_block(block_id, SESSION_ABORTED)
+            raise
+
+        _flush_gin(db, module, planned, onsets, trial_ids, presses,
+                   response_counts, state, outcome)
+        db.finish_block(block_id, SESSION_COMPLETED)
+        logger.info(
+            "Blok %d tamamlandı: %d segment, %s",
+            block_index, outcome.n_presented, dict(outcome.categories),
+        )
+
+    if state.before_first:
+        logger.info(
+            "İlk segmentten önce %d tuş basımı: hiçbir denemeye ait değil, "
+            "kaydedilmedi.", state.before_first,
+        )
+    return outcomes
+
+
 # ----------------------------------------------------------------- internals
 
 
@@ -299,6 +510,65 @@ def _load_sounds(
         sounds[key] = make_sound(stimulus, speaker)
     logger.info("Akış için %d ayrı uyaran belleğe alındı", len(sounds))
     return sounds
+
+
+class _SegmentCache:
+    """Sounds for a stream whose stimuli are too big to buffer all at once.
+
+    GIN presents thirty distinct six-second segments — sixty with
+    ``ear_selection: both`` — so the oddball approach of loading every stimulus
+    before the run would hold hundreds of megabytes of decoded audio.  Each
+    segment is read one trial ahead instead, which puts the file I/O in the
+    inter-segment interval where §A.12 allows preparation, and never inside the
+    250 ms before an onset.
+    """
+
+    def __init__(
+        self,
+        *,
+        calibration: Calibration | None,
+        sample_rate: int,
+        speaker: Any,
+    ) -> None:
+        self._calibration = calibration
+        self._sample_rate = sample_rate
+        self._speaker = speaker
+        self._sounds: dict[tuple[Path, str], Any] = {}
+        self._health: dict[tuple[Path, str], tuple[int, int]] = {}
+
+    def load(self, item: PlannedTrial) -> None:
+        key = _key(item)
+        if key in self._sounds:
+            return
+        path, ear = key
+        stimulus = load_audio(
+            path,
+            ear=ear,
+            burst_time_s=item.spec.audio_burst_s,
+            calibration=self._calibration,
+            expected_sample_rate=self._sample_rate,
+        )
+        self._sounds[key] = make_sound(stimulus, self._speaker)
+        self._health.setdefault(key, (0, 0))
+
+    def get(self, item: PlannedTrial) -> Any:
+        key = _key(item)
+        sound = self._sounds.get(key)
+        if sound is None:  # pragma: no cover - load() is called one ahead
+            self.load(item)
+            sound = self._sounds[key]
+        return sound
+
+    def health_delta(self, item: PlannedTrial) -> tuple[int, int]:
+        return _health_delta(self._sounds[_key(item)], self._health, _key(item))
+
+    def release(self, item: PlannedTrial) -> None:
+        """Drop a segment's decoded audio once it has been presented.
+
+        The health counters are kept — they are two integers, and dropping them
+        would make a reload read the backend's running totals as this segment's.
+        """
+        self._sounds.pop(_key(item), None)
 
 
 def _hold(
@@ -374,6 +644,77 @@ def _health_delta(
     previous = health[key]
     health[key] = total
     return total[0] - previous[0], total[1] - previous[1]
+
+
+def _flush_gin(
+    db: Database,
+    module: GINConfig,
+    planned: list[PlannedTrial],
+    onsets: list[float],
+    trial_ids: list[int],
+    presses: list[float],
+    response_counts: Counter[int],
+    state: _FlushState,
+    outcome: BlockOutcome,
+) -> None:
+    """Write the presses collected so far, each against the gap it answered.
+
+    Two levels of attribution.  A press first belongs to the *segment* whose
+    onset most recently preceded it — including one made during the
+    inter-segment interval, which still answers the segment that just played.
+    Inside that segment it belongs to the gap whose onset most recently preceded
+    it (``gin.attribute_presses``), and the response window decides whether that
+    is a detection.
+
+    A press that followed no gap — every press of a catch segment — is written
+    with ``event_index`` NULL and ``category = FALSE_ALARM``.  Dropping it would
+    hide the participant the catch segments exist to find.
+
+    A press in the interval *after* a gap's window has closed is a false alarm
+    on that segment, not on the next one: the next segment has not started, and
+    the participant pressed while there was nothing to detect.
+    """
+    known = onsets[: len(trial_ids)]
+    for press_s in presses[state.flushed :]:
+        index = bisect.bisect_right(known, press_s) - 1
+        if index < 0:
+            state.before_first += 1
+            continue
+
+        trial = planned[index].trial
+        attributed = gin_module.attribute_presses(
+            trial.design_extra["gap_onsets_s"],
+            [press_s - known[index]],
+            window_ms=module.response_window_ms,
+        )[0]
+        category = gin_module.category_of(attributed)
+        outcome.categories[category] += 1
+
+        trial_id = trial_ids[index]
+        db.add_response(
+            Response(
+                trial_id=trial_id,
+                response_index=response_counts[trial_id],
+                # Which gap this answered.  NULL when it followed none, which is
+                # what a press in a catch segment looks like.
+                event_index=attributed.gap_index if attributed.in_window else None,
+                raw_response=module.response_key,
+                category=category,
+                # There is no correct answer to record here: a detection is
+                # already named by the category, and a false alarm is not an
+                # incorrect answer to anything — it answers no gap at all.
+                is_correct=None,
+                # From the gap's own onset, and None for a press that followed
+                # no gap: with nothing to measure from, a number would be an
+                # interval to something the participant was not answering.
+                rt_from_burst_ms=attributed.rt_ms if attributed.in_window else None,
+                # A stream has no response prompt.
+                rt_from_prompt_ms=None,
+                input_device="keyboard",
+            )
+        )
+        response_counts[trial_id] += 1
+    state.flushed = len(presses)
 
 
 def _flush(

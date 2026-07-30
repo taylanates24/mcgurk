@@ -101,6 +101,9 @@ def _config(config_dict: dict[str, Any], tmp_path: Path) -> ExperimentConfig:
         segment_duration_s=2.0,
         max_gaps_per_segment=2,
         min_gap_separation_s=0.4,
+        # The response window has to fit inside this miniature gap spacing; the
+        # schema enforces it, so the shipped 900 ms would be refused here.
+        response_window_ms=[100.0, 300.0],
     )
     return ExperimentConfig.model_validate(data)
 

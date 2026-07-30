@@ -341,3 +341,69 @@ def test_congruent_module_may_be_scored(db: Database) -> None:
         Response(trial_id=trial_id, raw_response="BA", is_correct=True)
     )
     assert response_id > 0
+
+
+# ---------------------------------------------------- event_index (version 4)
+
+
+def _gin_trial(db: Database) -> int:
+    participant_id = _participant(db)
+    session_id = _session(db, participant_id)
+    block_id = _block(db, session_id, "gin")
+    return db.add_trial(
+        Trial(
+            block_id=block_id,
+            trial_index=0,
+            module="gin",
+            ear="right",
+            presentation_mode="A",
+            design_extra={
+                "segment_index": 4,
+                "gap_onsets_s": [1.5, 3.0],
+                "gap_durations_ms": [4.0, 12.0],
+            },
+        )
+    )
+
+
+def test_a_response_can_name_the_event_inside_its_trial(db: Database) -> None:
+    """GIN is the first module whose unit of analysis is smaller than a trial:
+    a segment holds up to three gaps and the threshold is computed per gap
+    duration, so a hit has to say which gap it answered."""
+    trial_id = _gin_trial(db)
+    db.add_response(
+        Response(
+            trial_id=trial_id,
+            event_index=1,
+            raw_response="space",
+            category="HIT",
+            rt_from_burst_ms=320.0,
+        )
+    )
+    row = db.conn.execute(
+        "SELECT * FROM v_trials_flat WHERE trial_id = ?", (trial_id,)
+    ).fetchone()
+    assert row["event_index"] == 1
+    assert row["gin_segment_index"] == 4
+    # The gap the index points at is recoverable without parsing anything else.
+    assert row["gin_gap_durations_ms"] == "[4.0,12.0]"
+
+
+def test_a_response_without_an_event_is_the_normal_case(db: Database) -> None:
+    """Every module but GIN leaves it NULL: there, the trial *is* the event."""
+    trial_id = _gin_trial(db)
+    db.add_response(
+        Response(trial_id=trial_id, raw_response="space", category="FALSE_ALARM")
+    )
+    row = db.conn.execute(
+        "SELECT event_index FROM responses WHERE trial_id = ?", (trial_id,)
+    ).fetchone()
+    assert row["event_index"] is None
+
+
+def test_a_negative_event_index_is_refused(db: Database) -> None:
+    trial_id = _gin_trial(db)
+    with pytest.raises(sqlite3.IntegrityError):
+        db.add_response(
+            Response(trial_id=trial_id, event_index=-1, raw_response="space")
+        )

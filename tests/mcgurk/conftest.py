@@ -106,6 +106,7 @@ def build_manifest(config: Any) -> Any:
 
     from mcgurk.stimuli.manifest import (
         DichoticEntry,
+        GinSegmentEntry,
         MediaFile,
         NoisyTokenEntry,
         SourceRef,
@@ -201,6 +202,32 @@ def build_manifest(config: Any) -> Any:
                         peak_dbfs=-6.0,
                     )
                 )
+
+    # GIN segments.  Packed rather than spread: the gaps go into the first
+    # segments at the configured maximum and the rest are catch segments, so a
+    # synthetic set always exercises the zero-gap path the real one only
+    # happens to contain.
+    gin = config.modules.gin
+    pending = [
+        duration
+        for duration in gin.gap_durations_ms
+        for _ in range(gin.reps_per_gap)
+    ]
+    for index in range(1, gin.n_segments + 1):
+        taken = pending[: gin.max_gaps_per_segment]
+        pending = pending[gin.max_gaps_per_segment :]
+        spacing = gin.segment_duration_s / (len(taken) + 1)
+        manifest.gin_segments.append(
+            GinSegmentEntry(
+                index=index,
+                file=media(f"gin/segment_{index:02d}.wav"),
+                duration_s=gin.segment_duration_s,
+                sample_rate=config.audio.sample_rate,
+                gap_onsets_s=[spacing * (k + 1) for k in range(len(taken))],
+                gap_durations_ms=list(taken),
+                level_dbfs=-23.0,
+            )
+        )
 
     for frequency in config.required_tones():
         manifest.tones.append(

@@ -129,6 +129,9 @@ class TrialTiming:
 class Response:
     trial_id: int
     response_index: int = 0
+    #: Which event inside the trial this answers (GIN: the gap's index in
+    #: ``design_extra.gap_onsets_s``).  None wherever the trial is the event.
+    event_index: int | None = None
     raw_response: str | None = None
     free_text: str | None = None
     category: str | None = None

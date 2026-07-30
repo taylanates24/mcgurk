@@ -51,6 +51,7 @@ from mcgurk.db.models import (  # noqa: E402
 from mcgurk.logging_setup import setup_logging  # noqa: E402
 from mcgurk.modules import avsr as avsr_module  # noqa: E402
 from mcgurk.modules import dichotic as dichotic_module  # noqa: E402
+from mcgurk.modules import gin as gin_module  # noqa: E402
 from mcgurk.modules import mcgurk as mcgurk_module  # noqa: E402
 from mcgurk.modules import oddball as oddball_module  # noqa: E402
 from mcgurk.modules import tbw as tbw_module  # noqa: E402
@@ -59,19 +60,20 @@ from mcgurk.provenance import collect as collect_provenance  # noqa: E402
 from mcgurk.stimuli import manifest as manifest_module  # noqa: E402
 from mcgurk.stimuli.manifest import ManifestError  # noqa: E402
 
-#: Modules this harness can run, and where their design comes from.  Adım 7c
-#: adds its own entry here; nothing else in the tool is module-specific.
+#: Modules this harness can run, and where their design comes from.  Nothing
+#: else in the tool is module-specific.
 MODULES = {
     "mcgurk": mcgurk_module,
     "avsr": avsr_module,
     "tbw": tbw_module,
     "oddball": oddball_module,
     "dichotic": dichotic_module,
+    "gin": gin_module,
 }
 
 #: Modules presented as a continuous stream rather than as discrete trials.
 #: They open no ``AVPresenter``: there is no video to synchronise to.
-STREAM_MODULES = {"oddball"}
+STREAM_MODULES = {"oddball", "gin"}
 
 #: Development participant.  An anonymous code and nothing else (§A.6); the age
 #: has to satisfy the database's 18–60 CHECK.
@@ -91,15 +93,28 @@ def _rule(title: str) -> None:
 
 
 def build_plan(
-    config: ExperimentConfig, module: str, seed: int, *, speaker_id: int | None = None
+    config: ExperimentConfig,
+    module: str,
+    seed: int,
+    *,
+    speaker_id: int | None = None,
+    ear: str | None = None,
 ) -> list[PlannedTrial]:
     stimuli_root = resolve_path(_PROJECT_ROOT, config.paths.stimuli)
     manifest = manifest_module.load(stimuli_root)
     implementation = MODULES.get(module)
     if implementation is None:  # pragma: no cover - argparse restricts this
         raise ModuleError(f"Bu araç bu modülü henüz koşmuyor: {module}")
+    # GIN is the one module that has to be told which ear: it is monaural and
+    # the side belongs to the participant, not to the design (Adım 8 chooses it).
+    extra = {"ear": ear} if module == "gin" else {}
     planned: list[PlannedTrial] = implementation.plan_trials(
-        config, manifest, seed=seed, stimuli_root=stimuli_root, speaker_id=speaker_id
+        config,
+        manifest,
+        seed=seed,
+        stimuli_root=stimuli_root,
+        speaker_id=speaker_id,
+        **extra,
     )
     return planned
 
@@ -163,6 +178,38 @@ def dry_run(config: ExperimentConfig, module: str, planned: list[PlannedTrial], 
             "OTHER (karışım)"
         )
 
+    if module == "gin":
+        _rule("GIN akışı")
+        gin = config.modules.gin
+        onsets = gin_module.gap_onsets(planned)
+        gaps = [len(item) for item in onsets]
+        hits, presentations = gin.threshold_rule()
+        print(f"  Segment              : {len(planned)} x {gin.segment_duration_s:g} s")
+        print(f"  Toplam boşluk        : {sum(gaps)} (config {gin.total_gaps()})")
+        print(
+            f"  Segment başına boşluk: {min(gaps)}-{max(gaps)} "
+            f"(üst sınır {gin.max_gaps_per_segment}), "
+            f"{gaps.count(0)} yakalama segmenti"
+        )
+        print(
+            f"  Boşluk süreleri      : "
+            f"{', '.join(f'{d:g}' for d in gin.gap_durations_ms)} ms "
+            f"(her biri {gin.reps_per_gap} kez)"
+        )
+        print(f"  Test edilen kulak    : {'/'.join(gin_module.ears_presented(planned))}")
+        print(
+            f"  Akış süresi          : "
+            f"{gin_module.stream_duration_s(planned, gin) / 60.0:.1f} dk"
+        )
+        print(
+            f"  Yanıt penceresi      : {gin.response_window_ms[0]:g}-"
+            f"{gin.response_window_ms[1]:g} ms (boşluk başlangıcından)"
+        )
+        print(
+            f"  Eşik ölçütü          : {gin.threshold_criterion} "
+            f"({presentations} sunumun en az {hits}'i)"
+        )
+
     if module == "tbw":
         _rule("SOA sunumu")
         tbw = config.modules.tbw
@@ -179,7 +226,9 @@ def dry_run(config: ExperimentConfig, module: str, planned: list[PlannedTrial], 
     for index, item in enumerate(planned[:12]):
         trial = item.trial
         noise = "sessiz" if trial.snr_db is None else f"{trial.snr_db:g} dB"
-        if trial.presentation_mode == "V":
+        if trial.noise_condition is None:
+            # NULL means "not applicable": AVSR's V-only carries no audio, and
+            # GIN's stimulus *is* noise.
             noise = "—"
         instance = trial.design_extra.get("noise_instance")
         # V-only carries a video and no audio; A-only the other way round.
@@ -215,7 +264,13 @@ def dry_run(config: ExperimentConfig, module: str, planned: list[PlannedTrial], 
     if not isinstance(module_config, ResponseUIConfig):
         # A stream module has one key and no grid: the participant is not
         # choosing between options, they are reporting a detection.
-        print(f"  [{config.modules.oddball.response_key}] hedef tonu duyunca")
+        if module == "gin":
+            print(
+                f"  [{config.modules.gin.response_key}] gürültüdeki kesintiyi "
+                "(sessizliği) duyunca"
+            )
+        else:
+            print(f"  [{config.modules.oddball.response_key}] hedef tonu duyunca")
         return 0
     for key, label in zip(module_config.response_keys, module_config.response_set, strict=True):
         marker = ""
@@ -281,7 +336,7 @@ def live_run(
         summarise,
     )
     from mcgurk.modules.response import make_keyboard
-    from mcgurk.modules.stream import run_oddball
+    from mcgurk.modules.stream import run_gin, run_oddball
 
     runners = {
         "mcgurk": run_mcgurk,
@@ -338,7 +393,8 @@ def live_run(
         print(f"  Oturum {session_id}, katılımcı {participant_code}, tohum {seed}")
 
         if module in STREAM_MODULES:
-            outcomes = run_oddball(
+            stream_runner = run_gin if module == "gin" else run_oddball
+            outcomes = stream_runner(
                 config=config,
                 db=db,
                 session_id=session_id,
@@ -408,6 +464,13 @@ def live_run(
         if module == "dichotic":
             print()
             print(dichotic_module.summarise_measures(_flat_rows(db_path, session_id)))
+        if module == "gin":
+            print()
+            print(
+                gin_module.summarise_measures(
+                    _flat_rows(db_path, session_id), config.modules.gin
+                )
+            )
     return exit_code
 
 
@@ -448,6 +511,12 @@ def main(argv: list[str] | None = None) -> int:
         "--limit", type=int, default=None, help="yalnızca ilk N denemeyi koştur"
     )
     parser.add_argument("--speaker-id", type=int, default=None, help="konuşmacıyı ez")
+    parser.add_argument(
+        "--ear",
+        choices=("left", "right"),
+        default=None,
+        help="GIN: hangi kulağa sunulacak (ear_selection 'good_ear' iken zorunlu)",
+    )
     parser.add_argument("--participant", default=DEV_CODE, help="anonim katılımcı kodu")
     parser.add_argument(
         "--dry-run",
@@ -476,7 +545,9 @@ def main(argv: list[str] | None = None) -> int:
 
     print(summarise_design(config))
     try:
-        planned = build_plan(config, args.module, seed, speaker_id=args.speaker_id)
+        planned = build_plan(
+            config, args.module, seed, speaker_id=args.speaker_id, ear=args.ear
+        )
     except (ManifestError, ModuleError, NotImplementedError) as exc:
         print(f"\nHATA: {exc}", file=sys.stderr)
         return 1

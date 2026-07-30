@@ -79,16 +79,17 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── av_presenter.py          # TrialSpec -> presentation -> TimingRecord
 │   ├── loopback.py              # level-2 jitter analysis (pure numpy)
 │   └── psychopy_prefs.py        # must run before psychopy.sound is imported
-├── modules/                     # Adım 4–7b: mcgurk, avsr, tbw, oddball, dichotic; 7c to come
+├── modules/                     # Adım 4–7c: mcgurk, avsr, tbw, oddball, dichotic, gin
 │   ├── base.py                  # seeding, ordering, PlannedTrial — no PsychoPy
 │   ├── mcgurk.py                # design + categorisation — no PsychoPy
 │   ├── avsr.py                  # design + scoring + measures — no PsychoPy
 │   ├── tbw.py                   # design + Gaussian fit + bootstrap — no PsychoPy
 │   ├── oddball.py               # stream design + attribution + d' — no PsychoPy
 │   ├── dichotic.py              # design + ear attribution + KAİ — no PsychoPy
+│   ├── gin.py                   # segment design + gap attribution + threshold — no PsychoPy
 │   ├── response.py              # option grid, keyboard, two RTs, free text
 │   ├── block.py                 # shared trial loop + per-module TrialPolicy
-│   └── stream.py                # continuous-stream loop (oddball; GIN in 7c)
+│   └── stream.py                # continuous-stream loop (oddball + GIN)
 ├── analysis/                    # Adım 9 (empty)
 ├── ui/                          # Adım 8 (empty)
 ├── logging_setup.py
@@ -354,6 +355,49 @@ to it:
   Same numbers, different reading — §6.5 requires the asymmetry to be stated
   whenever the groups are compared.
 
+**Modül 6 — GIN** (`gin.py` + `stream.py`, Adım 7c) is the second stream module,
+sharing `stream.py`'s scheduling, screen-hold and health-reading with oddball
+but keeping its own loop body — one trial is a six-second segment, not a tone.
+It is drafted for the method document as §6.6 (`docs/EK_GIN.docx`), still with
+the danışman. What is specific to it:
+
+- **The unit of analysis is the gap, not the trial.** A segment holds up to
+  three gaps and the threshold is computed per gap *duration*, so a hit has to
+  name the gap it answered: `responses.event_index` indexes
+  `design_extra.gap_onsets_s` (**schema version 4** — the first response field
+  smaller than a trial). It is NULL in every other module, where the trial is
+  the event.
+- **The segments are read, not designed.** They were cut offline (Adım 2) and
+  the manifest records where every gap landed; `gin.plan_trials` checks the set
+  against the config's gap distribution and reads the positions from it, so what
+  the participant hears and what the database says cannot disagree.
+- **A press is attributed first and scored second** (the oddball rule). It
+  belongs to the gap whose onset most recently preceded it, then
+  `response_window_ms` decides whether it is a detection. The config keeps that
+  window under `min_gap_separation_s`, so a press can never answer two gaps.
+- **A press that followed no gap is a false alarm**, written with `event_index`
+  NULL — unlike oddball's `OUTSIDE_WINDOW`, because in a stream of gaps a press
+  outside every window answered nothing, and "pressed when there was nothing to
+  hear" is the definition of a false alarm here. The prepared set holds one
+  catch segment (zero gaps) that exists to measure exactly this.
+- **A missed gap produces no row**, like an oddball miss; it is derived by
+  comparing the gaps the trial carries with the `event_index` values returned.
+- **The threshold is the shortest duration detected on ≥4 of its 6
+  presentations**, `None` when none qualifies — never the longest gap, which
+  would be a threshold the data never showed. It is always reported beside the
+  false-alarm count (§"Yorumlama Sınırları"): someone who presses often detects
+  short gaps by chance, and the threshold alone would flatter them.
+- **GIN is monaural.** `ear_selection: good_ear` needs the ear passed in
+  (`plan_trials(..., ear=...)`) — the good ear is the participant's, an Adım 8
+  decision, and picking one silently would look like a measurement.
+  `ear_selection: both` presents the segment list twice, once per ear, doubling
+  the module. `trials.noise_condition` is NULL, not `quiet`: the stimulus *is*
+  noise.
+- **Segments are loaded one ahead**, not all at once: thirty six-second files
+  are hundreds of MB, so the run reads each while the previous plays. The first
+  is loaded before the clock starts — reading it after would eat the lead-in and
+  the run would ask for an onset already past.
+
 ### Legacy Structure (src/, Adım 0)
 ```
 mcgurk/
@@ -454,11 +498,14 @@ Validated by `mcgurk/config/schema.py`; **unknown fields are an error**.
   `tbw` and `dichotic`; AVSR adds `mode_questions` (per presentation mode), TBW
   adds `response_labels` (which of its two options means "simultaneous"),
   `tbw_definition` and `bootstrap_samples`/`bootstrap_ci`, and dichotic adds
-  only `pairs` and `reps` — nothing is crossed with them. **Oddball has none
-  of it**: no grid, no prompt, one `response_key` — plus
+  only `pairs` and `reps` — nothing is crossed with them. **Oddball and GIN have
+  none of it**: no grid, no prompt, one `response_key`. Oddball adds
   `response_window_ms` (which press answers which tone), `lead_in_s`, and
   `ears` restricted to exactly one entry because `n_trials` is the total and
-  the ear is not crossed.
+  the ear is not crossed. GIN adds `response_window_ms` (which press answers
+  which gap — the schema keeps its upper bound under `min_gap_separation_s`),
+  `lead_in_s`, and `ear_selection` (`good_ear` / `fixed` / `both`): the ear is
+  the participant's, chosen in Adım 8, and `both` doubles the module.
 - `modules.avsr.stimulus_sets[].list` points at a `config/word_lists/*.yaml`
   file, read by the loader (§F.2 — the recording session has not happened, so
   the shipped list is an empty template with `enabled: false`).
@@ -471,7 +518,7 @@ Validated by `mcgurk/config/schema.py`; **unknown fields are an error**.
   uses is in `stimulus_prep.tokens`. `stimulus_prep.tones.level_dbfs` is the
   one thing about a tone that is not design — the level it is written at.
 
-## Data Model (new package — data/mcgurk.sqlite, schema version 3)
+## Data Model (new package — data/mcgurk.sqlite, schema version 4)
 Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - `participants` — anonymous code, group (`SSD_R`/`SSD_L`/`CTRL`), age, sex,
   deprivation_months, PTA left/right, postlingual
@@ -484,14 +531,19 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
   `tbw` and `dichotic` trials carry `speaker_id` (required) and
   `noise_instance`; `avsr` adds `stimulus_type` and `item`; `dichotic` adds
   `left_token` and `right_token`; `oddball` carries `tone_type`, `tone_hz` and
-  the nominal `isi_ms`. `v_trials_flat` exposes `speaker_id`, `noise_instance`,
-  `dichotic_left_token`, `dichotic_right_token`,
+  the nominal `isi_ms`; `gin` carries `segment_index` and the `gap_onsets_s` /
+  `gap_durations_ms` lists. `v_trials_flat` exposes `speaker_id`,
+  `noise_instance`, `dichotic_left_token`, `dichotic_right_token`,
+  `gin_segment_index`, `gin_gap_onsets_s`, `gin_gap_durations_ms`,
   `avsr_item` and `oddball_tone_type` as columns (`stimulus_type` and `isi_ms`
   are only in the JSON — adding either to the VIEW is a schema-version bump,
   and the occasion for that is the word set arriving; the realised interval is
   recoverable by differencing `audio_onset_s`).
 - `responses` — **0..n per trial**: none on timeout or on an oddball tone the
-  participant did not answer, several for a GIN segment or a tone pressed twice
+  participant did not answer, several for a GIN segment or a tone pressed twice.
+  `event_index` (schema version 4) names which event *inside* the trial a
+  response answers — the gap's index for GIN, NULL everywhere else (there the
+  trial is the event).
 - A trigger refuses `is_correct` on `mcgurk`/`dichotic`/`tbw` trials (§A.10)
 - A module may write several blocks; use `db.next_block_index(session_id)`
   rather than counting in the caller.
@@ -533,8 +585,8 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Monitor setup (ilk kurulumda bir kez): `python scripts/setup_monitor.py`
 - Validate config + design cost: `python -m mcgurk.config`
 - Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
-- Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic --dry-run`
-- Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic [--limit N] [--seed N]`
+- Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin --dry-run` (gin needs `--ear left|right`)
+- Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin [--limit N] [--seed N]` (gin needs `--ear left|right`)
 - Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
 - Verify stimuli: `python tools/verify_stimuli.py [--quick]`
 - Verify a backup: `python tools/verify_backup.py <yedek> --compare-with data/mcgurk.sqlite`
@@ -578,7 +630,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't back up SQLite by copying the file — use `VACUUM INTO`; a WAL-mode copy is silently inconsistent
 - Don't commit inside a trial (§A.5) — `add_trial`/`add_response` defer, `finish_block` commits
 - Don't add a module to `modules.*` without also adding it to `blocks.module`'s CHECK list and `design.py`
-- Don't import PsychoPy at module level in `modules/base.py`, `modules/mcgurk.py`, `modules/avsr.py`, `modules/tbw.py`, `modules/oddball.py` or `modules/dichotic.py` — the design, the categorisation, the scoring, the psychometric fit and the signal-detection measures are CI-tested, and a test enforces it
+- Don't import PsychoPy at module level in `modules/base.py`, `modules/mcgurk.py`, `modules/avsr.py`, `modules/tbw.py`, `modules/oddball.py`, `modules/dichotic.py` or `modules/gin.py` — the design, the categorisation, the scoring, the psychometric fit, the signal-detection measures and the threshold are CI-tested, and a test enforces it
 - Don't give the participant correctness feedback in any module — the McGurk effect must not be taught mid-session (demand characteristics)
 - Don't derive a category from `free_text`; the participant declined the options that were on screen
 - Don't put a character outside cp1254 in a printed, logged or raised string (`−`, `≠`, `→`) — the Turkish Windows console raises `UnicodeEncodeError` instead of degrading, so the traceback replaces the message. Docstrings and comments are fine; `tests/mcgurk/test_console_encoding.py` enforces the rest
@@ -596,3 +648,9 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't count a dichotic timeout as a report — with no correct answer, assigning it to either ear moves the laterality index; it is a missing observation
 - Don't report a laterality index of 0 when neither ear was reported — the index is undefined there, and 0 reads as "perfectly symmetrical"
 - Don't tell the dichotic participant that two syllables are presented, or ask them to attend to one ear — the free report *is* the measurement
+- Don't record a GIN hit without its `event_index` — the threshold is computed per gap duration, and a detection that does not name its gap cannot enter it
+- Don't record a GIN press outside every gap's window as `OUTSIDE_WINDOW` — unlike oddball, it answered no gap at all, so it is a plain false alarm with `event_index` NULL
+- Don't present GIN to a deaf ear or diotically — it is monaural; `ear_selection: good_ear` needs the ear passed in from the session flow, and the deaf ear measures nothing
+- Don't report a GIN threshold wider than the tested range as a number — if no duration meets the criterion it is `None` ("ulaşılamadı"), not the longest gap
+- Don't read a GIN threshold without the false-alarm count beside it — a participant who presses often catches short gaps by chance and reads as more acute than they are
+- Don't buffer every GIN segment up front like oddball's tones — thirty six-second files are hundreds of MB; load one ahead, and load the first before the clock starts

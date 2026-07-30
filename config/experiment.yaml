@@ -269,9 +269,19 @@ modules:
     inter_segment_interval_s: 2.0
     # GIN is monaural and presenting it to a deaf ear measures nothing, so the
     # ear is chosen per participant in Adım 8; the database records the ear
-    # that was actually used.
+    # that was actually used.  `both` tests both ears in turn and doubles the
+    # module (EK_GIN §"Kulak Seçimi" — the danışman's decision).
     ear_selection: good_ear            # good_ear | fixed | both
     response_key: space
+    # Which press counts as a response to which gap, in ms from the gap onset.
+    # Fixed before data collection on purpose (§F): choosing it afterwards means
+    # choosing the hit and false-alarm rates after seeing them.  The upper bound
+    # has to stay under min_gap_separation_s, or a press would belong to two
+    # gaps at once; the prepared set's tightest spacing is 1.029 s.
+    # EK_GIN leaves the number to the danışman — this is a starting point.
+    response_window_ms: [100, 900]
+    # Fixation before the first segment.
+    lead_in_s: 1.0
     threshold_criterion: 4_of_6        # shortest gap detected ≥4 of 6 times
 
 speaker_selection:

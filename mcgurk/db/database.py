@@ -35,7 +35,9 @@ logger = logging.getLogger(__name__)
 
 #: 1 -> 2: v_trials_flat exposes speaker_id and noise_instance (Adım 4).
 #: 2 -> 3: the §A.10 trigger also refuses is_correct on ``tbw`` trials (Adım 6).
-SCHEMA_VERSION = 3
+#: 3 -> 4: responses.event_index — which event inside a trial a response
+#:         answers.  GIN's unit of analysis is the gap, not the segment (Adım 7c).
+SCHEMA_VERSION = 4
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 
@@ -358,13 +360,14 @@ class Database:
 
     def add_response(self, response: Response) -> int:
         cursor = self.conn.execute(
-            "INSERT INTO responses (trial_id, response_index, raw_response, "
-            "free_text, category, is_correct, rt_from_burst_ms, "
+            "INSERT INTO responses (trial_id, response_index, event_index, "
+            "raw_response, free_text, category, is_correct, rt_from_burst_ms, "
             "rt_from_prompt_ms, input_device, recorded_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 response.trial_id,
                 response.response_index,
+                response.event_index,
                 response.raw_response,
                 response.free_text,
                 response.category,

@@ -1,4 +1,4 @@
--- McGurk / SSD platform database schema (version 2).
+-- McGurk / SSD platform database schema (version 4).
 --
 -- Version history:
 --   1 (Adım 1) — six tables + v_trials_flat + the §A.10 trigger.
@@ -6,6 +6,12 @@
 --     trials.design_extra.  No table changed; the version is bumped because a
 --     CREATE VIEW IF NOT EXISTS leaves an existing file on the old definition,
 --     and analysis reading v_trials_flat would silently miss the columns.
+--   3 (Adım 6) — the §A.10 trigger refuses is_correct on tbw trials too.
+--   4 (Adım 7c) — responses.event_index: which event *inside* a trial the
+--     response answers.  GIN is the first module whose unit of analysis is
+--     smaller than a trial — a segment holds up to three gaps and the threshold
+--     is computed per gap duration — so without it the database could not say
+--     which gap a hit belongs to.
 --
 -- Design notes:
 --   * Six tables plus a flat VIEW for analysis (steps.md Adım 1).
@@ -130,6 +136,13 @@ CREATE TABLE IF NOT EXISTS responses (
     -- 0 for the single response of a forced-choice trial; increments for the
     -- multiple key presses a GIN segment or an oddball run can produce.
     response_index      INTEGER NOT NULL DEFAULT 0,
+    -- Which event *inside* the trial this response answers, 0-based.  NULL
+    -- wherever the trial is the event (every module but GIN) and for a GIN
+    -- press that followed no gap at all — a false alarm in a catch segment,
+    -- which is exactly what catch segments are for.  For GIN it indexes
+    -- design_extra.gap_onsets_s / gap_durations_ms, which is how the threshold
+    -- can be computed per gap duration from the database alone.
+    event_index         INTEGER CHECK (event_index IS NULL OR event_index >= 0),
     raw_response        TEXT,
     free_text           TEXT,
     -- Derived category.  The vocabulary is module-specific and deliberately
@@ -231,11 +244,13 @@ SELECT
     json_extract(t.design_extra, '$.right_token')      AS dichotic_right_token,
     json_extract(t.design_extra, '$.gap_onsets_s')     AS gin_gap_onsets_s,
     json_extract(t.design_extra, '$.gap_durations_ms') AS gin_gap_durations_ms,
+    json_extract(t.design_extra, '$.segment_index')    AS gin_segment_index,
     json_extract(t.design_extra, '$.tone_type')        AS oddball_tone_type,
     json_extract(t.design_extra, '$.item')             AS avsr_item,
 
     r.response_id,
     r.response_index,
+    r.event_index,
     r.raw_response,
     r.free_text,
     r.category,

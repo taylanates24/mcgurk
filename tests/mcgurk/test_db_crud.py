@@ -202,7 +202,10 @@ def test_dichotic_extra_is_required(db: Database, session: tuple[int, int]) -> N
 
 def test_unknown_extra_key_is_rejected() -> None:
     with pytest.raises(DesignExtraError, match="design_extra"):
-        validate_design_extra("gin", {"gap_onsets_s": [1.0], "gap_lengths": [2]})
+        validate_design_extra(
+            "gin",
+            {"segment_index": 1, "gap_onsets_s": [1.0], "gap_lengths": [2]},
+        )
 
 
 def test_unknown_module_is_rejected() -> None:
@@ -213,22 +216,34 @@ def test_unknown_module_is_rejected() -> None:
 def test_gin_gap_lists_must_line_up() -> None:
     with pytest.raises(DesignExtraError):
         validate_design_extra(
-            "gin", {"gap_onsets_s": [1.0, 2.0], "gap_durations_ms": [4.0]}
+            "gin",
+            {"segment_index": 1, "gap_onsets_s": [1.0, 2.0], "gap_durations_ms": [4.0]},
         )
 
 
 def test_gin_gaps_must_be_ordered() -> None:
     with pytest.raises(DesignExtraError):
         validate_design_extra(
-            "gin", {"gap_onsets_s": [3.0, 1.0], "gap_durations_ms": [4.0, 6.0]}
+            "gin",
+            {
+                "segment_index": 1,
+                "gap_onsets_s": [3.0, 1.0],
+                "gap_durations_ms": [4.0, 6.0],
+            },
         )
 
 
 def test_design_extra_round_trip() -> None:
     raw = validate_design_extra(
-        "gin", {"gap_onsets_s": [1.0, 3.5], "gap_durations_ms": [4.0, 12.0]}
+        "gin",
+        {
+            "segment_index": 7,
+            "gap_onsets_s": [1.0, 3.5],
+            "gap_durations_ms": [4.0, 12.0],
+        },
     )
     assert parse_design_extra("gin", raw) == {
+        "segment_index": 7,
         "gap_onsets_s": [1.0, 3.5],
         "gap_durations_ms": [4.0, 12.0],
     }
@@ -367,6 +382,7 @@ def test_multiple_responses_per_trial(db: Database, session: tuple[int, int]) ->
             module="gin",
             ear="right",
             design_extra={
+                "segment_index": 3,
                 "gap_onsets_s": [1.0, 3.0, 5.0],
                 "gap_durations_ms": [4.0, 10.0, 20.0],
             },
@@ -400,7 +416,11 @@ def test_response_index_is_unique_per_trial(
             block_id=block_id,
             trial_index=0,
             module="gin",
-            design_extra={"gap_onsets_s": [], "gap_durations_ms": []},
+            design_extra={
+                "segment_index": 1,
+                "gap_onsets_s": [],
+                "gap_durations_ms": [],
+            },
         )
     )
     db.add_response(Response(trial_id=trial_id, response_index=0))

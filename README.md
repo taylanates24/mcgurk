@@ -237,11 +237,14 @@ Adım 1'de gelen şema altı tablo ve analiz için düz bir `VIEW` içerir:
 - `trials` — ortak tasarım alanları + gerçekleşen zamanlama; modüle özgü
   alanlar `design_extra` (JSON) içinde, `mcgurk/db/design.py` ile doğrulanır
 - `responses` — deneme başına **0..n** satır: zaman aşımında hiç, GIN
-  segmentinde birden fazla
+  segmentinde birden fazla. `event_index` (şema sürümü 4, Adım 7c) yanıtın
+  denemenin **içindeki hangi olaya** ait olduğunu söyler — GIN'de segmentteki
+  boşluğun sırası; başka her modülde deneme zaten olayın kendisi olduğu için
+  NULL
 - `v_trials_flat` — hepsini birleştiren düz tablo; `design_extra` anahtarları
   sütun olarak açılır, analiz tarafında JSON görünmez
 
-Veritabanı `mcgurk` ve `dichotic` denemelerinde `is_correct` yazılmasını
+Veritabanı `mcgurk`, `dichotic` ve `tbw` denemelerinde `is_correct` yazılmasını
 **tetikleyiciyle reddeder** — §A.10 depolama katmanında da geçerlidir.
 
 ### Yedekleme
@@ -450,7 +453,9 @@ Kademe 3 bu araçta gerçeklenmez; `docs/01_av_gecikme_olcumu.md` scriptleriyle,
 
 Oturum akışı Adım 8'de geliyor; o zamana kadar bir modül `tools/run_module.py`
 ile koşuluyor. Koşulabilen modüller: `mcgurk` (Adım 4), `avsr` (Adım 5),
-`tbw` (Adım 6), `oddball` (Adım 7) ve `dichotic` (Adım 7b).
+`tbw` (Adım 6), `oddball` (Adım 7), `dichotic` (Adım 7b) ve `gin` (Adım 7c).
+GIN tek kulaklıdır ve hangi kulağın test edileceği katılımcıya bağlı olduğu
+için koşuya `--ear right|left` eklenmesi gerekir.
 Önce tasarımı donanım açmadan denetleyin — deneme sayısını config'in hesabıyla
 karşılaştırır, hücre tablosunu basar ve her uyaran dosyasının yerinde olduğunu
 doğrular:
@@ -483,6 +488,14 @@ Dikotik koşuda video yoktur: iki kulağa aynı anda farklı hece gelir ve ekran
 yalnızca sabitleme haçı durur. Sonunda kulak başına bildirim oranı, karışım
 yanıtı oranı ve kulak avantajı indeksi (KAİ = [(Sağ - Sol) / (Sağ + Sol)] x 100)
 basılır. Doğru cevap yoktur; yanıtsız deneme indekse girmez, ayrıca sayılır.
+
+GIN koşusu da bir akıştır: altı saniyelik geniş bantlı gürültü segmentleri tek
+kulaktan akar, içlerine 2–20 ms sessiz boşluklar yerleştirilmiştir ve katılımcı
+boşluk duydukça tuşa basar. Bir segment birden çok boşluk taşıyabildiği için
+deneme başına 0..n yanıt olabilir; hangi boşluğun saptandığı `responses.event_index`
+ile kaydedilir. Sonunda süre başına saptama oranı, boşluk saptama eşiği (4/6
+ölçütünü sağlayan en kısa süre) ve yanlış alarm sayısı basılır — eşik her zaman
+yanlış alarmla birlikte, çünkü çok basan biri kısa boşlukları şansla yakalar.
 
 Bu bir **geliştirme aracıdır**: yönerge, alıştırma bloğu, mola ve katılımcı
 girişi yok, veritabanına `DEV01` kodlu bir geliştirme katılımcısı yazıyor.
@@ -553,9 +566,9 @@ gürültüsü biriktirmesini engeller. Manifest her dosyanın kaynak codec'ini v
 - Kesilen oturuma kaldığı yerden devam etme yok.
 
 **Yeni pakette henüz gelmeyenler:**
-- `mcgurk/modules/` McGurk (Adım 4), AVSR (Adım 5), TBW (Adım 6), oddball
-  (Adım 7) ve dikotiği (Adım 7b) içeriyor; GIN Adım 7c'de. `ui/` ve
-  `analysis/` hâlâ boş (Adım 8 ve 9).
+- `mcgurk/modules/` altı değerlendirme modülünü de içeriyor: McGurk (Adım 4),
+  AVSR (Adım 5), TBW (Adım 6), oddball (Adım 7), dikotik (Adım 7b) ve GIN
+  (Adım 7c). `ui/` ve `analysis/` hâlâ boş (Adım 8 ve 9).
 - Yeni config ve veritabanı henüz hiçbir deneyi çalıştırmıyor; `main.py` Adım
   8'e kadar `src/` yolunu kullanmaya devam ediyor.
 - AVSR kelime seti (`type: word`) **içerik olarak boş**: kayıt seansı yapılmadı

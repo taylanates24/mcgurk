@@ -111,9 +111,16 @@ class GINExtra(_Extra):
     """Gap positions inside one noise segment.
 
     Onsets are seconds from segment start; durations are in milliseconds,
-    matching ``modules.gin.gap_durations_ms`` in the config.
+    matching ``modules.gin.gap_durations_ms`` in the config.  A segment with no
+    gaps at all is legitimate — it is a catch trial, and both lists are empty.
+
+    ``segment_index`` names the prepared file (``stimuli/gin/segment_<nn>.wav``),
+    so a trial can be traced back to the manifest entry whose gaps were measured
+    from disk.  ``responses.event_index`` indexes into these two lists, which is
+    what makes the threshold computable per gap duration from the database.
     """
 
+    segment_index: int = Field(ge=1)
     gap_onsets_s: list[float]
     gap_durations_ms: list[float]
 
