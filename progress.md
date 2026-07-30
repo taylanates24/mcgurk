@@ -2299,6 +2299,15 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     `core.run_tool` senkron/headless yardımcı olarak kaldı; GUI QProcess kullanır.
   - Analiz/QC/dışa aktarım **seçili oturuma** etki eder; satır yoksa uyarı.
   - `requirements.txt` zaten `PySide6==6.11.0` içeriyordu; CI'ya eklenmedi.
+- **CI düzeltmesi (`320617e` sonrası, ayrı commit):** CI'ın `ruff + mypy` işi
+  kırmızı geldi (pytest yeşildi). Sebep: **CI'da PySide6 kurulu değil**, bu
+  yüzden `QApplication.exec()` ve `QTableWidget.currentRow()` mypy'de `Any`
+  oluyor ve `warn_return_any` iki `no-any-return` hatası veriyordu
+  (`app.py` `_selected_session_id`, `__main__.py` `main`). Yerelde PySide6 tipli
+  olduğu için görünmüyordu. İkisi de `int`-anotasyonlu yerel değişkene alındı.
+  Faydalı tuzak (10c için de): PySide6 dönüşünü doğrudan `int` bildiren bir
+  fonksiyondan döndürme. **CI birebir taklit edildi** (requirements-ci.txt ile
+  PySide6'sız geçici venv): düzeltme sonrası ruff + mypy + pytest yeşil.
 - **Bilinen sınırlar / sonraki adıma not:**
   - Manuel ekran testi (`TEST_ADIM_10B.md`) yapılmadı; özellikle "Oturum başlat"
     ayrı-süreç davranışı ve checklist KIRMIZI gösterimi elle doğrulanmalı.

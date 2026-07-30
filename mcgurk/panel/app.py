@@ -201,7 +201,9 @@ class PanelWindow(QMainWindow):
         return False
 
     def _selected_session_id(self) -> int | None:
-        row = self._table.currentRow()
+        # Annotated: QTableWidget.currentRow() is Any where PySide6 is absent
+        # (CI), which would make the returned session_id Any (no-any-return).
+        row: int = self._table.currentRow()
         if row < 0 or row >= len(self._sessions):
             QMessageBox.information(
                 self, "Oturum seçin", "Önce listeden bir oturum seçin."

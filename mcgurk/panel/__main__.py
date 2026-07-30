@@ -64,7 +64,10 @@ def main(argv: list[str] | None = None) -> int:
 
     window = PanelWindow(runtime, config, db_path)
     window.show()
-    return app.exec()
+    # Annotated: QApplication.exec() is Any where PySide6 is absent (CI), which
+    # would make main() return Any from an int-declared function (no-any-return).
+    exit_code: int = app.exec()
+    return exit_code
 
 
 if __name__ == "__main__":
