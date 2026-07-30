@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 8 (Adım 7c tamamlandı — Adım 8 planı onay bekliyor)
+Aktif adım: 8b (Adım 8a tamamlandı — Adım 8 alt adımlara bölündü: 8a/8b/8c)
 
 ## Durum tablosu
 
@@ -17,7 +17,9 @@ Aktif adım: 8 (Adım 7c tamamlandı — Adım 8 planı onay bekliyor)
 | 7 | Modül 4: Oddball | TAMAMLANDI | 2026-07-28 | `d6f5340` |
 | 7b | Modül 5: Dikotik dinleme | TAMAMLANDI | 2026-07-29 | `160f663` |
 | 7c | Modül 6: GIN | TAMAMLANDI | 2026-07-30 | `0294156` |
-| 8 | Oturum akışı ve arayüz | BEKLİYOR | | |
+| 8a | Oturum metinleri + checklist | TAMAMLANDI | 2026-07-30 | `8683fa2` |
+| 8b | Oturum akışı çekirdeği | BEKLİYOR | | |
+| 8c | Devam + entegrasyon + master merge | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
 
 Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAMAMLANDI
@@ -34,6 +36,15 @@ adım manuel test onayı gelene kadar `TAMAMLANDI` değil **`TESTTE`** olarak
 işaretleniyor ve düzeltme gerekirse ayrı bir commit geliyor. Adım 7b'de bu
 gecikme kısa sürdü: kod `160f663` ile commit edildi, manuel testler aynı gün
 yürütüldü ve geçti.
+
+**Adım 8 alt adımlara bölündü (kullanıcı kararı, 2026-07-30).** En büyük parça
+olduğu için 8a (oturum metinleri + checklist), 8b (oturum akışı çekirdeği) ve
+8c (kesinti/devam + entegrasyon + master merge) diye üçe ayrıldı; her birinde
+7b/7c gibi ayrı plan-onay, test ve commit. Ayrıca **src/ Adım 8 sonunda (8c)
+emekliye ayrılacak** (kullanıcı kararı, 2026-07-30): `main.py` yeni oturum
+akışına yönlendirilecek, eski `src/` + `config.yaml` + `data/mcgurk.db` legacy'ye
+alınacak. Dal politikası değişmedi — master yalnızca 8c sonunda ve Adım 9 sonunda
+güncellenir.
 
 ## Dal politikası — master'a ne zaman merge edilir
 
@@ -1681,12 +1692,91 @@ Branches); bu, master'ın "sürüm" anlamını korur.
     §"Analiz"): geniş bir TBW'nin modaliteler arası entegrasyondan mı yoksa
     düşük düzeyli işitsel zamansal keskinlikten mi geldiğini ayrıştırmak için.
 
-### Adım 8 — Oturum akışı ve arayüz
+### Adım 8 — Oturum akışı ve arayüz (alt adımlara bölündü)
+
+**En büyük parça olduğu için 8a/8b/8c'ye bölündü (kullanıcı, 2026-07-30).** Her
+alt adımda 7b/7c gibi ayrı plan-onay, test, commit. src/ Adım 8 sonunda (8c)
+emekliye ayrılacak.
+
+### Adım 8a — Oturum metinleri (config) + `python -m mcgurk.checklist`
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-30. Otomatik testler yeşil (736 CI alt kümesi, 18
+  yeni; ruff + mypy temiz). `TEST_ADIM_8A.md`'deki üç test kullanıcı tarafından
+  yürütüldü ve geçti (Test 1–2 donanımsız, Test 3 ses + pencere probu).
+- **Commit:** `8683fa2`
+
+- **Ne yapıldı:**
+  - **Config'e katılımcı-metinleri (§A.9):** yeni `screens:` bölümü +
+    `SessionScreens` modeli — `advance_key`, `continue_hint`, `welcome`,
+    `practice_intro`/`practice_end`, `break` (alias'lı `break_screen`),
+    `session_end`, `cross_hearing_intro` ve `module_instructions` (modül ->
+    yönerge). Yeni `checklist:` bölümü + `ChecklistConfig`
+    (`calibration_max_age_days: 30`, `min_free_disk_mb: 500`).
+  - **Yükleme-anı doğrulaması:** `module_order`'daki etkin her ölçüm modülünün
+    bir yönergesi olmalı; ölçüm modülü olmayan anahtar (ör. `practice`)
+    reddedilir; boş yönerge reddedilir; `cross_hearing_intro` yalnızca çapraz
+    dinleme etkinken zorunlu.
+  - **`mcgurk/checklist.py`:** saf kontroller (mod, A/V gecikmesi, kalibrasyon
+    yaşı, uyaran manifesti, disk + yedek klasörü, son yedek) + donanım probları
+    (ptb backend + aygıt, ölçülen yenileme). `run_checks(probe_hardware=...)`,
+    `any_red`, `render`, CLI (`--config`, `--no-hardware`). Herhangi bir KIRMIZI
+    -> çıkış kodu 1 (8b oturumu reddederken aynı kapıyı çağıracak).
+  - **Metinler "Don'ts" gözetilerek yazıldı:** McGurk etkisi anlatılmıyor,
+    dikotik'te iki hece sunulduğu söylenmiyor / kulağa dikkat istenmiyor, GIN'de
+    boşluk sayısı/süreleri verilmiyor.
+  - **Test:** 18 yeni (`test_config_screens.py` 8, `test_checklist.py` 10).
+    Mevcut konsol-encoding testi `checklist.py`'yi tarıyor -> tüm bastığı metinler
+    cp1254 (Türkçe Windows konsolu) ile uyumlu.
+
+- **Alınan kararlar:**
+  - **Saf/donanım ayrımı:** zorunlu kabul kriteri testi ("eksik/eski kalibrasyon
+    -> KIRMIZI -> oturumu engelle") donanımsız CI'da koşuyor; donanım probları
+    lazy import edilir, modül PsychoPy'siz import olur.
+  - **Eşikler config'ten** (`calibration_max_age_days`, `min_free_disk_mb`), koda
+    gömülü değil (§A.9): farklı merkezler KIRMIZI çizgisini farklı yere koyar.
+  - **Development'ta mod/offset/kalibrasyon UYARI, KIRMIZI değil** — dev oturumu
+    bunlarsız meşru; KIRMIZI kapısı yalnızca `data_collection` için.
+  - **Devre dışı bir ölçüm modülünün yönergesi config'te kalabilir** (dormant,
+    yeniden etkinleşince döner); yalnızca modül-olmayan anahtar reddedilir —
+    mevcut "modülü devre dışı bırak" testlerini kırmamak için.
+  - **check_filesystem=False ile yüklenir:** dosya kapıları KIRMIZI *satır* olarak
+    raporlanır (çökme değil); şemanın data_collection kapıları (null offset/aygıt)
+    yine yüklemeyi durdurur ve hangi alanın eksik olduğunu tek tek söyler.
+
+- **Bilinen sınırlar:**
+  - Checklist çıktısının **operatör onay ekranı** (arayüzde) 8b'de — burada
+    yalnızca CLI ve yeniden kullanılabilir `run_checks` var.
+  - Katılımcı metinleri config'te ama henüz **hiçbir ekrana çizilmiyor** — 8b
+    tüketecek.
+  - Donanım probları CI'da test edilmiyor (PsychoPy yok); manuel test kapsıyor.
+
+- **Sonraki adıma not:**
+  - **8b `run_checks`/`any_red`'i oturum başında çağırmalı** ve `data_collection`
+    modunda KIRMIZI varsa oturumu reddetmeli; aynı çıktı operatör onay ekranında
+    da gösterilmeli.
+  - **8b `screens.*` metinlerini tüketmeli:** yönerge ekranları (`advance_key` ile
+    ilerleyen), mola ekranı (`break_duration_s` ile), alıştırma
+    (`practice_intro`/`practice_end`), çapraz dinleme (`cross_hearing_intro`).
+  - Çapraz dinleme kontrolü SSD'ye özgü; CTRL'de atlanır (loglanır). Sonuç DB'ye
+    yazılır; eşik/analiz Adım 9'un işi.
+
+### Adım 8b — Oturum akışı çekirdeği
+- **Durum:** BEKLİYOR
+- **Tamamlanma:** —
+- **Commit:** —
+- **Ne yapıldı:**
+- **Alınan kararlar:**
+- **Bilinen sınırlar:**
+- **Sonraki adıma not:**
+
+### Adım 8c — Kesinti/devam + entegrasyon + master merge
 - **Durum:** BEKLİYOR
 - **Tamamlanma:** —
 - **Commit:** —
 - **Kapanışta ayrıca:** `develop` → `master` merge + `git tag
-  adim-8-oturum-akisi` (bkz. *Dal politikası*).
+  adim-8-oturum-akisi` (bkz. *Dal politikası*) ve **src/ emekliliği** (kullanıcı
+  kararı, 2026-07-30): main.py yeni akışa yönlenir, src/ + config.yaml +
+  data/mcgurk.db legacy'ye alınır.
 - **Ne yapıldı:**
 - **Alınan kararlar:**
 - **Bilinen sınırlar:**
