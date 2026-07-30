@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 9 — 9a+9b TAMAMLANDI (analiz kütüphanesi + QC/testler); sıradaki 9c (dokümantasyon + prova + master merge)
+Aktif adım: 9 — 9a+9b TAMAMLANDI; 9c dokümanları yazıldı, **prova oturumu bekliyor** (prova → bug düzeltme → master merge + v1.0.0 → Adım 10)
 
 ## Durum tablosu
 
@@ -25,7 +25,22 @@ Aktif adım: 9 — 9a+9b TAMAMLANDI (analiz kütüphanesi + QC/testler); sırada
 | 8.5 | Arayüz cilası + uçtan uca gösterim | İPTAL | 2026-07-30 | (kullanıcı kararı) |
 | 9a | Analiz kütüphanesi (dışa aktarım + ölçümler) | TAMAMLANDI | 2026-07-30 | `d53b61e` |
 | 9b | QC + entegrasyon/başarısızlık testleri | TAMAMLANDI | 2026-07-30 | `e24c01a` |
-| 9c | Dokümantasyon + prova + master merge | BEKLİYOR | | |
+| 9c | Dokümantasyon + prova + master merge | TESTTE | 2026-07-30 | `94c90bc` |
+| 10 | Operatör paneli (PySide6) + paketleme (.exe) | BEKLİYOR (prova sonrası) | | |
+
+**9c dokümanları yazıldı; prova oturumu + master merge bekliyor.** Dokümanlar
+(`docs/PROTOKOL.md`, `docs/OPERATOR_SOP.md`, README yenilemesi) commit edildi;
+9c'nin kabul kapısı **gerçek kişiyle prova oturumudur** (henüz koşulmadı).
+
+**Adım 10 eklendi (kullanıcı kararı, 2026-07-30):** operatör araçları (checklist/
+export/analiz/QC) için **buton temelli PySide6 paneli** + **PyInstaller ile Windows
+.exe paketleme**. steps.md dışı yeni kapsam; **prova sonrasına** bırakıldı.
+
+**Sıra (kullanıcı kararı, 2026-07-30):** prova oturumu → (bug çıkarsa) düzeltme →
+`develop → master` merge + `git tag v1.0.0` → Adım 10. Yani master merge yine
+**prova kapısından sonra** (steps.md'nin orijinal sırası; 9a/9b sırasında
+tartışılan "önce merge" fikri kullanıcıca geri alındı). Adım 10 kendi
+merge/etiketini (v1.1.0) sonra alır.
 
 **Adım 8 (oturum akışı) tamamen tamamlandı** — 8a/8b-i/8b-ii/8c-i/8c-ii.
 `develop` → `master` merge + `git tag adim-8-oturum-akisi` yapıldı.
@@ -2154,9 +2169,44 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
   - Kapanışta `develop` → `master` merge + `git tag v1.0.0` (dal politikası).
 
 ### Adım 9c — Dokümantasyon + prova oturumu + master merge
-- **Durum:** BEKLİYOR
-- **Kapanışta ayrıca:** `develop` → `master` merge + `git tag v1.0.0`
-  (bkz. *Dal politikası*). Prova oturumu kapısı geçilmeden yapılmaz.
+- **Durum:** TESTTE (dokümanlar yazıldı; prova oturumu kapısı bekliyor)
+- **Commit:** `94c90bc` (dokümanlar)
+- **Ne yapıldı (dokümanlar):**
+  - **`docs/PROTOKOL.md`** — yöntem dokümanı (`946383_YONTEM (3).docx`) ↔ kod
+    eşleme tablosu. §4 (katılımcı/KVKK), §5 (platform + iki **sapma**:
+    MoviePy→ffmpeg, CustomTkinter→PsychoPy `gui.Dlg`), §6.1–6.4 (modüller +
+    bağımlı değişkenler → modül dosyaları/fonksiyonları), §7 (bağımsız/bağımlı →
+    DB sütunları), §8 (analiz → `analysis/` + dışa aktarım; §8 model kurma
+    yazılım dışı). Dikotik/GIN "danışman onayı bekliyor" işaretli.
+  - **`docs/OPERATOR_SOP.md`** — operatör el kitabı taslağı (Python bilmeyen için):
+    kontrol listesi, karşılama/kulaklık, **ne söylenir/söylenmez** (McGurk ASLA
+    anlatılmaz — en üstte uyarı), oturum davranışı, oturum sonrası (QC/yedek/
+    debriefing), sorun giderme tablosu. Laboratuvara özgü yerler `[DOLDURULACAK]`.
+  - **README derin yenilemesi:** durum bloğu (üç kapı: fotodiyot/kalibrasyon/prova),
+    "Ne yapar" tablosu (eski 5 `src/` bölümü → doğru 6 modül), yeni "Analiz ve
+    dışa aktarım" bölümü, şema v5, "Bilinen sınırlar" güncel gerçeğe göre yeniden
+    yazıldı, kalan tüm `src/`/`config.yaml`/eski-bölüm atıfları temizlendi.
+- **Bekleyen (kapanış için):**
+  - **Prova oturumu** (steps.md Adım 9 kabul kapısı): gerçek kişiyle, SOP takip
+    edilerek, baştan sona tam oturum; süre ölçümü; QC raporu incelenmesi.
+    Otomatik uçtan uca test bunun yerine geçmez. Mevcut CLI-tabanlı biçim
+    üzerinde koşulacak (panel/paketleme Adım 10, prova sonrası).
+  - Prova'da bug çıkarsa düzeltilir, sonra `develop → master` merge +
+    `git tag v1.0.0`.
+
+### Adım 10 — Operatör paneli (PySide6) + paketleme (.exe)
+- **Durum:** BEKLİYOR (prova sonrası)
+- **Kapsam (kullanıcı isteği, 2026-07-30):**
+  - **Operatör paneli** (PySide6, ayrı süreç — PsychoPy ile aynı süreçte
+    çalışamaz, §CLAUDE Don'ts): butonlar → oturum başlat (deneyi ayrı süreç
+    açar), kontrol listesi, dışa aktar, analiz, QC raporu, sonuçları gör
+    (katılımcı/oturum listesi). KVKK: ad-soyad yok. Eski `admin.py`'nin
+    (legacy) PySide6 mantığına paralel ama yeni pakete karşı.
+  - **PyInstaller ile Windows `.exe`:** en kritik kısım paketlenmiş exe'de
+    `stimuli/`/`config/`/`data/`/`backups/` yollarının çözümü (`_MEIPASS` vs.
+    kullanıcı-yazılabilir dizin) ve PsychoPy'nin exe içinde çalışması.
+  - Muhtemelen alt adımlara bölünür (10a panel, 10b paketleme); her birinde ayrı
+    plan-onay/test. Kendi merge/etiketi (v1.1.0) sonra.
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 
