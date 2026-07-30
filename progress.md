@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 9 — 9a TAMAMLANDI (analiz kütüphanesi); sıradaki 9b (QC + entegrasyon/başarısızlık testleri)
+Aktif adım: 9 — 9a+9b TAMAMLANDI (analiz kütüphanesi + QC/testler); sıradaki 9c (dokümantasyon + prova + master merge)
 
 ## Durum tablosu
 
@@ -24,7 +24,7 @@ Aktif adım: 9 — 9a TAMAMLANDI (analiz kütüphanesi); sıradaki 9b (QC + ente
 | 8c-ii | src emekliliği + master merge | TAMAMLANDI | 2026-07-30 | `56c902e` |
 | 8.5 | Arayüz cilası + uçtan uca gösterim | İPTAL | 2026-07-30 | (kullanıcı kararı) |
 | 9a | Analiz kütüphanesi (dışa aktarım + ölçümler) | TAMAMLANDI | 2026-07-30 | `d53b61e` |
-| 9b | QC + entegrasyon/başarısızlık testleri | BEKLİYOR | | |
+| 9b | QC + entegrasyon/başarısızlık testleri | TAMAMLANDI | 2026-07-30 | `e24c01a` |
 | 9c | Dokümantasyon + prova + master merge | BEKLİYOR | | |
 
 **Adım 8 (oturum akışı) tamamen tamamlandı** — 8a/8b-i/8b-ii/8c-i/8c-ii.
@@ -2086,7 +2086,72 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     hata**.
 
 ### Adım 9b — QC raporu + entegrasyon/başarısızlık testleri
-- **Durum:** BEKLİYOR
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-30. Otomatik testler yeşil (835 CI alt kümesi, ~27
+  yeni; ruff + mypy temiz). `TEST_ADIM_9B.md` kullanıcı tarafından yürütüldü ve
+  geçti.
+- **Commit:** `e24c01a`
+
+- **Ne yapıldı:**
+  - **Config — yeni `qc:` bloğu (§A.9, geçici/danışman onayına açık).** `QCConfig`:
+    `max_dropped_frames`, `soa_tolerance_ms`, `cross_hearing_alpha`.
+    `ExperimentConfig`'e **varsayılanlı** eklendi — 9a'da yazılmış (qc'siz)
+    snapshot'lar `config_from_snapshot`'ta kırılmasın. `experiment.yaml`'e yorumlu
+    blok. Şema sürümü **değişmedi** (v5; tablo/VIEW dokunulmadı).
+  - **`mcgurk/analysis/qc_report.py`** (PsychoPy'siz, sınır-testli):
+    - Zamanlama (düşen kare, en kötü kare aralığı, SOA sapması `actual − nominal`),
+      modül başına zaman aşımı oranı, yanıt dağılımı.
+    - **Nesnel bozuk-deneme işaretleme** (`FlaggedTrial` + gerekçe), eşikler
+      snapshot'taki `qc`'den — post-hoc değil.
+    - **Çapraz dinleme:** v5 kolonuyla HIT/MISS/FA/CR türetimi; **tek yönlü
+      binomial** (scipy `binomtest`), boş p₀ = yanlış-alarm oranı (catch yoksa
+      0.5); `p < cross_hearing_alpha` → SSD katılımcısında "Modül 1-2 uzamsal
+      veri geçersiz" uyarısı (§6.5).
+    - `session_qc(db, session_id)` + `summary_text()`; CLI `tools/qc_report.py`.
+  - **Uçtan uca entegrasyon testi** (`test_analysis_integration.py`): sahte
+    katılımcı → 8 modül (practice + 6 ölçüm + cross_hearing) tek DB'ye → export +
+    measures + qc çökmeden, hiçbir şey sessizce düşmeden. steps.md'nin "uçtan uca
+    entegrasyon testi" kabul kriteri; boş oturum da temiz.
+  - **Başarısızlık modu testleri** (`test_failure_modes.py`): kesme→`aborted`+veri
+    korunur+devam; yanıtsız→McGurk `NONE`/AVSR yanlış; eksik uyaran→config
+    yüklemede yakalanır (katılımcı oturmadan); ses yolu→`AudioError` (§A.2 sessiz
+    geri düşüş yok); yazım hatası→açık hata (query_only ile; sessiz veri kaybı yok).
+  - **Test: ~27 yeni** (`test_analysis_qc.py` 15, `test_analysis_integration.py`
+    2, `test_failure_modes.py` 7 + config/boundary). `requirements-ci.txt`
+    değişmedi (scipy zaten vardı).
+
+- **Alınan kararlar:**
+  - **QC eşikleri config'te, geçici** (kullanıcı kararı) — oddball/GIN yanıt
+    pencereleriyle aynı statü. **Snapshot'la taşınır:** `qc_report.py` bir
+    oturumu o oturumun snapshot'ındaki eşiklerle değerlendirir, canlı config'i
+    değil (§G — veri toplandığı tasarımla yorumlanır). `experiment.yaml`'i
+    değiştirmek eski oturumların raporunu değiştirmez.
+  - **Çapraz dinleme şans ölçütü: tek yönlü binomial, α=0.05, yanlış-alarmla
+    düzeltilmiş** (kullanıcı kararı). Danışmanın açık maddesi (§F.3) böylece
+    kod tarafında kapandı; α config'ten, veri toplamadan önce sabit.
+  - **Çapraz dinleme zaman aşımı değil:** catch denemesinde basmamak doğru ret.
+    Zaman aşımı oranı yalnız forced-choice (mcgurk/avsr/tbw/dichotic) modüllerde
+    raporlanır; akış (oddball/gin) ve cross_hearing için "yanıtsız N (basımsız —
+    beklenebilir)".
+
+- **Bilinen sınırlar:**
+  - Ses aygıtı kaybı ve disk-dolu başarısızlık modları CI-koşulabilir vekillerle
+    test edildi (`load_audio` eksik dosya/yanlış hız → `AudioError`; `query_only`
+    bağlantıya yazma → `OperationalError`). Gerçek donanım yolları `psychopy`
+    işaretli motor testlerinde.
+  - QC eşikleri hâlâ danışman onayı bekliyor (geçici değerler) — aşağıdaki
+    bekleyen aksiyon.
+  - Dokümantasyon (README, PROTOKOL.md, OPERATOR_SOP.md) ve gerçek kişiyle prova
+    oturumu 9c'de.
+
+- **Sonraki adıma not (9c):**
+  - README derin yenilemesi (kurulum, kalibrasyon, oturum yürütme, analiz +
+    QC/export komutları), `docs/PROTOKOL.md` (yöntem ↔ kod eşlemesi — her bağımlı
+    değişkenin kod karşılığı), `docs/OPERATOR_SOP.md` taslağı.
+  - **Prova oturumu kapısı** (steps.md Adım 9): gerçek kişiyle, SOP takip
+    edilerek, baştan sona tam oturum; süre ölçümü; QC raporu incelenmesi.
+    Otomatik uçtan uca test bunun yerine geçmez.
+  - Kapanışta `develop` → `master` merge + `git tag v1.0.0` (dal politikası).
 
 ### Adım 9c — Dokümantasyon + prova oturumu + master merge
 - **Durum:** BEKLİYOR
@@ -2117,6 +2182,11 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
 - [ ] **GIN kontrol grubunda kulak seçimi** (Adım 7c) — SSD gruplarının iyi
   kulak dağılımına oranlı dengeleme; kod hazır, mantık Adım 8'de, karar
   danışmanın. Ayrıntı aşağıdaki bekleyen aksiyonlarda.
+- [ ] **QC eşikleri** (Adım 9b'de config'e girdi, `qc:` bloğu) — `max_dropped_frames`
+  (geçici 3), `soa_tolerance_ms` (20.0), `cross_hearing_alpha` (0.05). Bozuk-deneme
+  ölçütü ve çapraz duyma anlamlılığı; oddball/GIN yanıt pencereleriyle aynı statü,
+  veri toplamadan önce danışman onaylamalı. Snapshot'la taşınır (eski oturumlar
+  eski eşikle değerlendirilir).
 
 ### Ek açık kararlar (2026-07-26 depo incelemesinde çıktı)
 
@@ -2162,16 +2232,17 @@ Bunlar §F'den gelir. Karşılaşıldığında burada işaretlenir, karar gelinc
   **Adım 7b bunu engellemedi** (2026-07-29): modül taslaktaki tasarımla
   gerçeklendi, beş maddenin hiçbiri kodu değiştirmiyor — deneme sayısı ve
   yönerge metni config'ten, kalanlar analiz kararı.
-- **Dikotik çapraz duyma ölçütü — veri toplamadan önce sabitlenmeli (Adım 7b).**
-  §6.5, SSD katılımcısının **sağır kulağa sunulan heceyi şans düzeyinin
-  üzerinde bildirmesini** çapraz duyma göstergesi sayıyor ve o katılımcının
-  Modül 1–2 uzamsal yön verisinin QC raporunda işaretlenmesini istiyor. Eşiğin
-  kendisi ("şans düzeyinin üzerinde" ne demek: 30 denemede kaç bildirim,
-  binomial test mi sabit oran mı) config'e **girmedi** — ölçüt katılımcının
-  sağır kulağını bilmeyi gerektiriyor, o bilgi Adım 8'in katılımcı girişinden
-  geliyor ve rapor Adım 9'un işi. Modül tarafında gereken sayılar üretiliyor.
-  Oddball ve GIN yanıt pencereleriyle aynı kural: **sonradan seçilmesi, hangi
-  katılımcının çapraz duyduğuna sonuca bakarak karar vermek olur.**
+- **Çapraz duyma ölçütü — kod tarafında KAPANDI (Adım 9b), danışman değerini
+  onaylamalı.** §6.5, SSD katılımcısının **sağır kulağa sunulan tonu şans
+  düzeyinin üzerinde tespit etmesini** çapraz duyma göstergesi sayıyor ve o
+  katılımcının Modül 1–2 uzamsal yön verisinin QC raporunda işaretlenmesini
+  istiyor. **Ölçüt Adım 9b'de belirlendi (kullanıcı kararı):** tek yönlü
+  binomial test, boş p₀ = yanlış-alarm oranı, anlamlılık `qc.cross_hearing_alpha`
+  (config, **geçici 0.05**). `tools/qc_report.py` sağır kulağın kendisini
+  denemedeki `ear`'dan okur (Adım 8 girişinden gelir) ve şans üstü çıkarsa uyarı
+  basar. **Sonradan seçilemez** — α veri toplamadan önce config'te sabit
+  (oddball/GIN yanıt pencereleriyle aynı kural). Danışmandan beklenen: α=0.05 ve
+  n_trials=20/catch_ratio değerlerinin bu görev için uygun olduğunun onayı.
 - **GIN — taslak bölüm hazır, danışman onayı bekliyor.**
   `docs/EK_GIN.docx`, yöntem dokümanına **6.6** olarak eklenmek üzere yazıldı
   (2026-07-26). Gerekçe, görevin TBW ölçütü için bir kontrol olması üzerine
