@@ -9,7 +9,7 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-exclude = ["assets", "backups", "data", "logs", "stimuli"]
+exclude = ["assets", "backups", "data", "logs", "stimuli", "legacy"]
 
 [tool.ruff.lint]
 select = [
@@ -32,7 +32,9 @@ select = [
 
 [tool.mypy]
 python_version = "3.10"
-files = ["src", "mcgurk", "tools", "main.py", "admin.py", "tests"]
+files = ["mcgurk", "tools", "main.py", "tests"]
+# The Adım 0 baseline is frozen under legacy/ and neither checked nor run.
+exclude = ["^legacy/"]
 plugins = ["pydantic.mypy"]
 # Derive module names from the repository root so tests/conftest.py and
 # tests/mcgurk/conftest.py are distinct modules.  pytest needs both to be
@@ -46,9 +48,8 @@ ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 
-# The new package is annotated from the start.  src/ is the Adım 0 baseline
-# and is retired in Adım 8, so tightening it would be work spent on code that
-# is going away.
+# The whole live codebase is annotated; the Adım 0 baseline that used to be
+# exempt here is retired under legacy/ (Adım 8c-ii) and excluded above.
 [[tool.mypy.overrides]]
 module = ["mcgurk.*", "tools.*"]
 disallow_untyped_defs = true

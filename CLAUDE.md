@@ -16,34 +16,27 @@ TÜBİTAK-supported academic research project: "Behavioral Assessment of Audiovi
 
 ## Architecture
 
-### Two Entry Points
-1. **`main.py`** — Experiment runner (PsychoPy-based)
-   - Login dialog → Admin setup (speaker + section selection) → Fullscreen experiment → End screen
-2. **`admin.py`** — Admin panel (PySide6-based, separate process)
-   - Browse participants, view results, export CSV, manage sessions
+### Entry points
+1. **`main.py`** (= `python -m mcgurk.ui`) — the full session flow (Adım 8):
+   participant login → resume prompt for an interrupted session → pre-session
+   checklist confirm → practice → every module in `session.module_order` with its
+   instruction screen and breaks → cross-hearing check (SSD) → end + backup. ESC
+   opens an "are you sure?" confirm at any point.
+2. **`python -m mcgurk.checklist`** — the operator's pre-session GREEN/RED pre-flight.
+3. Admin / analysis (browse results, export) — Adım 9.
 
-### Application Flow (main.py)
-```
-[PsychoPy gui.Dlg]                                    [PsychoPy visual.Window — fullscreen]
-Login/Demographics  →  Admin Setup (speaker + sections)  →  Experiment Loop  →  End Screen
-                       (admin picks speaker & sections)      ↓
-                                                   Fixation (+) → Video → Response (ba/da/ga) → repeat
-```
+The six assessment modules are `mcgurk`, `avsr`, `tbw`, `oddball`, `dichotic`,
+`gin` (documented under `mcgurk/modules/` below); `practice` and the
+cross-hearing check are session-flow steps, not measurement modules.
 
-### Test Sections (admin selects before experiment)
-1. **McGurk** — incongruent stimuli only (visual ≠ audio), 6 videos per speaker (all permutations of ba/da/ga where visual ≠ audio)
-2. **AV Congruent** — visual = audio (ba-ba, da-da, ga-ga), 3 videos per speaker
-3. **A-only** — audio only, screen shows fixation cross or blank
-4. **V-only** — video only, audio muted
-5. **Dichotic Listening** — audio only to headphones, different syllable per ear, records which ear the response matches
+### Legacy retired under legacy/ (Adım 8c-ii)
 
-Each section has **clean** and **noisy** variants. Noise type and SNR level are configurable.
-
-### Two packages side by side (from Adım 1)
-
-`src/` is the Adım 0 baseline and still runs the experiment. `mcgurk/` is the
-new platform, built next to it and retired `src/` in Adım 8. They use separate
-config files and separate database files — the schemas are incompatible.
+The Adım 0 `src/` tree — its own `main.py`, `admin.py`, `config.yaml`, the old
+asset-generator scripts, and the McGurk/AV-congruent/A-only/V-only/Dichotic
+"section" model it used — is frozen under `legacy/` and no longer run, tested or
+type-checked (see `legacy/README.md`). `mcgurk/` is the single live platform.
+Its config/db/stimuli layers stay PsychoPy-free; the two used to share a repo
+root and separate config/database files — the schemas are incompatible.
 
 **Hard rule: `mcgurk/config`, `mcgurk/db` and `mcgurk/stimuli` must not import
 PsychoPy.** CI has no PsychoPy installed and an analysis machine need not
@@ -406,9 +399,14 @@ the danışman. What is specific to it:
   is loaded before the clock starts — reading it after would eat the lead-in and
   the run would ask for an onset already past.
 
-### Legacy Structure (src/, Adım 0)
+### Legacy Structure (Adım 0 — frozen under `legacy/`)
+
+Retired in Adım 8c-ii and moved under `legacy/` (see `legacy/README.md`): the
+paths below are now `legacy/main.py`, `legacy/admin.py`, `legacy/config.yaml`,
+`legacy/src/…` and `legacy/scripts/generate_*`. Not run, tested or type-checked.
+The tree below describes what is inside `legacy/` for reference only.
 ```
-mcgurk/
+(repo root, Adım 0)
 ├── CLAUDE.md
 ├── config.yaml                  # legacy experiment parameters (src/ only)
 ├── requirements.txt
@@ -588,8 +586,8 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
   `pip install -r requirements.txt` fails with
   `No matching distribution found for psychopy==2026.1.2` (psychopy needs <3.12).
 - Install: `pip install -r requirements.txt`
-- Run experiment: `python main.py` (WSL2'de `LIBGL_ALWAYS_SOFTWARE=1` prefix gerekebilir)
-- Run admin panel: `python admin.py`
+- Run the experiment: `python main.py` (= `python -m mcgurk.ui`; full options below. WSL2'de `LIBGL_ALWAYS_SOFTWARE=1` prefix gerekebilir)
+- Admin / analysis: Adım 9 (the Adım 0 `admin.py` is retired under `legacy/`)
 - Monitor setup (ilk kurulumda bir kez): `python scripts/setup_monitor.py`
 - Validate config + design cost: `python -m mcgurk.config`
 - Pre-session checklist (operator, Adım 8): `python -m mcgurk.checklist [--no-hardware]` — YEŞİL/KIRMIZI ön-uçuş; any RED blocks a `data_collection` session (exit 1)

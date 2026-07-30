@@ -7,27 +7,30 @@ deney platformu.
 **Proje:** Atılım Üniversitesi Odyoloji Bölümü, etik kurul onaylı, 12 aylık
 klinik çalışma. Katılımcılar: 20 sağ SSD + 20 sol SSD + 20 kontrol.
 
-> **Durum: Adım 1 (proje iskeleti).** Bu depo veri toplamaya hazır değildir.
-> Çalışan deney hâlâ Adım 0'ın `src/` ağacıdır; yeni `mcgurk/` paketi onun
-> yanında kuruluyor ve şu an config, veritabanı, yedekleme ve loglama
-> katmanlarını içeriyor. Neyin eksik olduğu için aşağıdaki
-> [Bilinen sınırlar](#bilinen-sınırlar) bölümüne bakın. Geliştirme planı
-> `docs/steps.md`, ilerleme durumu `progress.md` dosyasındadır.
+> **Durum: Adım 8 (oturum akışı) tamamlandı.** Platform artık `mcgurk/` yeni
+> paketidir ve tam bir oturumu baştan sona koşar: `python main.py`
+> (= `python -m mcgurk.ui`). Adım 0'ın `src/` ağacı emekliye ayrıldı ve
+> `legacy/` altında donduruldu (bkz. `legacy/README.md`). Sırada arayüz cilası
+> + danışman gösterimi (Adım 8.5) ve analiz/dışa aktarım (Adım 9) var. Bu depo
+> henüz veri toplamaya hazır değildir — fotodiyot ölçümü ve ses kalibrasyonu
+> bekliyor (aşağıdaki [Bilinen sınırlar](#bilinen-sınırlar)). Geliştirme planı
+> `docs/steps.md`, ilerleme durumu `progress.md`.
+>
+> Bu README'nin bir kısmı hâlâ eski `src/` tasarımını anlatıyor; tam yenileme
+> Adım 9'da yapılacak.
 
-## Depo yapısı — iki paket bir arada
+## Depo yapısı
 
-| | `src/` (Adım 0) | `mcgurk/` (Adım 1→) |
+| | `mcgurk/` (yeni platform) | `legacy/` (Adım 0, donmuş) |
 |---|---|---|
-| Durum | Çalışan baseline deney | Yeni platform, inşa hâlinde |
-| Giriş | `python main.py` | Henüz yok (Adım 8); `tools/run_module.py` ve `tools/timing_selftest.py` çalışır |
-| Config | `config.yaml` | `config/experiment.yaml` |
-| Veritabanı | `data/mcgurk.db` | `data/mcgurk.sqlite` |
-| PsychoPy | Zorunlu | `config/` ve `db/` katmanlarında **yasak** |
+| Durum | Tek çalışan platform | Tarihsel referans — çalıştırılmaz, test edilmez |
+| Giriş | `python main.py` / `python -m mcgurk.ui` | `legacy/main.py` (koşulmaz) |
+| Config | `config/experiment.yaml` | `legacy/config.yaml` |
+| Veritabanı | `data/mcgurk.sqlite` | `data/mcgurk.db` (eski, gitignore) |
+| PsychoPy | `config/`, `db/`, `stimuli/` katmanlarında **yasak** | — |
 
-İkisi bilinçli olarak ayrı: şemalar uyumsuz olduğu için aynı dosyayı
-paylaşamazlar, ve yeni paketin config/veritabanı katmanları PsychoPy'siz
-çalışabildiği için CI'da ve analiz makinesinde koşabiliyorlar. `src/` Adım 8'de
-oturum akışı yeni pakete taşındığında emekli edilecek.
+`config/` ve `db/` katmanları PsychoPy'siz çalışır (CI'da ve analiz makinesinde),
+bu yüzden PsychoPy oralarda yasaktır ve bir test bunu her koşuda doğrular.
 
 ---
 
@@ -172,31 +175,26 @@ python scripts/setup_monitor.py
 
 ## Çalıştırma
 
-Deney:
+Tam oturum (yeni platform):
 
 ```bash
 python main.py
 ```
 
-Farklı bir yapılandırma veya günlük düzeyiyle:
+Bu, `python -m mcgurk.ui` ile aynıdır. Geliştirme/kısaltma seçenekleri:
+`--limit N` (modül başına ilk N deneme), `--db PATH`, `--device NAME`,
+`--new-session` (yarım oturum devam teklifini atla).
 
-```bash
-python main.py --config config.yaml --log-level DEBUG
-```
+Akış: katılımcı girişi → (yarım oturum varsa) devam teklifi → oturum öncesi
+kontrol onayı → alıştırma → her modül yönergesiyle → molalar → çapraz dinleme
+(SSD) → bitiş + yedek. Oturum yarıda kalırsa aynı katılımcıyla **kaldığı yerden
+devam** edilebilir (tamamlanan modüller atlanır).
 
-Sonuçları görüntüleme ve dışa aktarma (ayrı süreç):
+`ESC` **her aşamada** çalışır (uyaran sunumu dâhil) ve "çıkmak istediğinize emin
+misiniz?" onayı sorar. Onaylanırsa oturum veritabanında `aborted` işaretlenir,
+o ana kadarki denemeler korunur, yedek yazılır ve çıkış kodu `2` döner.
 
-```bash
-python admin.py
-```
-
-Akış: katılımcı girişi → admin ayarları (konuşmacı, bölümler, gürültü, ses
-aygıtı) → tam ekran deney → bitiş ekranı.
-
-`ESC` deneyin **her aşamasında** çalışır — talimat ekranı, sabitleme haçı,
-uyaran sunumu ve yanıt ekranı dahil. Kesilen oturum veritabanında `aborted`
-işaretlenir, o ana kadar yanıtlanan denemeler korunur ve program çıkış kodu
-`1` ile döner ("başarıyla tamamlandı" demez).
+Oturum öncesi kontrol (operatör): `python -m mcgurk.checklist`.
 
 > **SDL2 uyarısı.** `MovieStim` her oluşturulduğunda PsychoPy
 > `Using \`sdl2\` for audio playback via \`ffpyplayer\`` uyarısı üretir
