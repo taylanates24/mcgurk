@@ -26,11 +26,15 @@ from mcgurk.modules.mcgurk import (
     OTHER,
     QUIET,
     VISUAL,
+    McGurkRates,
     categorise,
     categorise_for,
     cell_counts,
     design_cells,
     plan_trials,
+    rates_by_condition,
+    rates_from_rows,
+    summarise_measures,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -420,3 +424,101 @@ def test_the_shipped_config_is_still_readable_as_yaml() -> None:
     raw = yaml.safe_load(shipped.read_text(encoding="utf-8"))
     keys = raw["modules"]["mcgurk"]["response_keys"]
     assert all(isinstance(key, str) for key in keys)
+
+
+# --------------------------------------------------------------------- measures
+
+
+def _row(
+    trial_id: int,
+    category: str | None,
+    *,
+    rt: float | None = None,
+    snr_db: float | None = None,
+    ear: str | None = "left",
+) -> dict[str, Any]:
+    """One ``v_trials_flat`` row.  ``category=None`` is a timeout — no response
+    row — so response_id is absent too."""
+    responded = category is not None
+    return {
+        "module": "mcgurk",
+        "trial_id": trial_id,
+        "response_id": trial_id if responded else None,
+        "category": category,
+        "rt_from_burst_ms": rt,
+        "snr_db": snr_db,
+        "ear": ear,
+    }
+
+
+def test_rates_count_each_category_over_all_trials() -> None:
+    rows = [
+        _row(1, FUSION, rt=500.0),
+        _row(2, FUSION, rt=520.0),
+        _row(3, AUDITORY, rt=600.0),
+        _row(4, VISUAL, rt=None),
+        _row(5, None),  # timeout
+    ]
+    rates = rates_from_rows(rows)
+    assert rates.n_trials == 5
+    assert rates.fusion_rate == pytest.approx(2 / 5)
+    assert rates.auditory_rate == pytest.approx(1 / 5)
+    assert rates.visual_rate == pytest.approx(1 / 5)
+    assert rates.rate(NONE) == pytest.approx(1 / 5)
+    assert rates.combination_rate == pytest.approx(0.0)
+
+
+def test_a_timeout_is_a_trial_not_a_dropped_observation() -> None:
+    """NONE stays in the denominator: a condition that is mostly timeouts has a
+    low fusion rate, not an absent one."""
+    rows = [_row(1, FUSION, rt=500.0), _row(2, None), _row(3, None)]
+    rates = rates_from_rows(rows)
+    assert rates.n_trials == 3
+    assert rates.fusion_rate == pytest.approx(1 / 3)
+    assert rates.counts[NONE] == 2
+
+
+def test_reaction_time_is_measured_only_over_answered_trials() -> None:
+    rows = [_row(1, FUSION, rt=400.0), _row(2, AUDITORY, rt=600.0), _row(3, None)]
+    rates = rates_from_rows(rows)
+    assert rates.n_rt == 2
+    assert rates.mean_rt_ms == pytest.approx(500.0)
+
+
+def test_a_response_with_no_stored_category_counts_as_other() -> None:
+    """A response row must never reach analysis with a NULL category, but if one
+    did it is OTHER — a given answer, not a timeout."""
+    rows = [{**_row(1, FUSION), "category": None, "response_id": 1}]
+    rates = rates_from_rows(rows)
+    assert rates.counts[OTHER] == 1
+    assert rates.rate(NONE) == pytest.approx(0.0)
+
+
+def test_rates_by_condition_split_on_noise_and_ear() -> None:
+    rows = [
+        _row(1, FUSION, snr_db=None, ear="left"),
+        _row(2, AUDITORY, snr_db=None, ear="left"),
+        _row(3, FUSION, snr_db=5.0, ear="right"),
+    ]
+    by_condition = rates_by_condition(rows)
+    assert by_condition[(None, "left")].fusion_rate == pytest.approx(0.5)
+    assert by_condition[(5.0, "right")].fusion_rate == pytest.approx(1.0)
+
+
+def test_rows_of_other_modules_are_ignored() -> None:
+    rows = [_row(1, FUSION, rt=500.0), {"module": "avsr", "trial_id": 99}]
+    assert rates_from_rows(rows).n_trials == 1
+
+
+def test_empty_rows_give_no_rates() -> None:
+    rates = rates_from_rows([])
+    assert rates.n_trials == 0
+    assert rates.fusion_rate is None
+    assert McGurkRates(counts={}, n_trials=0).rate(FUSION) is None
+
+
+def test_summary_names_every_category_and_is_cp1254_safe() -> None:
+    rows = [_row(1, FUSION, rt=500.0), _row(2, None)]
+    text = summarise_measures(rows)
+    assert "Füzyon" in text and "Yanıtsız" in text
+    text.encode("cp1254")  # the Turkish console must be able to print it

@@ -17,6 +17,12 @@ numpy==2.2.6
 scipy==1.14.1
 soundfile==0.13.1
 
+# mcgurk/analysis — export builds pandas DataFrames from the flat view and the
+# raw tables; the measures layer wires each module's numbers to the database.
+# Both are PsychoPy-free and CI-tested.  Parquet (pyarrow) stays optional — CSV
+# is what CI exercises.
+pandas==2.3.3
+
 pytest==9.1.1
 ruff==0.16.0
 mypy==2.3.0

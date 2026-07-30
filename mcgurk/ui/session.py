@@ -15,7 +15,6 @@ monaural test of a deaf ear, and that has to be caught without a sound card.
 
 from __future__ import annotations
 
-import json
 import logging
 import random
 from collections.abc import Callable
@@ -24,7 +23,7 @@ from typing import Any, TypeVar
 
 from ..checklist import Check, any_red, render, run_checks
 from ..config.calibration import Calibration, load_calibration
-from ..config.loader import resolve_path
+from ..config.loader import config_from_snapshot, resolve_path
 from ..config.schema import ExperimentConfig
 from ..db.database import Database
 from ..db.models import (
@@ -140,16 +139,6 @@ def deaf_ear_for(participant: Participant) -> str | None:
 
 
 # --------------------------------------------------------------- resume (8c-i)
-
-
-def config_from_snapshot(snapshot: str) -> ExperimentConfig:
-    """Rebuild the config a session was started with, from its stored snapshot.
-
-    Resume uses this rather than the current config so the trials still to run
-    are exactly the ones the original session would have presented, even if
-    ``config/experiment.yaml`` changed since it started.
-    """
-    return ExperimentConfig.model_validate(json.loads(snapshot))
 
 
 def remaining_plan(

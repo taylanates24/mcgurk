@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -24,6 +25,22 @@ class ConfigError(RuntimeError):
 def resolve_path(project_root: Path, path: Path) -> Path:
     """Resolve *path* against the project root unless it is already absolute."""
     return path if path.is_absolute() else (project_root / path)
+
+
+def config_from_snapshot(snapshot: str) -> ExperimentConfig:
+    """Rebuild the config a session was started with, from its stored snapshot.
+
+    ``sessions.config_snapshot`` holds the config exactly as it was loaded when
+    the session started (§G).  Both resume and the analysis layer rebuild from
+    it rather than from the current ``config/experiment.yaml``, so an edit to
+    that file cannot change how already-collected data is interpreted or which
+    trials a half-finished session still has to run.
+
+    The model validation is pure — the filesystem checks (word lists, stimulus
+    files) live in :func:`load_config`, not in the schema — so this is safe to
+    call on an analysis machine that has neither the stimuli nor the config.
+    """
+    return ExperimentConfig.model_validate(json.loads(snapshot))
 
 
 def _format_validation_error(exc: ValidationError) -> str:

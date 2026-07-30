@@ -23,10 +23,12 @@ from __future__ import annotations
 
 import logging
 import random
+import statistics
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ..config.schema import AVPair, ExperimentConfig, McGurkConfig
 from ..db.models import Trial
@@ -39,6 +41,7 @@ from .base import (
     balanced_cycle,
     derive_seed,
     order_cells,
+    row_value,
 )
 
 logger = logging.getLogger(__name__)
@@ -289,6 +292,178 @@ def categorise_for(module: McGurkConfig, response: str | None, trial: Trial) -> 
         fusion_map=module.fusion_map,
         combination_map=module.combination_map,
     )
+
+
+# -------------------------------------------------------------------- measures
+
+
+#: The order categories are reported in — auditory, visual, then the two McGurk
+#: percepts, then the leftovers.  Fixed so a table always reads the same way.
+_REPORT_ORDER = (AUDITORY, VISUAL, FUSION, COMBINATION, OTHER, NONE)
+
+#: Turkish labels for the console.  ``NONE`` is a timeout, not a percept.
+_CATEGORY_LABELS = {
+    AUDITORY: "İşitsel",
+    VISUAL: "Görsel baskınlık",
+    FUSION: "Füzyon",
+    COMBINATION: "Kombinasyon",
+    OTHER: "Diğer",
+    NONE: "Yanıtsız",
+}
+
+
+@dataclass(frozen=True)
+class McGurkRates:
+    """The category proportions of one set of McGurk trials, plus RT.
+
+    There is no correct answer here (§A.10): the headline numbers are the rates
+    at which each percept was reported, not an accuracy.  ``NONE`` is a timeout
+    — a trial with no response row — and it is kept in ``n_trials`` so a
+    condition that is mostly timeouts reads as a low fusion rate rather than an
+    absent one.  The reaction time is measured only over the trials that were
+    answered.
+    """
+
+    counts: Mapping[str, int]
+    n_trials: int
+    mean_rt_ms: float | None = None
+    sd_rt_ms: float | None = None
+    n_rt: int = 0
+
+    def rate(self, category: str) -> float | None:
+        """Proportion of trials in *category*; None when there are no trials."""
+        if not self.n_trials:
+            return None
+        return self.counts.get(category, 0) / self.n_trials
+
+    @property
+    def fusion_rate(self) -> float | None:
+        return self.rate(FUSION)
+
+    @property
+    def visual_rate(self) -> float | None:
+        """Visual dominance — the video's token reported over the audio's."""
+        return self.rate(VISUAL)
+
+    @property
+    def auditory_rate(self) -> float | None:
+        return self.rate(AUDITORY)
+
+    @property
+    def combination_rate(self) -> float | None:
+        return self.rate(COMBINATION)
+
+
+@dataclass
+class _TrialResult:
+    snr_db: float | None
+    ear: str | None
+    category: str = NONE
+    rt_ms: float | None = None
+
+
+def _trial_results(rows: Iterable[Any]) -> list[_TrialResult]:
+    """One outcome per McGurk trial, read off ``v_trials_flat`` rows.
+
+    A trial with no response row is a timeout (``NONE``); the LEFT JOIN keeps it
+    visible, which is the only reason a timeout can be counted at all.  A row
+    whose module is unset is treated as this module's — a synthetic test row
+    need not carry it.
+    """
+    results: dict[int, _TrialResult] = {}
+    order: list[int] = []
+    for row in rows:
+        module = row_value(row, "module")
+        if module is not None and module != MODULE_NAME:
+            continue
+        trial_id = row_value(row, "trial_id")
+        if trial_id is None:
+            raise ModuleError("McGurk satırında trial_id yok")
+        trial_id = int(trial_id)
+        if trial_id not in results:
+            order.append(trial_id)
+            results[trial_id] = _TrialResult(
+                snr_db=row_value(row, "snr_db"),
+                ear=row_value(row, "ear"),
+            )
+        if row_value(row, "response_id") is None:
+            continue
+        category = row_value(row, "category")
+        # A response that categorisation did not place is OTHER; it never
+        # reaches the database as NULL, but analysis must not trust that.
+        results[trial_id].category = category if category in CATEGORIES else OTHER
+        rt = row_value(row, "rt_from_burst_ms")
+        results[trial_id].rt_ms = None if rt is None else float(rt)
+    return [results[trial_id] for trial_id in order]
+
+
+def _tally(results: Iterable[_TrialResult]) -> McGurkRates:
+    counts: Counter[str] = Counter()
+    rts: list[float] = []
+    n_trials = 0
+    for result in results:
+        n_trials += 1
+        counts[result.category] += 1
+        if result.category != NONE and result.rt_ms is not None:
+            rts.append(result.rt_ms)
+    return McGurkRates(
+        counts=dict(counts),
+        n_trials=n_trials,
+        mean_rt_ms=statistics.fmean(rts) if rts else None,
+        sd_rt_ms=statistics.stdev(rts) if len(rts) > 1 else None,
+        n_rt=len(rts),
+    )
+
+
+def rates_from_rows(rows: Iterable[Any]) -> McGurkRates:
+    """The module's headline rates, pooled over noise and ear."""
+    return _tally(_trial_results(rows))
+
+
+def rates_by_condition(
+    rows: Iterable[Any],
+) -> dict[tuple[float | None, str | None], McGurkRates]:
+    """Rates within each ``(snr_db, ear)`` cell — the form the SSD hypothesis
+    is tested in: fusion is expected to depend on the noise level and on which
+    ear the audio was sent to."""
+    grouped: dict[tuple[float | None, str | None], list[_TrialResult]] = {}
+    for result in _trial_results(rows):
+        grouped.setdefault((result.snr_db, result.ear), []).append(result)
+    return {key: _tally(group) for key, group in grouped.items()}
+
+
+def summarise_measures(rows: Iterable[Any]) -> str:
+    """The module's measures as a block of text, for the operator's console."""
+    rows = list(rows)
+    rates = rates_from_rows(rows)
+    if not rates.n_trials:
+        return "McGurk: kayıtlı deneme yok."
+
+    lines = [f"McGurk kategorileri (n={rates.n_trials}):"]
+    for category in _REPORT_ORDER:
+        count = rates.counts.get(category, 0)
+        rate = rates.rate(category)
+        shown = "—" if rate is None else f"%{100 * rate:.1f}"
+        lines.append(f"  {_CATEGORY_LABELS[category]:<16}: {shown} ({count})")
+
+    if rates.mean_rt_ms is not None:
+        sd = "" if rates.sd_rt_ms is None else f" (SD {rates.sd_rt_ms:.0f})"
+        lines.append(
+            f"Ortalama RT (patlama)  : {rates.mean_rt_ms:.0f} ms{sd}, "
+            f"{rates.n_rt} yanıt"
+        )
+
+    by_condition = rates_by_condition(rows)
+    if len(by_condition) > 1:
+        lines.append("Füzyon oranı (gürültü × kulak):")
+        for (snr_db, ear), stats in sorted(
+            by_condition.items(), key=lambda item: (str(item[0][0]), str(item[0][1]))
+        ):
+            noise = QUIET if snr_db is None else f"{snr_db:g} dB"
+            fusion = stats.fusion_rate
+            shown = "—" if fusion is None else f"%{100 * fusion:.1f}"
+            lines.append(f"  {noise:<8} {str(ear):<6}: {shown} ({stats.n_trials})")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------- inspection

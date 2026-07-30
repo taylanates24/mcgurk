@@ -407,3 +407,48 @@ def test_a_negative_event_index_is_refused(db: Database) -> None:
         db.add_response(
             Response(trial_id=trial_id, event_index=-1, raw_response="space")
         )
+
+
+# ------------------------------------- cross_hearing_signal_present (version 5)
+
+
+def _cross_hearing_trial(
+    db: Database, block_id: int, trial_index: int, *, signal_present: bool
+) -> int:
+    return db.add_trial(
+        Trial(
+            block_id=block_id,
+            trial_index=trial_index,
+            module="cross_hearing",
+            ear="left",
+            design_extra={"signal_present": signal_present},
+        )
+    )
+
+
+def test_flat_view_exposes_the_cross_hearing_signal_flag(db: Database) -> None:
+    """The QC report needs to tell a signal trial from a catch trial to score
+    the deaf-ear check; the flag has to be a column, not only JSON."""
+    block_id = _block(db, _session(db, _participant(db)), "cross_hearing")
+    signal = _cross_hearing_trial(db, block_id, 0, signal_present=True)
+    catch = _cross_hearing_trial(db, block_id, 1, signal_present=False)
+    rows = {
+        row["trial_id"]: row["cross_hearing_signal_present"]
+        for row in db.conn.execute(
+            "SELECT trial_id, cross_hearing_signal_present FROM v_trials_flat"
+        )
+    }
+    # SQLite renders a JSON boolean as 1/0 through json_extract.
+    assert rows[signal] == 1
+    assert rows[catch] == 0
+
+
+def test_flat_view_flag_is_null_for_other_modules(db: Database) -> None:
+    """A module that carries no signal_present leaves the column NULL, not 0 —
+    'not applicable', distinct from 'was a catch trial'."""
+    trial_id = _gin_trial(db)
+    row = db.conn.execute(
+        "SELECT cross_hearing_signal_present FROM v_trials_flat WHERE trial_id = ?",
+        (trial_id,),
+    ).fetchone()
+    assert row["cross_hearing_signal_present"] is None

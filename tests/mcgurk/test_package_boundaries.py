@@ -111,6 +111,10 @@ PURE_LAYERS = (
     "mcgurk.stimuli.prepare",
     "mcgurk.stimuli.verify",
     "mcgurk.stimuli.wavfile",
+    # analysis/ runs on a machine that need not have PsychoPy; it reads the flat
+    # view and each module's PsychoPy-free measures.
+    "mcgurk.analysis.export",
+    "mcgurk.analysis.measures",
     *ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY,
 )
 

@@ -1,4 +1,4 @@
--- McGurk / SSD platform database schema (version 4).
+-- McGurk / SSD platform database schema (version 5).
 --
 -- Version history:
 --   1 (Adım 1) — six tables + v_trials_flat + the §A.10 trigger.
@@ -12,6 +12,13 @@
 --     smaller than a trial — a segment holds up to three gaps and the threshold
 --     is computed per gap duration — so without it the database could not say
 --     which gap a hit belongs to.
+--   5 (Adım 9a) — v_trials_flat exposes cross_hearing_signal_present from
+--     trials.design_extra.  The cross-hearing check writes signal_present into
+--     design_extra (true on a tone trial, false on a catch trial); the QC
+--     report needs it to tell a hit from a false alarm and so decide whether a
+--     participant heard the tone in their deaf ear.  Same reason as version 2:
+--     the column has to be in the VIEW, not only the JSON, for analysis to read
+--     it, and reading the VIEW on an un-migrated file would silently miss it.
 --
 -- Design notes:
 --   * Six tables plus a flat VIEW for analysis (steps.md Adım 1).
@@ -247,6 +254,7 @@ SELECT
     json_extract(t.design_extra, '$.segment_index')    AS gin_segment_index,
     json_extract(t.design_extra, '$.tone_type')        AS oddball_tone_type,
     json_extract(t.design_extra, '$.item')             AS avsr_item,
+    json_extract(t.design_extra, '$.signal_present')   AS cross_hearing_signal_present,
 
     r.response_id,
     r.response_index,
