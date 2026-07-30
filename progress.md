@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 8c-ii (8a + 8b + 8c-i tamamlandı — sıradaki: src emekliliği + master merge)
+Aktif adım: 9 (ADIM 8 TAMAMLANDI — Adım 9 henüz başlatılmadı, kullanıcı kararı)
 
 ## Durum tablosu
 
@@ -21,9 +21,12 @@ Aktif adım: 8c-ii (8a + 8b + 8c-i tamamlandı — sıradaki: src emekliliği + 
 | 8b-i | Oturum akışı iskeleti | TAMAMLANDI | 2026-07-30 | `1882dcb` |
 | 8b-ii | Alıştırma + çapraz dinleme + ESC onayı | TAMAMLANDI | 2026-07-30 | `82a9a4d` |
 | 8c-i | Kesinti/devam (resume) | TAMAMLANDI | 2026-07-30 | `0602fbb` |
-| 8c-ii | src emekliliği + master merge | BEKLİYOR | | |
-| 8.5 | Arayüz cilası + uçtan uca gösterim (danışman) | BEKLİYOR | | |
+| 8c-ii | src emekliliği + master merge | TAMAMLANDI | 2026-07-30 | `56c902e` |
+| 8.5 | Arayüz cilası + uçtan uca gösterim | İPTAL | 2026-07-30 | (kullanıcı kararı) |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
+
+**Adım 8 (oturum akışı) tamamen tamamlandı** — 8a/8b-i/8b-ii/8c-i/8c-ii.
+`develop` → `master` merge + `git tag adim-8-oturum-akisi` yapıldı.
 
 Durum değerleri: BEKLİYOR / PLAN ONAYINDA / GELİŞTİRİLİYOR / TESTTE / TAMAMLANDI
 
@@ -1948,35 +1951,48 @@ diye ikiye bölündü (kullanıcı, 2026-07-30).**
     politikası; master hâlâ initial commit'te → fast-forward).
 
 ### Adım 8c-ii — src emekliliği + master merge
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
-- **Commit:** —
-- **Kapanışta ayrıca:** `develop` → `master` merge + `git tag
-  adim-8-oturum-akisi` ve **src/ emekliliği** (kullanıcı kararı, 2026-07-30).
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-30. Otomatik testler yeşil (773 CI alt kümesi; silinen
+  21 src testi düştü, yeni paket etkilenmedi), ruff + mypy temiz (107 dosya,
+  legacy hariç). `TEST_ADIM_8C_II.md` kullanıcı tarafından yürütüldü ve geçti.
+- **Commit:** `56c902e` (+ `develop` → `master` merge + tag `adim-8-oturum-akisi`)
+
 - **Ne yapıldı:**
+  - **src/ emekliliği (git mv, silme değil):** `src/`, eski `main.py`,
+    `admin.py`, `config.yaml`, `scripts/generate_{noisy,dichotic}_stimuli.py`,
+    `TEST_ADIM_0.md` → `legacy/`. `legacy/README.md` (donmuş referans + eski↔yeni
+    tablo). `data/mcgurk.db` zaten gitignore'lu (depoda değil).
+  - **main.py yönlendirildi:** kök `main.py` artık `python -m mcgurk.ui`'yi
+    çağıran ince shim. `SDL_AUDIODRIVER=wasapi` yeni pakette
+    (`engine/psychopy_prefs.py`) zaten korunuyor.
+  - **Test:** Adım 0'ın 7 src testi silindi (git rm; git geçmişi korur).
+    `tests/conftest.py` yeniden yazıldı — `src` bağımlılığı kalktı, `sys.path` +
+    `hardware_speaker` (yeni paketin donanım testleri) kaldı.
+  - **Araç/CI:** `pyproject.toml` mypy `files`'tan `src`/`admin.py` çıktı,
+    `legacy/` ruff + mypy'de hariç. README + CLAUDE.md yeni duruma göre
+    güncellendi (README derin içerik yenilemesi Adım 9'a).
+
 - **Alınan kararlar:**
+  - **Taşı, silme (kullanıcı):** src ve bağlıları `legacy/`'de donmuş referans.
+    Çalıştırılmaz/test edilmez; kırık `from src` importları inert.
+  - **src testleri silindi (kullanıcı):** emekli kodu test ediyorlardı; yeni
+    paketin tam test paketi var; geçmiş git'te.
+
 - **Bilinen sınırlar:**
-- **Sonraki adıma not:**
+  - `legacy/` içindeki kod olduğu gibi dondu; importları kök `src/`'i işaret
+    ettiği için doğrudan koşmaz (kasıtlı — referans).
+  - README hâlâ eski `src/` tasarımından izler taşıyor; tam yenileme Adım 9.
 
-### Adım 8.5 — Arayüz cilası + uçtan uca gösterim (danışman)
+- **Sonraki adıma not:** Adım 9 (analiz/dışa aktarım) `v_trials_flat` üzerinden
+  çalışır; çapraz-dinleme `signal_present`'ı VIEW'e eklemek (şema bump) Adım 9'un
+  işi. Prova oturumu kapısı Adım 9'da.
 
-**`steps.md`'de yoktur — kullanıcı kararıyla eklendi (2026-07-30).** Adım 8 tam
-bitince, Adım 9'dan **önce** yapılacak. Amaç: platformu danışmana **uçtan uca**
-gösterebilecek düzeye getirmek ve katılımcı arayüzünü güzelleştirmek.
+### Adım 8.5 — Arayüz cilası + uçtan uca gösterim (İPTAL)
 
-- **Kapsam (taslak, tur başında netleşecek):**
-  - **Arayüz cilası:** `theme` config bölümü (font, renk paleti, boyutlar) +
-    `mcgurk/ui/screens.py` ve `mcgurk/modules/response.py`'de tipografi/renk/
-    yerleşim; yumuşak geçişler; operatör ilerleme göstergesi; karşılama/bitiş
-    görseli. Zamanlama-kritik yollara kare-başına maliyet **eklenmez**; §A
-    kuralları korunur (görsel merkezde, geri bildirim yok, tam ekran).
-  - **Uçtan uca gösterim:** danışmana kısaltılmış ama tam akışlı bir demo
-    koşusu (resmi prova/pilot Adım 9'da).
-  - **(İsteğe bağlı, ayrı konuşulacak):** daha şık giriş formu — `gui.DlgFromDict`
-    yerine **ayrı process** bir PySide6 başlatıcı (aynı process'te PsychoPy+
-    PySide6 karışmaz, CLAUDE.md).
-- **Neden burada:** kod davranışı Adım 8'de sabitlendikten sonra estetik tek
-  seferde yapılır; danışman gösterimi de arayüz oturmuşken anlamlı.
+**İptal edildi (kullanıcı, 2026-07-30): "arayüz geliştirmesi yapmayacağız, bu
+şekilde iyi".** Mevcut arayüz yeterli görüldü; katılımcı metinleri zaten
+config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor — platform
+`python main.py` ile uçtan uca koşuyor. Bu satır kararın kaydı için tutuluyor.
 
 ### Adım 9 — Analiz, dışa aktarım ve entegrasyon
 - **Durum:** BEKLİYOR
