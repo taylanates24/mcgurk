@@ -45,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--device", default=None, help="bu koşu için audio.device'ı ez (config değişmez)"
     )
+    parser.add_argument(
+        "--new-session",
+        action="store_true",
+        help="yarım oturum bulunsa bile devam teklif etme, yeni oturum başlat",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -66,7 +71,11 @@ def main(argv: list[str] | None = None) -> int:
     db_path = args.db or resolve_path(_PROJECT_ROOT, config.database.path)
     try:
         return run_session(
-            config, project_root=_PROJECT_ROOT, db_path=db_path, limit=args.limit
+            config,
+            project_root=_PROJECT_ROOT,
+            db_path=db_path,
+            limit=args.limit,
+            offer_resume=not args.new_session,
         )
     except (EngineError, DatabaseError, ManifestError) as exc:
         # A broken timing chain, a database problem or a missing stimulus is

@@ -15,11 +15,12 @@ monaural test of a deaf ear, and that has to be caught without a sound card.
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from ..checklist import Check, any_red, render, run_checks
 from ..config.calibration import Calibration, load_calibration
@@ -50,10 +51,12 @@ from ..modules.response import make_keyboard
 from ..modules.stream import run_gin, run_oddball
 from ..stimuli import manifest as manifest_module
 from . import screens
-from .login import show_login_dialog
+from .login import ask_resume_or_new, show_login_dialog
 from .runtime import Hardware, open_hardware, start_session
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 #: name -> the module whose ``plan_trials`` builds the design.
 MODULE_IMPLS = {
@@ -136,6 +139,39 @@ def deaf_ear_for(participant: Participant) -> str | None:
     return None
 
 
+# --------------------------------------------------------------- resume (8c-i)
+
+
+def config_from_snapshot(snapshot: str) -> ExperimentConfig:
+    """Rebuild the config a session was started with, from its stored snapshot.
+
+    Resume uses this rather than the current config so the trials still to run
+    are exactly the ones the original session would have presented, even if
+    ``config/experiment.yaml`` changed since it started.
+    """
+    return ExperimentConfig.model_validate(json.loads(snapshot))
+
+
+def remaining_plan(
+    full: list[_T], completed_count: int, *, is_stream: bool
+) -> list[_T]:
+    """What is left to run of a module on resume.
+
+    A fully-recorded module returns nothing.  A stream (oddball/GIN, and the
+    cross-hearing check) that is not complete is re-run in full — a continuous
+    stream cannot be resumed from its middle, so its aborted partial block is
+    left in the database and superseded.  A forced-choice module resumes after
+    the trials already in its completed blocks; the seed makes the order
+    identical, so those first *completed_count* trials are exactly the ones
+    already recorded.
+    """
+    if completed_count >= len(full):
+        return []
+    if is_stream:
+        return list(full)
+    return list(full[completed_count:])
+
+
 # ------------------------------------------------------------- orchestration
 
 
@@ -189,8 +225,15 @@ def run_session(
     project_root: Path,
     db_path: Path,
     limit: int | None = None,
+    offer_resume: bool = True,
 ) -> int:
-    """Run one full session.  Returns 0 completed, 1 refused/failed, 2 aborted."""
+    """Run one full session.  Returns 0 completed, 1 refused/failed, 2 aborted.
+
+    If *offer_resume* and the participant has a half-finished session, the
+    operator is asked to continue it (Adım 8c-i): the same session id, seed and
+    stored config snapshot are reused and the already-completed modules are
+    skipped.
+    """
     # 1. Pre-session checklist (pure part) on the console.  The hardware is
     #    verified when it is opened below (open_hardware raises on a bad backend
     #    or an unmeasurable refresh), so the console pass is the file checks.
@@ -215,30 +258,69 @@ def run_session(
         logger.info("Giriş iptal edildi; oturum başlatılmadı.")
         return 0
 
-    # 3. Hardware.
-    hardware = open_hardware(config)
-    win = hardware.win
-
     db = Database(db_path)
-    seed = random.SystemRandom().randrange(2**31)
     status = SESSION_COMPLETED
     session_id: int | None = None
+    win: Any = None
+    active_config = config
     try:
         participant_id = _participant_id(db, participant)
-        speaker_id = select_speaker(
-            config, session_count=db.count_sessions(), seed=seed
+
+        # 3. Resume a half-finished session for this participant, if any and if
+        #    the operator wants to.  Cancel here backs out before any hardware.
+        resume_row = None
+        if offer_resume:
+            resumable = db.latest_resumable_session(participant_id)
+            if resumable is not None:
+                decision = ask_resume_or_new(
+                    session_id=int(resumable["session_id"]),
+                    started_at=str(resumable["started_at"]),
+                    status=str(resumable["status"]),
+                )
+                if decision == "cancel":
+                    logger.info("Operatör devam/yeni seçmedi (iptal).")
+                    return 0
+                if decision == "resume":
+                    resume_row = resumable
+
+        # A resumed session runs under the config it was started with, so the
+        # trials still to run are the ones it originally planned.
+        active_config = (
+            config_from_snapshot(str(resume_row["config_snapshot"]))
+            if resume_row is not None
+            else config
         )
+
+        # 4. Hardware (under the active config).
+        hardware = open_hardware(active_config)
+        win = hardware.win
+
         good_ear = good_ear_for(participant)
         deaf_ear = deaf_ear_for(participant)
-        session_id = start_session(
-            db,
-            config,
-            project_root=project_root,
-            participant_id=participant_id,
-            seed=seed,
-            hardware=hardware,
-            operator_notes=f"ui.session konuşmacı={speaker_id} iyi_kulak={good_ear}",
-        )
+        if resume_row is not None:
+            session_id = int(resume_row["session_id"])
+            seed = int(resume_row["seed"])
+            speaker_id = db.session_speaker_id(session_id) or select_speaker(
+                active_config, session_count=db.count_sessions(), seed=seed
+            )
+            db.set_session_status(session_id, "running")
+            completed = db.completed_trial_counts(session_id)
+            logger.info("Oturum %d DEVAM ediyor. Tamamlanan: %s", session_id, completed)
+        else:
+            seed = random.SystemRandom().randrange(2**31)
+            speaker_id = select_speaker(
+                active_config, session_count=db.count_sessions(), seed=seed
+            )
+            completed = {}
+            session_id = start_session(
+                db,
+                active_config,
+                project_root=project_root,
+                participant_id=participant_id,
+                seed=seed,
+                hardware=hardware,
+                operator_notes=f"ui.session konuşmacı={speaker_id} iyi_kulak={good_ear}",
+            )
         logger.info(
             "Oturum %d, katılımcı %s (%s), tohum %d, konuşmacı %d, iyi kulak %s, "
             "sağır kulak %s",
@@ -252,7 +334,7 @@ def run_session(
         )
 
         _run_flow(
-            config,
+            active_config,
             db=db,
             session_id=session_id,
             hardware=hardware,
@@ -263,6 +345,7 @@ def run_session(
             seed=seed,
             limit=limit,
             checks=checks,
+            completed=completed,
         )
     except AbortSession:
         status = SESSION_ABORTED
@@ -274,12 +357,13 @@ def run_session(
         # Clear the abort confirmer so the closing writes below — and any later
         # run in this process — are not affected by it.
         set_abort_confirmer(None)
-        win.close()
+        if win is not None:
+            win.close()
         if session_id is not None:
             db.finish_session(session_id, status)
-            if config.database.backup_on_session_end:
+            if active_config.database.backup_on_session_end:
                 backup = db.backup(
-                    resolve_path(project_root, config.paths.backups),
+                    resolve_path(project_root, active_config.paths.backups),
                     label=f"session{session_id}",
                 )
                 logger.info("Yedek: %s", backup)
@@ -301,8 +385,14 @@ def _run_flow(
     seed: int,
     limit: int | None,
     checks: list[Check],
+    completed: dict[str, int],
 ) -> None:
-    """The on-window part: confirm, welcome, modules with breaks, end."""
+    """The on-window part: confirm, welcome, modules with breaks, end.
+
+    *completed* maps a module to how many of its trials are already recorded
+    (empty for a fresh session); each module runs only what is left of it
+    (:func:`remaining_plan`), so a resumed session skips what it already did.
+    """
     win = hardware.win
     kb = make_keyboard()
     advance = config.screens.advance_key
@@ -360,17 +450,11 @@ def _run_flow(
                 advance=advance,
                 hint=hint,
                 on_break=on_break,
+                completed_count=completed.get("practice", 0),
             )
             continue
 
-        screens.show_instruction(
-            win,
-            kb,
-            config.screens.module_instructions[name],
-            advance_key=advance,
-            hint=hint,
-        )
-        planned = _plan_module(
+        full = _plan_module(
             name,
             config,
             manifest,
@@ -379,6 +463,22 @@ def _run_flow(
             speaker_id=speaker_id,
             good_ear=good_ear,
             limit=limit,
+        )
+        planned = remaining_plan(
+            full, completed.get(name, 0), is_stream=name in STREAM_MODULES
+        )
+        if not planned:
+            logger.info("  %s zaten tamamlanmış — atlanıyor (resume).", name)
+            continue
+        if len(planned) < len(full):
+            logger.info("  %s: %d/%d deneme kaldı (resume).", name, len(planned), len(full))
+
+        screens.show_instruction(
+            win,
+            kb,
+            config.screens.module_instructions[name],
+            advance_key=advance,
+            hint=hint,
         )
         if name in STREAM_MODULES:
             _STREAM_RUNNERS[name](
@@ -421,6 +521,7 @@ def _run_flow(
             limit=limit,
             advance=advance,
             hint=hint,
+            completed_count=completed.get("cross_hearing", 0),
         )
 
     screens.show_instruction(
@@ -444,14 +545,16 @@ def _run_practice(
     advance: str,
     hint: str,
     on_break: Callable[[int, int], None],
+    completed_count: int,
 ) -> None:
-    planned = practice_module.plan_trials(
+    full = practice_module.plan_trials(
         config, manifest, seed=seed, stimuli_root=stimuli_root, speaker_id=speaker_id
     )
     if limit is not None:
-        planned = planned[:limit]
+        full = full[:limit]
+    planned = remaining_plan(full, completed_count, is_stream=False)
     if not planned:
-        logger.info("Alıştırma denemesi yok (practice_trials 0) — atlanıyor.")
+        logger.info("Alıştırma tamamlanmış ya da denemesi yok — atlanıyor.")
         return
     screens.show_instruction(
         win, kb, config.screens.practice_intro, advance_key=advance, hint=hint
@@ -489,6 +592,7 @@ def _run_cross_hearing(
     limit: int | None,
     advance: str,
     hint: str,
+    completed_count: int,
 ) -> None:
     if deaf_ear is None:
         logger.info(
@@ -496,14 +600,19 @@ def _run_cross_hearing(
         )
         return
     assert config.screens.cross_hearing_intro is not None  # required when enabled
-    screens.show_instruction(
-        win, kb, config.screens.cross_hearing_intro, advance_key=advance, hint=hint
-    )
-    planned = cross_hearing_module.plan_trials(
+    full = cross_hearing_module.plan_trials(
         config, manifest, seed=seed, stimuli_root=stimuli_root, deaf_ear=deaf_ear
     )
     if limit is not None:
-        planned = planned[:limit]
+        full = full[:limit]
+    # A discrete but non-resumable check: done, or re-run whole (is_stream=True).
+    planned = remaining_plan(full, completed_count, is_stream=True)
+    if not planned:
+        logger.info("Çapraz dinleme tamamlanmış — atlanıyor (resume).")
+        return
+    screens.show_instruction(
+        win, kb, config.screens.cross_hearing_intro, advance_key=advance, hint=hint
+    )
     outcome = cross_hearing_module.run_cross_hearing(
         config=config,
         db=db,

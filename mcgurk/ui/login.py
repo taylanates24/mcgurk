@@ -187,3 +187,32 @@ def show_login_dialog() -> Participant | None:
             )
             # Loop and re-show the form; the operator's entries are preserved
             # because DlgFromDict rewrote them into `info` in place.
+
+
+#: Operator's choice when a half-finished session is found (Adım 8c-i).
+_RESUME_CHOICES = {
+    "Devam et (kaldığı yerden)": "resume",
+    "Yeni oturum başlat": "new",
+    "İptal": "cancel",
+}
+
+
+def ask_resume_or_new(*, session_id: int, started_at: str, status: str) -> str:
+    """Ask the operator what to do with a resumable session.
+
+    Returns ``"resume"``, ``"new"`` or ``"cancel"`` (cancel also on close).
+    """
+    from psychopy import gui
+
+    info: OrderedDict[str, Any] = OrderedDict(
+        [
+            ("Yarım oturum", f"#{session_id} — {started_at} ({status})"),
+            ("Ne yapmak istersiniz?", list(_RESUME_CHOICES)),
+        ]
+    )
+    dlg = gui.DlgFromDict(
+        info, title="Kaldığı yerden devam?", order=list(info.keys())
+    )
+    if not dlg.OK:
+        return "cancel"
+    return _RESUME_CHOICES.get(str(info["Ne yapmak istersiniz?"]), "cancel")

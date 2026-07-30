@@ -263,6 +263,68 @@ class Database:
         )
         self.conn.commit()
 
+    def set_session_status(self, session_id: int, status: str) -> None:
+        """Set a session's status without stamping ``completed_at``.
+
+        Resume reopens an ``aborted``/``running`` session back to ``running``;
+        the closing ``finish_session`` stamps ``completed_at`` at the real end.
+        """
+        self.conn.execute(
+            "UPDATE sessions SET status = ? WHERE session_id = ?",
+            (status, session_id),
+        )
+        self.conn.commit()
+
+    def latest_resumable_session(self, participant_id: int) -> dict[str, Any] | None:
+        """The participant's most recent session that can be continued.
+
+        Resumable = never completed: ``aborted`` (ESC or an error) or ``running``
+        (the process died before it could close the session).
+        """
+        row = self.conn.execute(
+            "SELECT * FROM sessions WHERE participant_id = ? "
+            "AND status IN ('aborted', 'running') "
+            "ORDER BY session_id DESC LIMIT 1",
+            (participant_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def completed_trial_counts(self, session_id: int) -> dict[str, int]:
+        """Trials in a session's *completed* blocks, per module.
+
+        Aborted blocks are excluded: their trials are superseded when the module
+        is resumed, and analysis excludes them too.  Resume subtracts these from
+        each module's planned count to find what is left to run.
+        """
+        rows = self.conn.execute(
+            "SELECT t.module AS module, COUNT(*) AS n FROM trials t "
+            "JOIN blocks b ON b.block_id = t.block_id "
+            "WHERE b.session_id = ? AND b.status = 'completed' "
+            "GROUP BY t.module",
+            (session_id,),
+        ).fetchall()
+        return {row["module"]: int(row["n"]) for row in rows}
+
+    def session_speaker_id(self, session_id: int) -> int | None:
+        """The speaker recorded on this session's trials, if any.
+
+        The speaker is chosen once at session start (§F.4); for
+        ``balanced``/``random`` it is not re-derivable later, so resume reads it
+        back from a trial rather than guessing.  None when the session aborted
+        before any speaker-bearing trial was written.
+        """
+        row = self.conn.execute(
+            "SELECT json_extract(t.design_extra, '$.speaker_id') AS speaker_id "
+            "FROM trials t JOIN blocks b ON b.block_id = t.block_id "
+            "WHERE b.session_id = ? "
+            "AND json_extract(t.design_extra, '$.speaker_id') IS NOT NULL "
+            "ORDER BY t.trial_id LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        if row is None or row["speaker_id"] is None:
+            return None
+        return int(row["speaker_id"])
+
     def get_session(self, session_id: int) -> dict[str, Any] | None:
         row = self.conn.execute(
             "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
