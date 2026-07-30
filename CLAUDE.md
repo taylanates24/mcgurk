@@ -584,6 +584,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Run admin panel: `python admin.py`
 - Monitor setup (ilk kurulumda bir kez): `python scripts/setup_monitor.py`
 - Validate config + design cost: `python -m mcgurk.config`
+- Pre-session checklist (operator, Adım 8): `python -m mcgurk.checklist [--no-hardware]` — YEŞİL/KIRMIZI ön-uçuş; any RED blocks a `data_collection` session (exit 1)
 - Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
 - Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin --dry-run` (gin needs `--ear left|right`)
 - Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin [--limit N] [--seed N]` (gin needs `--ear left|right`)

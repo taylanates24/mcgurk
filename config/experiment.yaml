@@ -75,6 +75,41 @@ session:
   break_duration_s: 30
   practice_trials: 12
 
+# ---- Katılımcıya gösterilen ekran metinleri (§A.9) ----
+# Hepsi Türkçe ve config'te: bir yönerge metni protokol ayrıntısıdır ve
+# uygulandığı veriyle birlikte sessions.config_snapshot içinde durmalı.
+# module_instructions, module_order'daki etkin her ölçüm modülünü kapsamak
+# zorundadır — şema yükleme anında kontrol eder ve eksik/fazlasını reddeder.
+screens:
+  advance_key: space
+  continue_hint: "Devam etmek için BOŞLUK tuşuna basın."
+  welcome: "Katıldığınız için teşekkürler. Birkaç kısa bölümden oluşan görevler yapacaksınız. Her bölümden önce ne yapmanız gerektiği ekranda açıklanacak. Sorularınızı bölümler arasında sorabilirsiniz."
+  practice_intro: "Önce kısa bir alıştırma yapacağız. Alıştırma verisi kaydedilmez; amacı yalnızca göreve alışmanızdır."
+  practice_end: "Alıştırma bitti. Sorunuz varsa şimdi sorabilirsiniz. Hazır olduğunuzda asıl test başlayacak."
+  break: "Kısa bir ara. Dilerseniz gözlerinizi dinlendirin. Hazır olduğunuzda devam edeceğiz."
+  session_end: "Testi tamamladınız. Katıldığınız için çok teşekkür ederiz."
+  # Sağır kulağa sunulan basit tespit görevi (§F.3). Kaç ses geleceği ya da
+  # hangi kulağa geleceği söylenmez — söylenirse ölçüm bir uyum denetimine döner.
+  cross_hearing_intro: "Bu bölümde zaman zaman kısa bir ses duyabilirsiniz. Ne zaman bir ses duyarsanız BOŞLUK tuşuna basın. Emin değilseniz basmayın."
+  module_instructions:
+    # McGurk: etki katılımcıya ASLA anlatılmaz (talep karakteristiği). Yalnızca
+    # "ne duyduğunuzu" sorar; dudak ile sesin uyuşup uyuşmadığından söz etmez.
+    mcgurk: "Ekranda konuşan bir yüz göreceksiniz ve aynı anda bir hece duyacaksınız. DUYDUĞUNUZ heceyi ekrandaki seçeneklerden ilgili tuşa basarak seçin. Listede yoksa DİĞER seçeneğini seçip yazabilirsiniz. Kimi denemede gürültü olabilir; en iyi tahmininizi yapın."
+    # AVSR: üç sunum modu (yalnız ses / yalnız görüntü / ikisi). Doğru cevabı
+    # olan görev; yine de tahmin istenir.
+    avsr: "Bu bölümde kimi denemede yalnızca ses, kimi denemede yalnızca görüntü, kimi denemede ikisi birden sunulacak. Size iletilen heceyi ekrandaki tuşlardan seçin. Emin olamasanız da en iyi tahmininizi yapın."
+    # TBW: eşzamanlılık yargısı. İki seçenekten hangisinin 'aynı anda' olduğu
+    # response_labels'ta tanımlı.
+    tbw: "Her denemede bir ses ve bir görüntü sunulacak. Bunların size AYNI ANDA mı yoksa FARKLI ZAMANLARDA mı geldiğini ekrandaki iki seçenekten birini seçerek bildirin."
+    # Oddball: dikkat kontrol görevi. Hedefin daha tiz olduğunu söylemek aldatma
+    # değil, standart yönergedir.
+    oddball: "Art arda tonlar duyacaksınız. Çoğu aynı sestedir; arada daha TİZ (farklı) bir ton duyduğunuzda BOŞLUK tuşuna basın. Yalnızca farklı tonu duyunca basın."
+    # Dikotik: serbest rapor (§6.5). İki hece sunulduğu söylenmez, bir kulağa
+    # dikkat etmesi istenmez — serbest bildirimin kendisi ölçümdür.
+    dichotic: "Kulaklıktan bir hece duyacaksınız. Duyduğunuz heceyi ekrandaki tuşlardan seçin. Listede yoksa DİĞER seçeneğini seçip yazabilirsiniz."
+    # GIN: boşluk sayısı ya da süreleri söylenmez.
+    gin: "Sürekli bir uğultu (gürültü) duyacaksınız. Bu uğultunun içinde çok kısa bir sessizlik (kesinti) fark ettiğiniz anda BOŞLUK tuşuna basın."
+
 modules:
   # ---- Modül 1: McGurk ----
   mcgurk:
@@ -291,6 +326,16 @@ speaker_selection:
 cross_hearing_check:
   enabled: true
   n_trials: 20
+
+# ---- Oturum öncesi kontrol (python -m mcgurk.checklist, steps.md §C Adım 8) ----
+# Operatörün her data_collection oturumu öncesi çalıştıracağı YEŞİL/KIRMIZI
+# kontrolün eşikleri. Koda gömülmez (§A.9): haftalık kalibre eden bir merkez ile
+# aylık kalibre eden bir merkez KIRMIZI çizgisini farklı yere koyar.
+checklist:
+  # Bundan eski bir kalibrasyon KIRMIZI verir.
+  calibration_max_age_days: 30
+  # data/ diskinde bundan az boş alan KIRMIZI verir.
+  min_free_disk_mb: 500
 
 # ---- Stimulus preparation (tools/prepare_stimuli.py, Adım 2) ----
 # Offline only (§A.12): nothing below is read during a trial.  It lives in this

@@ -141,6 +141,56 @@ class SessionConfig(StrictModel):
         return self
 
 
+class SessionScreens(StrictModel):
+    """Every narrative screen the participant reads during a session (§A.9).
+
+    Turkish, and in the config rather than in the code: an instruction wording
+    is a protocol detail, so it has to travel in ``sessions.config_snapshot``
+    with the data it applied to.  ``module_instructions`` must cover every
+    enabled measurement module (checked in :class:`ExperimentConfig`) — a module
+    with no instruction screen means the participant meets it with no idea what
+    to do.
+    """
+
+    # ``break`` is a keyword, so the field is ``break_screen`` with a YAML
+    # alias; populate_by_name lets the model still be built from field names.
+    model_config = ConfigDict(
+        extra="forbid", validate_assignment=True, populate_by_name=True
+    )
+
+    #: The key that advances past an instruction or break screen.
+    advance_key: str = Field(min_length=1)
+    #: The "press <key> to continue" hint shown under a screen.
+    continue_hint: str = Field(min_length=1)
+    welcome: str = Field(min_length=1)
+    practice_intro: str = Field(min_length=1)
+    #: Shown after practice — the comprehension-check / "the real test begins"
+    #: screen the operator advances once the participant is ready.
+    practice_end: str = Field(min_length=1)
+    break_screen: str = Field(min_length=1, alias="break")
+    session_end: str = Field(min_length=1)
+    #: Required exactly when ``cross_hearing_check`` is enabled (checked in
+    #: :class:`ExperimentConfig`); None otherwise, so a disabled check does not
+    #: force a screen nobody sees.
+    cross_hearing_intro: str | None = Field(default=None, min_length=1)
+    #: Module name -> the instruction screen shown before it.  Coverage of the
+    #: enabled modules is enforced at the root, where the module order is known.
+    module_instructions: dict[ModuleName, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _instructions_are_not_blank(self) -> SessionScreens:
+        # min_length on the field only constrains the top-level strings, not the
+        # values of the dict — a blank instruction would otherwise pass.
+        blank = sorted(
+            name for name, text in self.module_instructions.items() if not text.strip()
+        )
+        if blank:
+            raise ValueError(
+                f"screens.module_instructions boş yönerge içeriyor: {blank}"
+            )
+        return self
+
+
 # ------------------------------------------------------------------- modules
 
 
@@ -857,6 +907,20 @@ class CrossHearingCheck(StrictModel):
     n_trials: int = Field(gt=0)
 
 
+class ChecklistConfig(StrictModel):
+    """Thresholds for ``python -m mcgurk.checklist`` (steps.md §C Adım 8).
+
+    In the config rather than the code because they are QC parameters (§A.9): a
+    site that recalibrates weekly and one that recalibrates monthly draw the RED
+    line in different places, and neither should have to edit Python to move it.
+    """
+
+    #: A calibration older than this many days turns the check RED.
+    calibration_max_age_days: int = Field(gt=0)
+    #: Free space below this many MB on the data volume turns the check RED.
+    min_free_disk_mb: int = Field(ge=0)
+
+
 # --------------------------------------------------------- stimulus preparation
 
 
@@ -1000,9 +1064,11 @@ class ExperimentConfig(StrictModel):
     display: DisplayConfig
     audio: AudioConfig
     session: SessionConfig
+    screens: SessionScreens
     modules: ModulesConfig
     speaker_selection: SpeakerSelection
     cross_hearing_check: CrossHearingCheck
+    checklist: ChecklistConfig
     stimulus_prep: StimulusPrep
 
     # -- what the stimulus set has to contain ------------------------------
@@ -1133,6 +1199,46 @@ class ExperimentConfig(StrictModel):
                 f"Etkin ama module_order'da olmayan modüller: {sorted(missing)}. "
                 "Etkin her modül oturum sırasında yer almalı, aksi hâlde sessizce "
                 "hiç koşmaz"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _screens_cover_the_session(self) -> ExperimentConfig:
+        """Every enabled module the participant meets must have a screen (§A.9).
+
+        Coverage cannot be checked on ``SessionScreens`` alone: whether a module
+        is presented depends on ``session.module_order`` and ``modules.*.enabled``,
+        which only exist here.  A module with no instruction screen is a
+        participant sitting down with no idea what to do; an instruction for a
+        module that is never presented is text nobody reads — both are refused.
+        """
+        presented = self.enabled_modules()
+        missing = [m for m in presented if m not in self.screens.module_instructions]
+        if missing:
+            raise ValueError(
+                f"screens.module_instructions eksik: {sorted(missing)} için "
+                "yönerge yok. Etkin her ölçüm modülünün bir yönerge ekranı "
+                "olmalı, aksi hâlde katılımcı modülle ne yapacağını bilmeden "
+                "karşılaşır"
+            )
+        # An instruction keyed to something that is not a measurement module can
+        # never be shown.  A *disabled* measurement module is fine — its screen
+        # is dormant and returns when it is re-enabled — but 'practice' has its
+        # own screens (practice_intro/end) and never reads this map.
+        non_modules = sorted(
+            set(self.screens.module_instructions) - set(self.modules.by_name())
+        )
+        if non_modules:
+            raise ValueError(
+                "screens.module_instructions ölçüm modülü olmayan anahtar "
+                f"içeriyor: {non_modules}. 'practice' kendi ekranlarını "
+                "(practice_intro / practice_end) kullanır, module_instructions'a "
+                "yazılmaz"
+            )
+        if self.cross_hearing_check.enabled and self.screens.cross_hearing_intro is None:
+            raise ValueError(
+                "cross_hearing_check.enabled ama screens.cross_hearing_intro yok "
+                "— çapraz dinleme kontrolü katılımcıya yönergesiz başlardı"
             )
         return self
 
