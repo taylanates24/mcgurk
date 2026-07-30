@@ -26,7 +26,7 @@ Aktif adım: 10 — 10a (panel çekirdeği) TAMAMLANDI (kullanıcı onayı 2026-
 | 9a | Analiz kütüphanesi (dışa aktarım + ölçümler) | TAMAMLANDI | 2026-07-30 | `d53b61e` |
 | 9b | QC + entegrasyon/başarısızlık testleri | TAMAMLANDI | 2026-07-30 | `e24c01a` |
 | 9c | Dokümantasyon (+ prova/merge en son kapıda) | TAMAMLANDI | 2026-07-30 | `94c90bc` |
-| 10a | Panel çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-07-30 | |
+| 10a | Panel çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-07-30 | `15d428f` |
 | 10b | PySide6 paneli (GUI kabuğu) | BEKLİYOR | | |
 | 10c | PyInstaller ile Windows .exe | BEKLİYOR | | |
 
@@ -2221,7 +2221,7 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
 - **Tamamlanma:** 2026-07-30. Otomatik testler yeşil (864 test, CI alt kümesi;
   25 yeni panel testi), `ruff` + `mypy` temiz; `TEST_ADIM_10A.md` manuel testleri
   kullanıcı tarafından yürütüldü ve geçti.
-- **Commit:**
+- **Commit:** `15d428f`
 - **Ne yapıldı:**
   - **Yeni paket `mcgurk/panel/`** — PySide6'sız ve PsychoPy'siz çekirdek mantık
     (§A10.2/3). `core.py` + `__init__.py` (kamu API). Qt kabuğu (10b) ve `.exe`
