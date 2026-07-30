@@ -7,17 +7,20 @@ deney platformu.
 **Proje:** Atılım Üniversitesi Odyoloji Bölümü, etik kurul onaylı, 12 aylık
 klinik çalışma. Katılımcılar: 20 sağ SSD + 20 sol SSD + 20 kontrol.
 
-> **Durum: Adım 8 (oturum akışı) tamamlandı.** Platform artık `mcgurk/` yeni
+> **Durum: kod tarafı özünde tamamlandı (Adım 9a/9b).** Platform `mcgurk/` yeni
 > paketidir ve tam bir oturumu baştan sona koşar: `python main.py`
-> (= `python -m mcgurk.ui`). Adım 0'ın `src/` ağacı emekliye ayrıldı ve
-> `legacy/` altında donduruldu (bkz. `legacy/README.md`). Sırada arayüz cilası
-> + danışman gösterimi (Adım 8.5) ve analiz/dışa aktarım (Adım 9) var. Bu depo
-> henüz veri toplamaya hazır değildir — fotodiyot ölçümü ve ses kalibrasyonu
-> bekliyor (aşağıdaki [Bilinen sınırlar](#bilinen-sınırlar)). Geliştirme planı
-> `docs/steps.md`, ilerleme durumu `progress.md`.
+> (= `python -m mcgurk.ui`); toplanan veri dışa aktarılır, ölçülür ve kalite
+> kontrolünden geçirilir (`tools/analyse.py`, `tools/export_data.py`,
+> `tools/qc_report.py`). Adım 0'ın `src/` ağacı emekliye ayrıldı ve `legacy/`
+> altında donduruldu (bkz. `legacy/README.md`).
 >
-> Bu README'nin bir kısmı hâlâ eski `src/` tasarımını anlatıyor; tam yenileme
-> Adım 9'da yapılacak.
+> **Bu depo henüz veri toplamaya hazır DEĞİLDİR.** Kapıda üç kod dışı iş var:
+> fotodiyot A/V gecikme ölçümü (`docs/01_av_gecikme_olcumu.md`), ses
+> kalibrasyonu (`docs/02_kalibrasyon.md`) ve gerçek bir kişiyle prova oturumu.
+> Ayrıca **dikotik ve GIN modülleri yöntem dokümanına eklenip danışman onayı
+> almadan** kullanılmamalıdır (aşağıdaki [Bilinen sınırlar](#bilinen-sınırlar)).
+> Geliştirme planı `docs/steps.md`, ilerleme durumu `progress.md`, yöntem↔kod
+> eşlemesi `docs/PROTOKOL.md`, operatör el kitabı `docs/OPERATOR_SOP.md`.
 
 ## Depo yapısı
 
@@ -37,17 +40,26 @@ bu yüzden PsychoPy oralarda yasaktır ve bir test bunu her koşuda doğrular.
 ## Ne yapar
 
 Katılımcıya görsel-işitsel konuşma uyaranları sunar, yanıt ve tepki süresini
-kaydeder. Beş bölüm vardır:
+psikofizik hassasiyetinde kaydeder. **Altı değerlendirme modülü** vardır
+(yöntem↔kod eşlemesi: `docs/PROTOKOL.md`):
 
-| Bölüm | İçerik | Doğru cevap var mı? |
-|---|---|---|
-| `mcgurk` | Uyumsuz (görsel ≠ işitsel) heceler | **Hayır** — algı kategorisi ölçülür |
-| `av_congruent` | Uyumlu (görsel = işitsel) heceler | Evet |
-| `audio_only` | Yalnızca ses | Evet |
-| `visual_only` | Yalnızca görüntü (dudak okuma) | Evet |
-| `dichotic` | Her kulağa farklı hece | **Hayır** — hangi kulağın duyulduğu kaydedilir |
+| Modül | İçerik | Ana bağımlı değişkenler | Doğru cevap? |
+|---|---|---|---|
+| `mcgurk` | Uyumlu/uyumsuz heceler (fonem düzeyi) | Füzyon, görsel baskınlık, işitsel yanıt oranı, RT | **Hayır** — algı kategorisi |
+| `avsr` | A-only / V-only / AV | Doğruluk, görsel fayda (AV−A), lipreading | Evet |
+| `tbw` | −300…+300 ms SOA, eşzamanlılık yargısı | TBW genişliği, PSS | **Hayır** |
+| `oddball` | İşitsel dikkat kontrolü (ton akışı) | Hedef doğruluğu, RT, d′ | Evet (kovaryat) |
+| `dichotic` | Her kulağa farklı hece | Kulak avantajı indeksi (KAİ) | **Hayır** |
+| `gin` | Gürültüdeki boşluk saptama | Saptama eşiği | Evet |
 
-Her bölüm sessiz ve gürültülü koşulda çalıştırılabilir.
+`mcgurk` ve `avsr` iki manipülasyon taşır: **gürültü** (sessiz / +5 dB SNR
+konuşma şekilli gürültü) ve **uzamsal yön** (sağ / sol kulak) — SSD hipotezini
+taşıyan değişkenler. Ayrıca oturum akışında **alıştırma** ve (SSD'de) **çapraz
+dinleme geçerlilik kontrolü** vardır; bunlar ölçüm modülü değildir.
+
+> **Dikotik ve GIN yöntem dokümanında henüz yoktur** — §6.5/§6.6 taslakları
+> danışman onayı bekliyor (`docs/EK_*.docx`). Protokole eklenmeden verileri
+> kullanılmamalıdır.
 
 ---
 
@@ -117,29 +129,14 @@ hata vermeden kaydırabilir. Pinleri gevşetmeyin.
 
 ### Uyaranlar
 
-Video uyaranları depoya dâhil değildir (`.gitignore`). `assets/` şu yapıda
-olmalıdır:
+Ham kayıtlar (`assets/`) ve hazırlanmış set (`stimuli/`) depoya dâhil değildir
+(`.gitignore`). Ham kayıt `assets/{cinsiyet}_speaker_{n}/Vis-{hece}_Aud-{hece}.mp4`
+desenindeki **uyumlu** çekimlerdir; hangi klasörün hangi `speaker_id` olduğu
+`config/experiment.yaml` → `stimulus_prep` bölümünde yazılıdır.
 
-```
-assets/
-├── female_speaker_1/          Vis-{hece}_Aud-{hece}.mp4
-├── male_speaker_1/
-├── dichotic/{konuşmacı}/      Left-{hece}_Right-{hece}.wav
-└── noise/                     {tür}_noise.mp3
-```
+### Hazırlanmış uyaran seti (`stimuli/`)
 
-Konuşmacılar çalışma anında `{cinsiyet}_speaker_{n}` desenine göre taranır —
-yeni bir klasör eklemek yeterlidir, kod veya config değişikliği gerekmez.
-
-Dikotik uyaranlar uyumlu videolardan türetilir ve depoya dâhil değildir:
-
-```bash
-python scripts/generate_dichotic_stimuli.py
-```
-
-### Hazırlanmış uyaran seti (`stimuli/`, yeni paket)
-
-`assets/` ham kayıttır ve doğrudan sunulmaz. Yeni paket `stimuli/` altındaki
+`assets/` ham kayıttır ve **doğrudan sunulmaz**. Platform `stimuli/` altındaki
 **hazırlanmış** seti kullanır: sessiz sabit kare hızlı video, patlama anına
 hizalanmış ve eşit seviyeye getirilmiş 48 kHz 24-bit ses, konuşma şekilli
 gürültü, gürültülü türevler, dikotik çiftler, GIN gürültü segmentleri ve
@@ -207,23 +204,15 @@ Oturum öncesi kontrol (operatör): `python -m mcgurk.checklist`.
 
 ## Veri
 
-SQLite: `data/mcgurk.db` (config'ten değiştirilebilir).
-
-- `participants` — **anonim kod**, yaş, cinsiyet, grup, notlar
-- `sessions` — konuşmacı, çalıştırılan bölümler, **RNG seed**, durum
-  (`running` / `completed` / `aborted`)
-- `trials` — tasarım alanları, ham yanıt, iki RT referansı, `is_correct`
+SQLite: `data/mcgurk.sqlite` (config'ten `database.path` ile değiştirilebilir).
 
 **KVKK:** Ad, soyad ve doğum tarihi hiçbir yere yazılmaz. Katılımcı yalnızca
 anonim bir kodla (`SSD-R-007` gibi) tanımlanır. Kod ↔ kimlik eşleşme dosyası
-bu depoda tutulmaz ve bulut senkronizasyonuna konulmaz.
+bu depoda tutulmaz ve bulut senkronizasyonuna konulmaz. Ad-soyad sütunu içeren
+eski bir veritabanı dosyası açılmaya çalışılırsa program **açık hatayla durur**,
+sessizce devam etmez.
 
-Ad-soyad sütunu içeren eski bir veritabanı dosyası açılmaya çalışılırsa program
-**açık hatayla durur**, sessizce devam etmez.
-
-### Yeni paketin veritabanı (`data/mcgurk.sqlite`)
-
-Adım 1'de gelen şema altı tablo ve analiz için düz bir `VIEW` içerir:
+Şema (sürüm 5) altı tablo ve analiz için düz bir `VIEW` içerir:
 
 - `participants` — anonim kod, grup (`SSD_R`/`SSD_L`/`CTRL`), yaş, cinsiyet,
   **deprivasyon süresi**, PTA sağ/sol, postlingual bayrağı
@@ -240,10 +229,46 @@ Adım 1'de gelen şema altı tablo ve analiz için düz bir `VIEW` içerir:
   boşluğun sırası; başka her modülde deneme zaten olayın kendisi olduğu için
   NULL
 - `v_trials_flat` — hepsini birleştiren düz tablo; `design_extra` anahtarları
-  sütun olarak açılır, analiz tarafında JSON görünmez
+  sütun olarak açılır, analiz tarafında JSON görünmez. Sürüm 5'te (Adım 9a)
+  `cross_hearing_signal_present` sütunu da açılır — çapraz dinleme QC'sinin
+  sinyal denemesini yakalama denemesinden ayırması için
 
 Veritabanı `mcgurk`, `dichotic` ve `tbw` denemelerinde `is_correct` yazılmasını
 **tetikleyiciyle reddeder** — §A.10 depolama katmanında da geçerlidir.
+
+### Analiz ve dışa aktarım (`mcgurk/analysis/`, Adım 9)
+
+Analiz katmanı PsychoPy gerektirmez; `v_trials_flat` görünümünü ve her oturumun
+**config anlık görüntüsünü** okur. Bir oturumun sayıları, o oturumun kendi
+tasarımının ürettiği sayılardır — sonradan `config/experiment.yaml` değişse bile.
+
+Oturum başına modül ölçütleri (McGurk oranları, AVSR fayda indeksi, TBW PSS/genişlik,
+oddball d′, dikotik KAİ, GIN eşiği):
+
+```bash
+python tools/analyse.py            # tüm oturumlar
+python tools/analyse.py --session 3
+```
+
+Düz dosyaya aktarım (analiz ortamına — R/Python). CSV her zaman; **parquet
+yalnız `pyarrow` kuruluysa** (yoksa uyarıp atlar):
+
+```bash
+python tools/export_data.py --out data/export --format both
+```
+
+Kalite kontrol raporu — düşen kare, SOA sapması, zaman aşımı oranı, yanıt
+dağılımı, **nesnel olarak işaretlenen bozuk denemeler** ve (SSD) çapraz dinleme
+geçerlilik yargısı (tek yönlü binomial, `config.qc`):
+
+```bash
+python tools/qc_report.py --session 3
+```
+
+QC eşikleri (`config.qc`: `max_dropped_frames`, `soa_tolerance_ms`,
+`cross_hearing_alpha`) **oturum anlık görüntüsüyle taşınır** — bir oturum kendi
+snapshot'ındaki eşiklerle değerlendirilir. Bunlar veri toplamadan önce sabit,
+danışman onayına açık geçici değerlerdir.
 
 ### Yedekleme
 
@@ -300,22 +325,22 @@ etkilemez. Bu yüzden:
 3. Backend gerçekten `ptb` değilse program **başlamaz** — sessiz geri düşüş
    yoktur.
 
-**Gösterilecek bir şeyin olmadığı bölümlerde video hiç oluşturulmaz.**
-`audio_only` ve `dichotic` denemelerinde ekranda yalnızca sabitleme haçı kalır
-ve deneme sesin kendi süresi kadar sürer. Bu bölümler eskiden sesi gizlenmiş
-bir videonun içinde taşıyordu; bu, denemenin bitiş anını — yani RT
-referanslarından birini — video akışının kare ızgarasına bağlıyordu.
+**Gösterilecek bir şeyin olmadığı denemelerde video hiç oluşturulmaz.** AVSR'nin
+A-only modunda, dikotikte, oddball ve GIN akışlarında ekranda yalnızca sabitleme
+haçı kalır ve deneme sesin kendi süresi kadar sürer. Aksi hâlde denemenin bitiş
+anı — yani RT referanslarından biri — bir video akışının kare ızgarasına bağlı
+olurdu.
 
 > PsychoPy 2026.1 backend seçimini `prefs.hardware['audioLib']` yerine
 > `sound.Sound.backend` sınıf niteliğine taşıdı; `sound.audioLib` artık
 > mevcut değil. Kod her ikisini de ayarlar ve sonucu çalışma öncesinde
 > doğrular.
 
-### Yeni paketin sunum motoru (`mcgurk/engine/`, Adım 3)
+### Sunum motoru (`mcgurk/engine/`)
 
-`src/` yukarıdaki stratejiyi çalışma anında ffmpeg çağırarak uyguluyor. Yeni
-pakette sessiz video ve hizalanmış WAV zaten `stimuli/` altında hazır
-(Adım 2), bu yüzden motorun işi yalnızca zamanlama:
+Sessiz video ve hizalanmış WAV `stimuli/` altında çevrimdışı hazırdır (Adım 2),
+bu yüzden motorun işi çalışma anında yalnızca zamanlamadır (§A.12: çalışma
+anında ağır DSP yok):
 
 | Katman | İş | PsychoPy |
 |---|---|---|
@@ -361,8 +386,9 @@ setin 48 kHz'de hazırlanmış olması anlamını yitirirdi.
 ### Yeniden üretilebilirlik
 
 Deneme sırası tohumlanmış bir RNG ile karıştırılır ve tohum oturum kaydına
-yazılır. Bir oturumun sırasını birebir yeniden üretmek için `config.yaml`
-içindeki `seed` alanına o oturumun tohumunu yazın.
+(`sessions.seed`) yazılır. Her modülün tohumu bu oturum tohumundan **modüle özgü**
+türetilir, tek akış değildir. Bir oturumun sırasını birebir yeniden üretmek için
+`config/experiment.yaml` içindeki `seed` alanına o oturumun tohumunu yazın.
 
 ---
 
@@ -447,13 +473,13 @@ python tools/timing_selftest.py --level 3
 Kademe 3 bu araçta gerçeklenmez; `docs/01_av_gecikme_olcumu.md` scriptleriyle,
 **tüm kod bittikten sonra** bir kez yapılır.
 
-### Bir modülü tek başına koşmak (Adım 4→)
+### Bir modülü tek başına koşmak (geliştirme aracı)
 
-Oturum akışı Adım 8'de geliyor; o zamana kadar bir modül `tools/run_module.py`
-ile koşuluyor. Koşulabilen modüller: `mcgurk` (Adım 4), `avsr` (Adım 5),
-`tbw` (Adım 6), `oddball` (Adım 7), `dichotic` (Adım 7b) ve `gin` (Adım 7c).
-GIN tek kulaklıdır ve hangi kulağın test edileceği katılımcıya bağlı olduğu
-için koşuya `--ear right|left` eklenmesi gerekir.
+Tam oturum `python main.py` iledir; tek bir modülü izole koşmak (geliştirme,
+kontrol, kısa demo) için `tools/run_module.py` vardır. Koşulabilen modüller:
+`mcgurk`, `avsr`, `tbw`, `oddball`, `dichotic` ve `gin`. GIN tek kulaklıdır ve
+hangi kulağın test edileceği katılımcıya bağlı olduğu için koşuya
+`--ear right|left` eklenmesi gerekir.
 Önce tasarımı donanım açmadan denetleyin — deneme sayısını config'in hesabıyla
 karşılaştırır, hücre tablosunu basar ve her uyaran dosyasının yerinde olduğunu
 doğrular:
@@ -497,7 +523,7 @@ yanlış alarmla birlikte, çünkü çok basan biri kısa boşlukları şansla y
 
 Bu bir **geliştirme aracıdır**: yönerge, alıştırma bloğu, mola ve katılımcı
 girişi yok, veritabanına `DEV01` kodlu bir geliştirme katılımcısı yazıyor.
-Gerçek oturum akışı Adım 8'in işi.
+Gerçek oturum akışı `python main.py` (`mcgurk/ui/`) ile koşulur.
 
 Kod, değişken adları ve docstring'ler İngilizce; katılımcıya ve operatöre
 gösterilen metinler Türkçedir.
@@ -506,87 +532,52 @@ gösterilen metinler Türkçedir.
 
 ## Bilinen sınırlar
 
-Bunlar bilinçli olarak Adım 0 kapsamı dışında bırakıldı; her biri
-`docs/steps.md` içinde bir adıma bağlıdır.
+Kod tarafı özünde tamam; aşağıdakiler **veri toplamadan önce** kapanması gereken
+kod dışı işler ve bilinçli açık uçlardır. Tam liste `progress.md` → *Açık
+kararlar* ve *Kullanıcıya bekleyen aksiyonlar*.
 
-**Uyaranlar — `src/` yolunda hâlâ geçerli, `stimuli/` altında çözüldü:**
+**Veri toplamayı engelleyen kapılar (kod dışı):**
+- **Fotodiyot A/V gecikme ölçümü** (`docs/01_av_gecikme_olcumu.md`) yapılmadı.
+  O ana kadar `timing.system_av_offset_ms` `null` ve motor 0 kabul edip uyarı
+  basar. `data_collection` modu bu ölçüm olmadan başlamaz.
+- **Ses kalibrasyonu** (`docs/02_kalibrasyon.md`) yapılmadı; mutlak SPL
+  bilinmiyor. `data_collection` modu kalibrasyon dosyası olmadan başlamaz.
+- **Prova oturumu** (gerçek kişiyle, SOP takip edilerek) koşulmadı — otomatik
+  uçtan uca test bunun yerine geçmez.
+- **Kulaklık tipi (§F.3):** test kulaklığı (Bluetooth) veri toplama için uygun
+  değil (değişken gecikme, kendi DSP'si, düşük kulaklar arası zayıflama). SSD
+  lateralizasyonu için insert kulaklık gerekebilir. Çapraz dinleme kontrolü bu
+  yüzden kodda hazır ve her SSD katılımcısında çalışır.
 
-`src/` doğrudan `assets/` içindeki ham mp4'leri sunar ve aşağıdaki sınırların
-tamamını taşımaya devam eder. Adım 2'nin ürettiği `stimuli/` seti bunları
-çözer; yeni paket Adım 8'de devralana kadar ikisi yan yana durur.
+**Protokol kapıları (danışman):**
+- **Dikotik ve GIN yöntem dokümanında henüz yok.** §6.5/§6.6 taslakları hazır
+  (`docs/EK_DIKOTIK_DINLEME.docx`, `docs/EK_GIN.docx`) ve danışman onayı bekliyor;
+  protokole eklenmeden bu iki modülün verisi kullanılmamalı.
+- **Deneme sayıları (§F.1)** config'ten geliyor (geçici minimumlar); danışman
+  yükseltebilir. `python -m mcgurk.config` tahmini süreyi basar.
+- **QC eşikleri ve çapraz duyma α'sı** (`config.qc`) geçici; danışman onaylamalı.
 
-- Videolar 29.97 fps — 60 Hz ekranda kare başına 2.002 yenileme, periyodik kare
-  tekrarı. *(`stimuli/`: 30 fps, sabit kare hızı.)*
-- Ses AAC ile sıkıştırılmış ve 44.1 kHz. *(`stimuli/`: 48 kHz 24-bit PCM.)*
-- Token'ların akustik patlama anları hizalanmamış, seviyeleri eşitlenmemiş.
-  *(`stimuli/`: her ses, birlikte sunulacağı videonun kendi patlama anına
-  hizalanır; ölçülen sapma 1 ms'in altında. Seviyeler ortak bir
-  konuşma-aktif RMS hedefine getirilir.)*
-- SNR karışımı tüm dosya RMS'i üzerinden hesaplanıyor; dosyaların önemli bir
-  bölümü sessizlik olduğu için etkin SNR token'a göre değişiyor.
-  *(`stimuli/`: konuşma-aktif seviye üzerinden, çevrimdışı.)*
-- Gürültü dosyaları kayıplı MP3 ve 44.1 kHz, konuşma şekilli değil.
-  *(`stimuli/`: korpusun LTAS'ından üretilen SSN.)*
-- Dikotik uyaranlar 48 kHz stereo PCM ama kaynakları AAC.
-  *(`stimuli/`: aynı kaynaktan, ama normalize edilmiş ve iki kulak ortak bir
-  patlama anına hizalanmış hâlde.)*
+**İçerik/özellik açık uçları:**
+- **AVSR kelime seti** (`type: word`) içerik olarak **boş**: kayıt seansı
+  yapılmadı (§F.2). Şema ve okuyucu hazır (`config/word_lists/`), liste şablon
+  hâlinde. `enabled: true` yapılırsa config yüklenirken açık hata verir.
+- **AVSR `response_mode: open_set`** tanımlı ama gerçeklenmedi; seçilirse
+  `NotImplementedError`. Açık set puanlama kuralları karara bağlanmadı.
 
-**Hazırlanmış sette kalan sınır:** kaynaklar kayıpsız değil. Depoda ham kayıt
-yok (A0-3), bu yüzden `stimuli/` 44.1 kHz AAC'den türetiliyor; 48 kHz ve
-24 bit kaynağa hassasiyet eklemez, yalnızca sonraki işlemlerin kuantalama
-gürültüsü biriktirmesini engeller. Manifest her dosyanın kaynak codec'ini ve
-örnekleme hızını kaydeder.
-
-**Zamanlama (Adım 3):**
-- Gerçekleşen zamanlama kaydedilmiyor: onset zamanları, düşen kare sayısı,
-  maksimum kare süresi, nominal↔gerçekleşen SOA farkı.
-- SOA manipülasyonu yok (TBW modülü için gerekli).
-- Uzamsal lateralizasyon (sağ/sol kulak) yok — SSD hipotezini taşıyan
-  değişkendir.
-- `system_av_offset_ms` ölçülmedi (fotodiyot ölçümü, `docs/01_av_gecikme_olcumu.md`).
-- Ses kalibrasyonu yapılmadı (`docs/02_kalibrasyon.md`); mutlak SPL bilinmiyor.
-- Fixation süresi `core.wait()` ile veriliyor, flip ızgarasına oturmuyor.
-
-**Tasarım ve arayüz — `src/` yolunda geçerli; ilk üçü yeni pakette çözüldü
-(Adım 4):**
-- Yanıt seti `BA/DA/GA` ile sınırlı; kombinasyon algısı ("bga") ifade
-  edilemiyor ve "DİĞER" seçeneği yok. *(Yeni paket: dokuz seçenek, `BGA`/`BDA`
-  ve serbest metin dahil, hepsi config'ten.)*
-- Füzyon/kombinasyon kategorizasyonu yok. *(Yeni paket:
-  `AUDITORY`/`VISUAL`/`FUSION`/`COMBINATION`/`OTHER`/`NONE`, haritalar
-  config'ten — §A.9.)*
-- Katılımcıya gösterilen metinler hâlâ koda gömülü. *(Yeni paket: McGurk
-  modülünün tüm metinleri `modules.mcgurk.prompts` altında; diğer modüller
-  Adım 5–7c'de aynı yapıyı alacak.)*
-- Deprivasyon süresi ve PTA değerleri toplanmıyor.
-- Alıştırma bloğu, molalar, oturum öncesi kontrol listesi ve çapraz dinleme
-  kontrolü yok.
-- Kesilen oturuma kaldığı yerden devam etme yok.
-
-**Yeni pakette henüz gelmeyenler:**
-- `mcgurk/modules/` altı değerlendirme modülünü de içeriyor: McGurk (Adım 4),
-  AVSR (Adım 5), TBW (Adım 6), oddball (Adım 7), dikotik (Adım 7b) ve GIN
-  (Adım 7c). `ui/` ve `analysis/` hâlâ boş (Adım 8 ve 9).
-- Yeni config ve veritabanı henüz hiçbir deneyi çalıştırmıyor; `main.py` Adım
-  8'e kadar `src/` yolunu kullanmaya devam ediyor.
-- AVSR kelime seti (`type: word`) **içerik olarak boş**: kayıt seansı yapılmadı
-  (§F.2). Şema ve okuyucu hazır (`config/word_lists/`), liste dosyası şablon
-  hâlinde. `enabled: true` yapılırsa config yüklenirken açık hata verir —
-  listenin boş olduğunu, kelimelerin `stimulus_prep.tokens`'a eklenmesi ve
-  hazırlanması gerektiğini söyleyerek.
-- AVSR'nin `response_mode: open_set` seçeneği tanımlı ama gerçeklenmedi;
-  seçilirse `NotImplementedError`. Açık set puanlama kuralları (transkripsiyon,
-  kısmi kredi) karara bağlanmadı.
-- Dikotik ve GIN modülleri **yöntem dokümanında tanımlı değil** — config ve
-  veritabanı yerleri açıldı, ancak protokole eklenmeden veri toplanmamalı.
-  İkisi için de taslak bölüm hazır ve danışman onayı bekliyor:
-  `docs/EK_DIKOTIK_DINLEME.docx` (yöntem dokümanına 6.5 olarak) ve
-  `docs/EK_GIN.docx` (6.6 olarak).
+**Hazırlanmış set:** kaynaklar kayıpsız değil. Depoda ham kayıt yok (A0-3), bu
+yüzden `stimuli/` 44.1 kHz AAC'den türetiliyor; 48 kHz / 24 bit kaynağa
+hassasiyet eklemez, yalnızca sonraki işlemlerin kuantalama gürültüsü
+biriktirmesini engeller. Yeni bir çekim yapılırsa aynı boru hattı kayıpsız
+kaynakla daha iyisini üretir — kod değişmez. Manifest her dosyanın kaynak
+codec'ini kaydeder.
 
 **Ortam:**
 - `ffmpeg` PATH'te yoksa `imageio-ffmpeg` ile gelen ikili kullanılır. `ffprobe`
   bu pakette **yoktur**; uyaran araçları bu yüzden `ffprobe` kullanmaz, akış
   bilgisini `ffmpeg -i` çıktısından okur. Ayrı bir kurulum gerekmez.
+- Ses aygıtı **adları** config'te sabittir, indeksleri değil (Bluetooth kulaklık
+  kapalıyken listeye hiç girmez). Listelemek için:
+  `python tools/timing_selftest.py --devices`.
 
 ---
 
