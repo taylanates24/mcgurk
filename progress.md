@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 8b (Adım 8a tamamlandı — Adım 8 alt adımlara bölündü: 8a/8b/8c)
+Aktif adım: 8b-ii (8a + 8b-i tamamlandı — 8b iki tura bölündü: 8b-i / 8b-ii)
 
 ## Durum tablosu
 
@@ -18,7 +18,8 @@ Aktif adım: 8b (Adım 8a tamamlandı — Adım 8 alt adımlara bölündü: 8a/8
 | 7b | Modül 5: Dikotik dinleme | TAMAMLANDI | 2026-07-29 | `160f663` |
 | 7c | Modül 6: GIN | TAMAMLANDI | 2026-07-30 | `0294156` |
 | 8a | Oturum metinleri + checklist | TAMAMLANDI | 2026-07-30 | `8683fa2` |
-| 8b | Oturum akışı çekirdeği | BEKLİYOR | | |
+| 8b-i | Oturum akışı iskeleti | TAMAMLANDI | 2026-07-30 | `1882dcb` |
+| 8b-ii | Alıştırma + çapraz dinleme | BEKLİYOR | | |
 | 8c | Devam + entegrasyon + master merge | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
 
@@ -1760,7 +1761,68 @@ emekliye ayrılacak.
   - Çapraz dinleme kontrolü SSD'ye özgü; CTRL'de atlanır (loglanır). Sonuç DB'ye
     yazılır; eşik/analiz Adım 9'un işi.
 
-### Adım 8b — Oturum akışı çekirdeği
+### Adım 8b — Oturum akışı çekirdeği (iki tura bölündü)
+
+**8b, hacmi nedeniyle 8b-i (iskele) ve 8b-ii (alıştırma + çapraz dinleme) diye
+ikiye bölündü (kullanıcı, 2026-07-30).**
+
+### Adım 8b-i — Oturum akışı iskeleti
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-30. Otomatik testler yeşil (763 CI alt kümesi, 22
+  yeni; ruff + mypy temiz). `TEST_ADIM_8B_I.md` kullanıcı tarafından yürütüldü
+  ve geçti (tam akış + ESC her aşamada).
+- **Commit:** `1882dcb`
+
+- **Ne yapıldı:**
+  - **Yeni `mcgurk/ui/` paketi:** `login.py` (gui katılımcı formu; saf
+    `build_participant` — grup/cinsiyet eşlemesi, yaş 18–60, kod sanitizasyonu,
+    ad/soyad yok), `screens.py` (tuşla ilerleyen yönerge/mola/operatör-checklist
+    ekranları, ESC ile abort), `runtime.py` (ortak `open_hardware` +
+    `start_session`), `session.py` (orkestratör), `__main__.py`
+    (`python -m mcgurk.ui`).
+  - **Akış:** checklist(konsol; data_collection'da KIRMIZI→reddet) → giriş →
+    donanım → operatör onay ekranı → karşılama → `module_order` (yönerge → koşu
+    → bloklar-arası mola) → bitiş → `finish_session` + yedek. ESC her aşamada →
+    `aborted` + yedek.
+  - **`block.py`'ye `on_break` kancası** (bloklar arası, §A.5 commit sınırında);
+    dört blok sarmalayıcısı geçiriyor. `db.count_sessions()` eklendi.
+  - **`run_module` ortak `runtime`'a taşındı** — donanım açma + session satırı
+    tek yerde; harness ile oturum akışı aynı kodu paylaşıyor.
+  - **practice ve çapraz dinleme 8b-ii'ye:** akışta yerleri loglanıp atlanıyor.
+  - **Test: 22 yeni** — `test_ui_login` (12), `test_ui_session` (8: saf kararlar
+    + ui import güvenliği), `test_block_on_break` (2). Saf kararlar
+    (`select_speaker` fixed/balanced/random, `good_ear_for` PTA/grup) donanımsız
+    CI'da doğrulanıyor.
+
+- **Alınan kararlar:**
+  - **İyi kulak:** iki PTA da varsa daha düşük (iyi) kulak; yoksa gruptan
+    (SSD_R→sol, SSD_L→sağ); CTRL'de PTA yoksa varsayılan sağ + log. Kontrol
+    kulak dengeleme danışman kararı (Adım 8/9).
+  - **Konuşmacı:** fixed tam; balanced oturum sayısıyla döner; random tohumdan
+    üretilebilir. Seçilen konuşmacı AV modüllerine `speaker_id` ile geçer.
+  - **Ortak `runtime`:** "iki kopya sürüklenir" — harness ve oturum aynı donanım
+    kurulumunu kullanmalı, yoksa aralarında bir zamanlama farkı gizlenebilir.
+
+- **Bilinen sınırlar:**
+  - Alıştırma bloğu ve çapraz dinleme modülü henüz yok (8b-ii); şimdilik
+    loglanıp atlanıyor.
+  - Resume (kaldığı yerden devam) yok — 8c. Bu turda her koşu yeni oturum satırı.
+  - Oturum akışı donanım gerektirdiği için CI'da test edilmiyor; saf kararlar
+    ediliyor. Uçtan uca entegrasyon testi 8c.
+
+- **Sonraki adıma not (8b-ii):**
+  - **ESC onayı (kullanıcı isteği, 2026-07-30):** ESC'ye basınca doğrudan
+    çıkmak yerine "Çıkmak istediğinize emin misiniz? Evet / İptal" ekranı çıksın;
+    İptal → oturuma devam, Evet → `aborted`. Şu an ESC anında kesiyor.
+  - **Alıştırma bloğu:** uyumlu ısınma, geri bildirimsiz, `practice` bloğuna
+    yazılır, analize girmez (GIN alıştırması yalnızca uzun boşluklar).
+  - **Çapraz dinleme modülü:** onaylı varsayılan — hazır 1000 Hz oddball tonu,
+    sağır kulağa lateralize, ~%50 catch, `space`=duydum; SSD'ye özgü, CTRL'de
+    atlanır; sonuç DB'ye (`cross_hearing` bloğu).
+  - **Konuşmacı değiştirme:** `docs/KONUSMACI_DEGISTIRME.md` yazıldı (kullanıcı
+    isteği) — mevcut konuşmacıyı değiştirme ve yeni konuşmacı ekleme adımları.
+
+### Adım 8b-ii — Alıştırma bloğu + çapraz dinleme modülü
 - **Durum:** BEKLİYOR
 - **Tamamlanma:** —
 - **Commit:** —
