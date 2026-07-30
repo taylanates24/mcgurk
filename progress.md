@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 8b-ii (8a + 8b-i tamamlandı — 8b iki tura bölündü: 8b-i / 8b-ii)
+Aktif adım: 8c (8a + 8b tamamlandı — sıradaki: kesinti/devam + entegrasyon + master merge)
 
 ## Durum tablosu
 
@@ -19,7 +19,7 @@ Aktif adım: 8b-ii (8a + 8b-i tamamlandı — 8b iki tura bölündü: 8b-i / 8b-
 | 7c | Modül 6: GIN | TAMAMLANDI | 2026-07-30 | `0294156` |
 | 8a | Oturum metinleri + checklist | TAMAMLANDI | 2026-07-30 | `8683fa2` |
 | 8b-i | Oturum akışı iskeleti | TAMAMLANDI | 2026-07-30 | `1882dcb` |
-| 8b-ii | Alıştırma + çapraz dinleme | BEKLİYOR | | |
+| 8b-ii | Alıştırma + çapraz dinleme + ESC onayı | TAMAMLANDI | 2026-07-30 | `82a9a4d` |
 | 8c | Devam + entegrasyon + master merge | BEKLİYOR | | |
 | 9 | Analiz ve entegrasyon | BEKLİYOR | | |
 
@@ -1822,14 +1822,74 @@ ikiye bölündü (kullanıcı, 2026-07-30).**
   - **Konuşmacı değiştirme:** `docs/KONUSMACI_DEGISTIRME.md` yazıldı (kullanıcı
     isteği) — mevcut konuşmacıyı değiştirme ve yeni konuşmacı ekleme adımları.
 
-### Adım 8b-ii — Alıştırma bloğu + çapraz dinleme modülü
-- **Durum:** BEKLİYOR
-- **Tamamlanma:** —
-- **Commit:** —
+### Adım 8b-ii — Alıştırma bloğu + çapraz dinleme + ESC onayı
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-30. Otomatik testler yeşil (783 CI alt kümesi, 21
+  yeni; ruff + mypy temiz). `TEST_ADIM_8B_II.md` kullanıcı tarafından yürütüldü
+  ve geçti: ESC onayı (video sırasında dâhil), alıştırma, ve çapraz dinleme
+  tonunun sağır (sağ) kulaktan geldiği doğrulandı.
+- **Commit:** `82a9a4d`
+
 - **Ne yapıldı:**
+  - **ESC onay ekranı (kullanıcı isteği):** engine'e `set_abort_confirmer`/
+    `should_abort` dolaylılığı. ESC görülen her yer (`check_abort` -> video/
+    fixation/stream; `response.py`; `screens.py`) artık `should_abort()`'tan
+    geçiyor. Confirmer takılıysa "emin misiniz?" (`screens.confirm_quit`, ENTER=
+    Evet, ESC=İptal); takılı değilken anında kes (harness/testler). `session.py`
+    confirmer'ı kurar, `finally`'de temizler. Config: `screens.quit_confirm`.
+  - **Alıştırma bloğu:** `modules/practice.py` (uyumlu AV ısınma, tohumdan
+    üretilebilir, `practice` bloğuna, NoExtra) + `block.py`'de `practice_policy`/
+    `run_practice` (McGurk ızgarası, skorlama/geri bildirim yok). Akış:
+    `practice_intro` -> denemeler -> `practice_end`.
+  - **Çapraz dinleme modülü:** `modules/cross_hearing.py`. `plan_trials` (saf):
+    ~%50 sinyal (`tone_hz` tonu sağır kulağa lateralize) / ~%50 catch, en az
+    birer tane, tohumdan üretilebilir. `run_cross_hearing` (donanım): fixation ->
+    ton/sessizlik -> yanıt penceresi -> isabet/yanlış alarm; `cross_hearing`
+    bloğuna (`design_extra.signal_present`), `space`=duydum. CTRL'de atlanır.
+    Config: `cross_hearing_check`'e `tone_hz`/`catch_ratio`/`response_window_ms`/
+    `response_key`/`fixation_duration_ms`/`post_response_ms`; `required_tones()`
+    çapraz-dinleme tonunu da türetiyor.
+  - **`tools/run_cross_hearing.py`:** yalnızca çapraz dinlemeyi koşan araç
+    (`--ear` = sağır kulak) — tam oturum beklemeden lateralizasyonu teyit için.
+    Ortak `runtime`'ı kullanıyor.
+  - **Test: 21 yeni** — çapraz dinleme tasarımı+atfetme (11, ton-türetme dâhil),
+    alıştırma tasarımı (4), ESC confirmer (4) + güncellenen oddball ton testi.
+
 - **Alınan kararlar:**
+  - **ESC onayı her yerde** (kullanıcı, 2026-07-30): ekranlar + uyaran sunumu
+    dâhil. Sunum sırasında "İptal" o denemeyi kare düşmesiyle işaretleyebilir —
+    kabul edilen bedel.
+  - **`confirm_quit` tampon temizliği `waitRelease=False`** (donanım testinde
+    yakalandı): video/stream'de ESC `psychopy.event` ile yakalanıyor ama onay
+    ekranı `kb` okuyor; varsayılan `waitRelease=True` bırakılmamış keydown'ı
+    düşürmediği için onay ekranı anında "İptal" okuyup sönüyordu. `waitRelease=
+    False` ile dialogu açan ESC de düşürülüyor.
+  - **Alıştırma yalnızca forced-choice ısınma** (kullanıcı): McGurk ızgarası;
+    oddball/GIN'in space-bas tuşu kendi yönergesinde. Skorlama yok (§Don'ts).
+  - **Çapraz dinleme catch oranı kırpılır:** en az bir sinyal ve bir catch
+    garanti (aksi hâlde bir oran tanımsız kalırdı).
+  - **`practice`=NoExtra, `cross_hearing`=CrossHearingExtra(signal_present)**
+    zaten Adım 1'de DB'de tanımlıydı; blocks.module CHECK ikisini de içeriyordu.
+
 - **Bilinen sınırlar:**
-- **Sonraki adıma not:**
+  - Çapraz dinleme eşiği/"şans üstü mü" yorumu **Adım 9** (§F.3); 8b-ii yalnızca
+    isabet/yanlış alarmı topluyor. `signal_present` `design_extra`'da; VIEW
+    sütunu Adım 9'da eklenebilir (şema bump).
+  - ESC onayı sunum sırasında bir denemeyi kare düşmesiyle işaretleyebilir
+    (kabul edilen).
+  - Resume yok — 8c. Oturum akışı donanım gerektirdiği için CI'da test edilmiyor;
+    tasarım/atfetme/confirmer mantığı ediliyor.
+
+- **Sonraki adıma not (8c):**
+  - **Resume:** yarıda kalan (`aborted`/`running`) oturumu tespit edip kaldığı
+    modül/bloktan devam. Şu an her koşu yeni oturum satırı.
+  - **Uçtan uca entegrasyon testi:** sahte katılımcı, tüm modüller, DB'den
+    çıktıya (donanımsız olabildiğince).
+  - **main.py yönlendirmesi + src/ emekliliği** (kullanıcı kararı): main.py yeni
+    akışa, eski src/ + config.yaml + data/mcgurk.db legacy'ye.
+  - **`develop` -> `master` merge + `git tag adim-8-oturum-akisi`.**
+  - Çapraz dinleme `signal_present`'ı `v_trials_flat`'a eklemek (şema bump)
+    Adım 9'un QC/analiz işiyle birlikte.
 
 ### Adım 8c — Kesinti/devam + entegrasyon + master merge
 - **Durum:** BEKLİYOR
