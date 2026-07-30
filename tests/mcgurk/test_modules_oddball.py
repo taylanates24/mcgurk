@@ -517,4 +517,7 @@ def test_a_disabled_module_asks_for_no_tones(
     data["session"]["module_order"] = [
         name for name in data["session"]["module_order"] if name != "oddball"
     ]
+    # The cross-hearing check reuses the standard tone (Adım 8b-ii), so disable
+    # it too to isolate oddball's contribution — which should then be nothing.
+    data["cross_hearing_check"]["enabled"] = False
     assert _load(write_config, data).required_tones() == []

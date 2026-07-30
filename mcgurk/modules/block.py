@@ -47,6 +47,7 @@ from ..engine.av_presenter import AVPresenter, TimingRecord, check_abort
 from . import avsr as avsr_module
 from . import dichotic as dichotic_module
 from . import mcgurk as mcgurk_module
+from . import practice as practice_module
 from . import tbw as tbw_module
 from .base import PlannedTrial, chunk
 from .response import Choice, ResponseGrid, collect_choice, collect_free_text, show_message
@@ -267,6 +268,38 @@ def dichotic_policy(config: ExperimentConfig, win: Any) -> TrialPolicy:
     )
 
 
+def practice_policy(config: ExperimentConfig, win: Any) -> TrialPolicy:
+    """The warm-up (Adım 8b-ii) — the McGurk response screen, nothing scored.
+
+    Reuses McGurk's grid so the participant learns the mechanic they will use
+    most.  Nothing is derived from the response: no category, no correctness
+    (§Don'ts — a warm-up that scored would prime the effect); the raw press is
+    recorded and the operator's summary just tallies what was pressed.
+    """
+    module = config.modules.mcgurk
+    grid = ResponseGrid(
+        win,
+        labels=list(module.response_set),
+        keys=list(module.response_keys),
+        question=module.prompts.question,
+    )
+
+    def evaluate(label: str | None, _trial: Trial) -> Evaluation:
+        return Evaluation(tally=label or "?", category=None, is_correct=None)
+
+    return TrialPolicy(
+        module=practice_module.MODULE_NAME,
+        fixation_s=module.fixation_duration_ms / 1000.0,
+        post_response_s=module.post_response_ms / 1000.0,
+        timeout_s=module.response_timeout_s,
+        timeout_message=module.prompts.timeout,
+        free_text_label=module.free_text_response,
+        free_text_prompt=module.prompts.other,
+        grid_for=lambda _trial: grid,
+        evaluate=evaluate,
+    )
+
+
 # -------------------------------------------------------------------- the loop
 
 
@@ -459,6 +492,31 @@ def run_dichotic(
         kb=kb,
         planned=planned,
         policy=dichotic_policy(config, win),
+        on_break=on_break,
+    )
+
+
+def run_practice(
+    *,
+    config: ExperimentConfig,
+    db: Database,
+    session_id: int,
+    presenter: AVPresenter,
+    win: Any,
+    kb: Any,
+    planned: list[PlannedTrial],
+    on_break: Callable[[int, int], None] | None = None,
+) -> list[BlockOutcome]:
+    """The practice warm-up — see :func:`run_blocks`."""
+    return run_blocks(
+        config=config,
+        db=db,
+        session_id=session_id,
+        presenter=presenter,
+        win=win,
+        kb=kb,
+        planned=planned,
+        policy=practice_policy(config, win),
         on_break=on_break,
     )
 

@@ -88,6 +88,9 @@ screens:
   practice_end: "Alıştırma bitti. Sorunuz varsa şimdi sorabilirsiniz. Hazır olduğunuzda asıl test başlayacak."
   break: "Kısa bir ara. Dilerseniz gözlerinizi dinlendirin. Hazır olduğunuzda devam edeceğiz."
   session_end: "Testi tamamladınız. Katıldığınız için çok teşekkür ederiz."
+  # ESC'ye basılınca çıkmadan önce sorulur (operatöre). Tuşları metnin kendisi
+  # söyler (§A.9): ENTER onaylar, ESC iptal eder.
+  quit_confirm: "Oturumdan çıkmak istediğinize emin misiniz?\n\nEvet, çık: ENTER\nİptal, devam et: ESC"
   # Sağır kulağa sunulan basit tespit görevi (§F.3). Kaç ses geleceği ya da
   # hangi kulağa geleceği söylenmez — söylenirse ölçüm bir uyum denetimine döner.
   cross_hearing_intro: "Bu bölümde zaman zaman kısa bir ses duyabilirsiniz. Ne zaman bir ses duyarsanız BOŞLUK tuşuna basın. Emin değilseniz basmayın."
@@ -326,6 +329,17 @@ speaker_selection:
 cross_hearing_check:
   enabled: true
   n_trials: 20
+  # Tespit tonu — oddball standardıyla aynı, tek hazırlanmış ton ikisine de
+  # hizmet etsin. SSD katılımcısının SAĞIR kulağına lateralize edilir.
+  tone_hz: 1000
+  # Denemelerin ~yarısı sessiz (catch). Catch'te basma yanlış alarmdır; catch
+  # olmadan her denemede basan biri kusursuz tespit ediyormuş gibi görünürdü.
+  catch_ratio: 0.5
+  # Ton başlangıcından sonra bu aralıkta gelen basım tespit sayılır.
+  response_window_ms: [100, 1500]
+  response_key: space
+  fixation_duration_ms: 800
+  post_response_ms: 300
 
 # ---- Oturum öncesi kontrol (python -m mcgurk.checklist, steps.md §C Adım 8) ----
 # Operatörün her data_collection oturumu öncesi çalıştıracağı YEŞİL/KIRMIZI

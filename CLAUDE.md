@@ -79,8 +79,10 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── av_presenter.py          # TrialSpec -> presentation -> TimingRecord
 │   ├── loopback.py              # level-2 jitter analysis (pure numpy)
 │   └── psychopy_prefs.py        # must run before psychopy.sound is imported
-├── modules/                     # Adım 4–7c: mcgurk, avsr, tbw, oddball, dichotic, gin
+├── modules/                     # Adım 4–8: mcgurk, avsr, tbw, oddball, dichotic, gin, practice, cross_hearing
 │   ├── base.py                  # seeding, ordering, PlannedTrial — no PsychoPy
+│   ├── practice.py              # congruent AV warm-up design (Adım 8b-ii) — no PsychoPy
+│   ├── cross_hearing.py         # deaf-ear detection design + runner (Adım 8b-ii)
 │   ├── mcgurk.py                # design + categorisation — no PsychoPy
 │   ├── avsr.py                  # design + scoring + measures — no PsychoPy
 │   ├── tbw.py                   # design + Gaussian fit + bootstrap — no PsychoPy
@@ -93,9 +95,9 @@ mcgurk/                          # new platform (Adım 1→)
 ├── analysis/                    # Adım 9 (empty)
 ├── ui/                          # Adım 8 — session flow (8b-i)
 │   ├── login.py                 # gui.DlgFromDict -> Participant; build_participant is pure
-│   ├── screens.py               # instruction / break / operator-checklist screens
+│   ├── screens.py               # instruction / break / operator-checklist / quit-confirm screens
 │   ├── runtime.py               # shared hardware open + start_session (also used by run_module)
-│   ├── session.py               # orchestrator: checklist -> login -> modules -> breaks -> end
+│   ├── session.py               # orchestrator: checklist -> login -> practice -> modules -> cross-hearing -> end; installs the ESC confirmer
 │   └── __main__.py              # python -m mcgurk.ui
 ├── checklist.py                 # Adım 8a — python -m mcgurk.checklist (pre-session GREEN/RED)
 ├── logging_setup.py
@@ -594,7 +596,8 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
 - Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin --dry-run` (gin needs `--ear left|right`)
 - Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin [--limit N] [--seed N]` (gin needs `--ear left|right`)
-- Run a full session (Adım 8, new package): `python -m mcgurk.ui [--limit N] [--db PATH] [--device NAME]` — login → checklist confirm → instructions → modules → breaks → end; ESC aborts to `aborted` + backup. (Practice block and cross-hearing check land in Adım 8b-ii.)
+- Run a full session (Adım 8, new package): `python -m mcgurk.ui [--limit N] [--db PATH] [--device NAME]` — login → checklist confirm → practice → instructions → modules → breaks → cross-hearing (SSD) → end. ESC opens an "are you sure?" confirm (Adım 8b-ii); confirmed → `aborted` + backup.
+- Verify cross-hearing lateralisation on its own (Adım 8b-ii): `python tools/run_cross_hearing.py --ear left|right` — `--ear` is the deaf ear; the tone routes there, the other channel is silent, half the trials are catch. Runs just this check so the side can be confirmed without a full session.
 - Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
 - Verify stimuli: `python tools/verify_stimuli.py [--quick]`
 - Verify a backup: `python tools/verify_backup.py <yedek> --compare-with data/mcgurk.sqlite`

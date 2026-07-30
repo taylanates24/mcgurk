@@ -26,7 +26,7 @@ from typing import Any
 
 from ..config.calibration import Calibration
 from ..db.models import TrialTiming
-from . import AbortSession, EngineError
+from . import AbortSession, EngineError, should_abort
 from .audio import (
     EARS,
     AudioStimulus,
@@ -77,10 +77,15 @@ def _quiet_movie_init() -> Iterator[None]:
 
 
 def check_abort(key: str = ABORT_KEY) -> None:
-    """Raise :class:`AbortSession` if the operator pressed the abort key."""
+    """Raise :class:`AbortSession` if the operator pressed the abort key.
+
+    The abort is routed through :func:`should_abort`, so a confirmer installed
+    by the session flow can ask "are you sure?" first; with none installed the
+    key stops the session immediately.
+    """
     from psychopy import event
 
-    if event.getKeys(keyList=[key]):
+    if event.getKeys(keyList=[key]) and should_abort():
         raise AbortSession()
 
 

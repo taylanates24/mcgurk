@@ -21,7 +21,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from ..engine import AbortSession
+from ..engine import AbortSession, should_abort
 from ..engine.av_presenter import ABORT_KEY
 
 logger = logging.getLogger(__name__)
@@ -193,7 +193,10 @@ def collect_choice(
         presses = kb.getKeys(keyList=accepted, waitRelease=False)
         for press in presses:
             if press.name == ABORT_KEY:
-                raise AbortSession()
+                if should_abort():
+                    raise AbortSession()
+                # Cancelled: ignore this press and keep waiting for a response.
+                continue
             index = grid.by_key[press.name]
             _check_clock_agreement(press, prompt_onset)
             if highlight_s > 0:
@@ -256,7 +259,9 @@ def collect_free_text(
         for press in kb.getKeys(waitRelease=False):
             name = press.name
             if name == ABORT_KEY:
-                raise AbortSession()
+                if should_abort():
+                    raise AbortSession()
+                continue
             if name == _TEXT_ACCEPT:
                 return answer.strip()
             if name == _TEXT_DELETE:

@@ -169,6 +169,10 @@ class SessionScreens(StrictModel):
     practice_end: str = Field(min_length=1)
     break_screen: str = Field(min_length=1, alias="break")
     session_end: str = Field(min_length=1)
+    #: Shown when ESC is pressed, before the session actually stops (Adım 8b-ii).
+    #: Names the confirm/cancel keys itself, since the wording is participant-
+    #: facing and must not be hard-coded (§A.9).
+    quit_confirm: str = Field(min_length=1)
     #: Required exactly when ``cross_hearing_check`` is enabled (checked in
     #: :class:`ExperimentConfig`); None otherwise, so a disabled check does not
     #: force a screen nobody sees.
@@ -901,10 +905,39 @@ class SpeakerSelection(StrictModel):
 
 
 class CrossHearingCheck(StrictModel):
-    """Detection task on the deaf ear — validates the lateralisation (§F.3)."""
+    """Detection task on the deaf ear — validates the lateralisation (§F.3).
+
+    In an SSD participant, a tone lateralised to the deaf ear should be at chance:
+    if it is detected above chance the sound is reaching the good cochlea through
+    the skull and the spatial-direction manipulation is invalid for them.  What
+    is measured here is only the raw detections and false alarms; whether that is
+    "above chance" is Adım 9's reading (§F.3), not this module's.
+    """
 
     enabled: bool
     n_trials: int = Field(gt=0)
+    #: Detection-tone frequency.  Defaults to the oddball standard so one prepared
+    #: tone serves both — see :meth:`ExperimentConfig.required_tones`.
+    tone_hz: float = Field(gt=0)
+    #: Fraction of trials with no sound.  A press on a catch trial is a false
+    #: alarm; without catch trials, pressing on every trial would look like
+    #: perfect detection.
+    catch_ratio: float = Field(gt=0.0, lt=1.0)
+    #: A press this many ms after the tone onset counts as a detection.
+    response_window_ms: tuple[float, float]
+    response_key: str = Field(min_length=1)
+    fixation_duration_ms: float = Field(gt=0)
+    post_response_ms: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _window_is_ordered(self) -> CrossHearingCheck:
+        low, high = self.response_window_ms
+        if low < 0 or high <= low:
+            raise ValueError(
+                "cross_hearing_check.response_window_ms [alt, üst] ve "
+                f"0 <= alt < üst olmalı, verilen: {list(self.response_window_ms)}"
+            )
+        return self
 
 
 class ChecklistConfig(StrictModel):
@@ -1090,14 +1123,18 @@ class ExperimentConfig(StrictModel):
     def required_tones(self) -> list[float]:
         """Tone frequencies the enabled modules ask for, in Hz.
 
-        Derived from ``modules.oddball`` for the same reason as
-        :meth:`required_snrs`: a second list under ``stimulus_prep`` could
-        disagree with the design, and the disagreement would surface as a
-        stimulus file that is named after one frequency and carries another.
+        Derived from ``modules.oddball`` (and the cross-hearing check, which
+        reuses the standard tone) for the same reason as :meth:`required_snrs`:
+        a second list under ``stimulus_prep`` could disagree with the design, and
+        the disagreement would surface as a stimulus file that is named after one
+        frequency and carries another.
         """
-        if not self.modules.oddball.enabled:
-            return []
-        return self.modules.oddball.tone_frequencies()
+        tones: set[float] = set()
+        if self.modules.oddball.enabled:
+            tones.update(self.modules.oddball.tone_frequencies())
+        if self.cross_hearing_check.enabled:
+            tones.add(self.cross_hearing_check.tone_hz)
+        return sorted(tones)
 
     def required_speaker_ids(self) -> list[int]:
         ids: set[int] = set()

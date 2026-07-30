@@ -25,6 +25,8 @@ imported, so there is exactly one place that does it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 
 class EngineError(RuntimeError):
     """Base class for presentation problems the operator has to act on.
@@ -41,3 +43,29 @@ class AbortSession(Exception):
     Not an ``EngineError``: nothing went wrong, the session was stopped on
     purpose.  Callers unwind, mark the session ``aborted`` and exit cleanly.
     """
+
+
+#: Optional confirmation asked before an abort key actually stops the session.
+#: The session flow (Adım 8b-ii) installs one that shows "are you sure?" on the
+#: window; with none installed — the dev harness, the tests — an abort is
+#: immediate, which is the historical behaviour every abort site was written to.
+_abort_confirmer: Callable[[], bool] | None = None
+
+
+def set_abort_confirmer(confirmer: Callable[[], bool] | None) -> None:
+    """Install (or clear) the confirmation asked before an abort takes effect."""
+    global _abort_confirmer
+    _abort_confirmer = confirmer
+
+
+def should_abort() -> bool:
+    """Whether an observed abort key should really stop the session.
+
+    Called at every abort-key site instead of raising directly.  With no
+    confirmer installed it returns True, so the abort is immediate; the session
+    flow's confirmer returns False when the operator cancels, and the caller
+    then carries on where it was.
+    """
+    if _abort_confirmer is None:
+        return True
+    return _abort_confirmer()

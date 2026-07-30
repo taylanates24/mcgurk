@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import logging
 import random
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from ..checklist import Check, any_red, render, run_checks
 from ..config.calibration import Calibration, load_calibration
@@ -31,17 +33,19 @@ from ..db.models import (
     SESSION_COMPLETED,
     Participant,
 )
-from ..engine import AbortSession
+from ..engine import AbortSession, set_abort_confirmer
 from ..engine.av_presenter import AVPresenter
 from ..engine.window import make_fixation
 from ..modules import avsr as avsr_module
+from ..modules import cross_hearing as cross_hearing_module
 from ..modules import dichotic as dichotic_module
 from ..modules import gin as gin_module
 from ..modules import mcgurk as mcgurk_module
 from ..modules import oddball as oddball_module
+from ..modules import practice as practice_module
 from ..modules import tbw as tbw_module
 from ..modules.base import PlannedTrial
-from ..modules.block import run_avsr, run_dichotic, run_mcgurk, run_tbw
+from ..modules.block import run_avsr, run_dichotic, run_mcgurk, run_practice, run_tbw
 from ..modules.response import make_keyboard
 from ..modules.stream import run_gin, run_oddball
 from ..stimuli import manifest as manifest_module
@@ -117,6 +121,19 @@ def good_ear_for(participant: Participant) -> str:
         participant.group_code,
     )
     return "right"
+
+
+def deaf_ear_for(participant: Participant) -> str | None:
+    """The SSD (deaf) ear the cross-hearing check is presented to, or None.
+
+    Defined by the group, which is what "single-sided deafness on the right"
+    means; a control has no deaf ear, so the check is skipped for them.
+    """
+    if participant.group_code == GROUP_SSD_RIGHT:
+        return "right"
+    if participant.group_code == GROUP_SSD_LEFT:
+        return "left"
+    return None
 
 
 # ------------------------------------------------------------- orchestration
@@ -212,6 +229,7 @@ def run_session(
             config, session_count=db.count_sessions(), seed=seed
         )
         good_ear = good_ear_for(participant)
+        deaf_ear = deaf_ear_for(participant)
         session_id = start_session(
             db,
             config,
@@ -222,13 +240,15 @@ def run_session(
             operator_notes=f"ui.session konuşmacı={speaker_id} iyi_kulak={good_ear}",
         )
         logger.info(
-            "Oturum %d, katılımcı %s (%s), tohum %d, konuşmacı %d, iyi kulak %s",
+            "Oturum %d, katılımcı %s (%s), tohum %d, konuşmacı %d, iyi kulak %s, "
+            "sağır kulak %s",
             session_id,
             participant.participant_code,
             participant.group_code,
             seed,
             speaker_id,
             good_ear,
+            deaf_ear or "-",
         )
 
         _run_flow(
@@ -239,6 +259,7 @@ def run_session(
             project_root=project_root,
             speaker_id=speaker_id,
             good_ear=good_ear,
+            deaf_ear=deaf_ear,
             seed=seed,
             limit=limit,
             checks=checks,
@@ -250,6 +271,9 @@ def run_session(
         status = SESSION_ABORTED
         raise
     finally:
+        # Clear the abort confirmer so the closing writes below — and any later
+        # run in this process — are not affected by it.
+        set_abort_confirmer(None)
         win.close()
         if session_id is not None:
             db.finish_session(session_id, status)
@@ -273,6 +297,7 @@ def _run_flow(
     project_root: Path,
     speaker_id: int,
     good_ear: str,
+    deaf_ear: str | None,
     seed: int,
     limit: int | None,
     checks: list[Check],
@@ -282,6 +307,10 @@ def _run_flow(
     kb = make_keyboard()
     advance = config.screens.advance_key
     hint = config.screens.continue_hint
+
+    # From now on ESC opens "are you sure?" instead of stopping outright; the
+    # confirmer draws on this window and is cleared in run_session's finally.
+    set_abort_confirmer(lambda: screens.confirm_quit(win, kb, config.screens.quit_confirm))
 
     # Operator confirms the checklist in the interface (steps.md Adım 8).
     screens.show_checklist(win, kb, checks, advance_key=advance, advance_hint=hint)
@@ -316,8 +345,22 @@ def _run_flow(
     for index, name in enumerate(order):
         logger.info("Modül %d/%d: %s", index + 1, len(order), name)
         if name == "practice":
-            # 8b-ii: warm-up block with congruent stimuli, no feedback.
-            logger.info("Alıştırma bloğu 8b-ii'de gelecek — şimdilik atlanıyor.")
+            _run_practice(
+                config,
+                db=db,
+                session_id=session_id,
+                presenter=presenter,
+                win=win,
+                kb=kb,
+                seed=seed,
+                stimuli_root=stimuli_root,
+                manifest=manifest,
+                speaker_id=speaker_id,
+                limit=limit,
+                advance=advance,
+                hint=hint,
+                on_break=on_break,
+            )
             continue
 
         screens.show_instruction(
@@ -363,9 +406,114 @@ def _run_flow(
             )
 
     if config.cross_hearing_check.enabled:
-        # 8b-ii: SSD-only detection task on the deaf ear.
-        logger.info("Çapraz dinleme kontrolü 8b-ii'de gelecek — şimdilik atlanıyor.")
+        _run_cross_hearing(
+            config,
+            db=db,
+            session_id=session_id,
+            hardware=hardware,
+            win=win,
+            kb=kb,
+            deaf_ear=deaf_ear,
+            seed=seed,
+            stimuli_root=stimuli_root,
+            manifest=manifest,
+            calibration=calibration,
+            limit=limit,
+            advance=advance,
+            hint=hint,
+        )
 
     screens.show_instruction(
         win, kb, config.screens.session_end, advance_key=advance, hint=None
     )
+
+
+def _run_practice(
+    config: ExperimentConfig,
+    *,
+    db: Database,
+    session_id: int,
+    presenter: AVPresenter,
+    win: Any,
+    kb: Any,
+    seed: int,
+    stimuli_root: Path,
+    manifest: manifest_module.StimulusManifest,
+    speaker_id: int,
+    limit: int | None,
+    advance: str,
+    hint: str,
+    on_break: Callable[[int, int], None],
+) -> None:
+    planned = practice_module.plan_trials(
+        config, manifest, seed=seed, stimuli_root=stimuli_root, speaker_id=speaker_id
+    )
+    if limit is not None:
+        planned = planned[:limit]
+    if not planned:
+        logger.info("Alıştırma denemesi yok (practice_trials 0) — atlanıyor.")
+        return
+    screens.show_instruction(
+        win, kb, config.screens.practice_intro, advance_key=advance, hint=hint
+    )
+    run_practice(
+        config=config,
+        db=db,
+        session_id=session_id,
+        presenter=presenter,
+        win=win,
+        kb=kb,
+        planned=planned,
+        on_break=on_break,
+    )
+    # practice_end doubles as the comprehension-check screen the operator
+    # advances once the participant is ready for the real test.
+    screens.show_instruction(
+        win, kb, config.screens.practice_end, advance_key=advance, hint=hint
+    )
+
+
+def _run_cross_hearing(
+    config: ExperimentConfig,
+    *,
+    db: Database,
+    session_id: int,
+    hardware: Hardware,
+    win: Any,
+    kb: Any,
+    deaf_ear: str | None,
+    seed: int,
+    stimuli_root: Path,
+    manifest: manifest_module.StimulusManifest,
+    calibration: Calibration | None,
+    limit: int | None,
+    advance: str,
+    hint: str,
+) -> None:
+    if deaf_ear is None:
+        logger.info(
+            "Çapraz dinleme kontrol grubunda atlanıyor (sağır kulak yok)."
+        )
+        return
+    assert config.screens.cross_hearing_intro is not None  # required when enabled
+    screens.show_instruction(
+        win, kb, config.screens.cross_hearing_intro, advance_key=advance, hint=hint
+    )
+    planned = cross_hearing_module.plan_trials(
+        config, manifest, seed=seed, stimuli_root=stimuli_root, deaf_ear=deaf_ear
+    )
+    if limit is not None:
+        planned = planned[:limit]
+    outcome = cross_hearing_module.run_cross_hearing(
+        config=config,
+        db=db,
+        session_id=session_id,
+        planned=planned,
+        win=win,
+        kb=kb,
+        params=hardware.params,
+        speaker=hardware.speaker,
+        calibration=calibration,
+        fixation=make_fixation(win),
+    )
+    logger.info("%s", cross_hearing_module.summarise(outcome))

@@ -37,7 +37,7 @@ def _wait_advance(
     """
     import psychtoolbox as ptb
 
-    from ..engine import AbortSession
+    from ..engine import AbortSession, should_abort
     from ..engine.av_presenter import ABORT_KEY
 
     kb.getKeys(clear=True)  # flush a key held over from the previous screen
@@ -47,7 +47,10 @@ def _wait_advance(
         win.flip()
         for press in kb.getKeys(keyList=[advance_key, ABORT_KEY], waitRelease=False):
             if press.name == ABORT_KEY:
-                raise AbortSession()
+                if should_abort():
+                    raise AbortSession()
+                # Cancelled: redraw and keep waiting for the advance key.
+                continue
             if press.name == advance_key:
                 return
         if deadline is not None and float(ptb.GetSecs()) >= deadline:
@@ -147,3 +150,44 @@ def show_checklist(
         hint_stim.draw()
 
     _wait_advance(win, kb, draw, advance_key=advance_key)
+
+
+#: Keys the quit-confirmation screen reads.  Return confirms, Escape cancels;
+#: the participant-facing wording is in ``screens.quit_confirm`` (§A.9) and names
+#: these keys.
+QUIT_CONFIRM_KEY = "return"
+QUIT_CANCEL_KEY = "escape"
+
+
+def confirm_quit(win: Any, kb: Any, text: str) -> bool:
+    """Ask "are you sure you want to quit?"; True = quit, False = continue.
+
+    Installed as the engine's abort confirmer (Adım 8b-ii), so ESC anywhere —
+    a screen, the response grid, mid-stimulus — opens this instead of stopping
+    the session outright.  Both input queues are drained on the way out so the
+    key that answered here does not re-fire the abort check on the next frame.
+    """
+    from psychopy import event
+
+    prompt = _text(win, text, height=40, pos=(0, 0))
+    # waitRelease=False so the ESC that *opened* this dialog is drained too: in a
+    # video/stream trial that press was seen through psychopy.event, not the
+    # keyboard, so it is still sitting in the keyboard buffer and the default
+    # waitRelease=True flush (which ignores a key not yet released) would leave
+    # it there — and the loop below would read it immediately as "cancel".
+    kb.getKeys(waitRelease=False, clear=True)
+    event.clearEvents()
+    result: bool | None = None
+    while result is None:
+        prompt.draw()
+        win.flip()
+        for press in kb.getKeys(
+            keyList=[QUIT_CONFIRM_KEY, QUIT_CANCEL_KEY], waitRelease=False
+        ):
+            if press.name == QUIT_CONFIRM_KEY:
+                result = True
+            elif press.name == QUIT_CANCEL_KEY:
+                result = False
+    kb.getKeys(waitRelease=False, clear=True)
+    event.clearEvents()
+    return result
