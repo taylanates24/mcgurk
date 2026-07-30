@@ -116,6 +116,9 @@ PURE_LAYERS = (
     "mcgurk.analysis.export",
     "mcgurk.analysis.measures",
     "mcgurk.analysis.qc_report",
+    # panel/core is the operator panel's logic; it drives PsychoPy only through
+    # separate processes (§A10.1) and must import without PsychoPy or PySide6.
+    "mcgurk.panel.core",
     *ENGINE_IMPORTABLE_WITHOUT_PSYCHOPY,
 )
 

@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 10 — Adım 9 TAMAMLANDI (kod + doküman, kullanıcı onayı 2026-07-30). Sıra: **Adım 10 (operatör paneli + paketleme) → prova oturumu → master merge + v1.0.0**
+Aktif adım: 10 — 10a (panel çekirdeği) TAMAMLANDI (kullanıcı onayı 2026-07-30). Sıra: **10b (PySide6 paneli) → 10c (.exe paketleme) → prova oturumu → master merge + v1.0.0**
 
 ## Durum tablosu
 
@@ -26,7 +26,9 @@ Aktif adım: 10 — Adım 9 TAMAMLANDI (kod + doküman, kullanıcı onayı 2026-
 | 9a | Analiz kütüphanesi (dışa aktarım + ölçümler) | TAMAMLANDI | 2026-07-30 | `d53b61e` |
 | 9b | QC + entegrasyon/başarısızlık testleri | TAMAMLANDI | 2026-07-30 | `e24c01a` |
 | 9c | Dokümantasyon (+ prova/merge en son kapıda) | TAMAMLANDI | 2026-07-30 | `94c90bc` |
-| 10 | Operatör paneli (PySide6) + paketleme (.exe) | BEKLİYOR | | |
+| 10a | Panel çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-07-30 | |
+| 10b | PySide6 paneli (GUI kabuğu) | BEKLİYOR | | |
+| 10c | PyInstaller ile Windows .exe | BEKLİYOR | | |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
 analiz kütüphanesi, 9b QC + testler, 9c dokümanlar. Prova oturumu ve master merge
@@ -2198,7 +2200,10 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     `git tag v1.0.0`.
 
 ### Adım 10 — Operatör paneli (PySide6) + paketleme (.exe)
-- **Durum:** BEKLİYOR (prova sonrası)
+- **Durum:** GELİŞTİRİLİYOR (10a TAMAMLANDI; 10b/10c bekliyor)
+- **Ayrıntılı prompt:** `docs/ADIM_10.md`. **Alt adımlar (kullanıcı kararı,
+  2026-07-30):** 10a panel çekirdeği (GUI'siz, CI-testli) → 10b PySide6 kabuğu →
+  10c PyInstaller `.exe`. Her birinde ayrı plan-onay/test/commit.
 - **Kapsam (kullanıcı isteği, 2026-07-30):**
   - **Operatör paneli** (PySide6, ayrı süreç — PsychoPy ile aynı süreçte
     çalışamaz, §CLAUDE Don'ts): butonlar → oturum başlat (deneyi ayrı süreç
@@ -2208,8 +2213,62 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
   - **PyInstaller ile Windows `.exe`:** en kritik kısım paketlenmiş exe'de
     `stimuli/`/`config/`/`data/`/`backups/` yollarının çözümü (`_MEIPASS` vs.
     kullanıcı-yazılabilir dizin) ve PsychoPy'nin exe içinde çalışması.
-  - Muhtemelen alt adımlara bölünür (10a panel, 10b paketleme); her birinde ayrı
-    plan-onay/test. Kendi merge/etiketi (v1.1.0) sonra.
+  - **Sıra (kullanıcı kararı):** prova oturumu + `master` merge + `v1.0.0`
+    Adım 10'un **sonuna** alındı; v1.0.0 = dağıtılabilir Windows uygulaması.
+
+### Adım 10a — Panel çekirdeği (GUI'siz, CI-testli)
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-07-30. Otomatik testler yeşil (864 test, CI alt kümesi;
+  25 yeni panel testi), `ruff` + `mypy` temiz; `TEST_ADIM_10A.md` manuel testleri
+  kullanıcı tarafından yürütüldü ve geçti.
+- **Commit:**
+- **Ne yapıldı:**
+  - **Yeni paket `mcgurk/panel/`** — PySide6'sız ve PsychoPy'siz çekirdek mantık
+    (§A10.2/3). `core.py` + `__init__.py` (kamu API). Qt kabuğu (10b) ve `.exe`
+    (10c) bunun üzerine oturacak; motorun `scheduling.py` ayrımı gibi, mantık
+    GUI'den ayrı ve CI-testli.
+  - **Yol çözümleme (§A10.6):** `resolve_roots()` saf fonksiyon +
+    `detect_runtime()`. Kaynaktan iki kök de proje kökü; donmuş halde
+    `resource_root = _MEIPASS` (salt-okunur kaynak), `writable_root = exe dizini`
+    (taşınabilir yerleşim). Donmuş dal `sys.frozen`/`_MEIPASS` taklidiyle testli.
+  - **Başlatıcılar (§A10.1):** `session_command`, `checklist_command`,
+    `verify_stimuli_command`, `verify_backup_command`, `run_module_command` —
+    hepsi saf `argv` listesi. Kaynaktan `-m mcgurk.ui` / `tools/*.py`; donmuş
+    halde `exe --run <altkomut>`. Yalnız önek değişir, bayraklar ortak.
+    `run_tool()` gerçek başlatmanın ince (subprocess) sarmalayıcısı; çıkış kodu +
+    metin döndürür (KIRMIZI checklist bir sonuçtur, istisna değil).
+  - **Salt-okunur tarama (§A10.4/5, KVKK):** `open_readonly()` SQLite `mode=ro`
+    URI ile açar (yazma motor düzeyinde reddedilir). `list_sessions()` /
+    `list_participants()` yalnız anonim kolon döndürür (kod, grup, tarih, durum,
+    deneme/oturum sayısı) — ad yok.
+  - **Analiz sarmalayıcıları:** `export_session`/`export_all`/`measures_text`/
+    `qc_text` — PsychoPy'siz analiz katmanını doğrudan çağırıp panele hazır
+    dönüş verir.
+  - **Sınır testi:** `mcgurk.panel.core` hem dosya-tarama hem `PURE_LAYERS` ile
+    PsychoPy'siz import garantisine bağlandı; 25 yeni test (`test_panel_core.py`).
+- **Alınan kararlar:**
+  - **Donmuş sözleşme:** tek exe, `--run <altkomut>` dağıtımı. 10c dağıtıcıyı
+    yazacak; 10a yalnız argv sözleşmesini sabitledi (tek-exe/iki-exe kesin kararı
+    §D10 gereği 10c'de).
+  - **`writable_root = exe dizini`** (taşınabilir). Program Files gibi salt-okunur
+    kuruluma gidilirse `%APPDATA%` fallback'i 10c'de; `resolve_roots` saf olduğu
+    için o dal bugün test edilebilir durumda.
+  - **`verify_backup` in-process değil, subprocess** (`tools/` paket değil,
+    import edilemez; kod tekrarını önler). Export/measures/qc in-process.
+  - Tarama için ayrı **salt-okunur** bağlantı; export/analiz için normal
+    `Database` (§A10.5'te "güvenli", katı salt-okunur olması gerekmiyor).
+- **Bilinen sınırlar / sonraki adıma not:**
+  - **10b (PySide6 kabuğu):** `requirements.txt`'e PySide6 pini (CI'ya
+    **eklenmez** — Qt yok), `mcgurk/panel/app.py` + `python -m mcgurk.panel`.
+    Uzun işler arayüzü dondurmamalı; deneyin/checklist'in canlı çıktısı
+    non-blocking (QProcess/thread) — `run_tool` yalnız kısa rapor araçları için.
+  - **10c (.exe):** `resolve_roots`/`detect_runtime` gerçek bundle'a bağlanır;
+    `--run` dağıtıcısı yazılır (10a'nın altkomut sözcük dağarcığını karşılar);
+    PyInstaller spec (PsychoPy veri/hook, ptb/ses, ffmpeg, `schema.sql`),
+    `stimuli/` gömülmez (yüzlerce MB) — exe yanına konur.
+  - Panel çekirdeği analiz katmanını import ettiği için `soundfile`/`numpy`/
+    `pandas` gerektirir (PsychoPy **gerektirmez**). PowerShell'de `python` base
+    ortama düşerse bu bağımlılıklar bulunamaz — mcgurk ortamı kullanılmalı.
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 
