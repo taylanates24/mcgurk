@@ -385,6 +385,69 @@ def test_delete_session_missing_raises(db_path: Path, tmp_path: Path) -> None:
         core.delete_session(db_path, 999, backup_dir=tmp_path / "backups")
 
 
+# ------------------------------------------- design summary / editable counts
+
+
+def test_design_rows_match_the_config_trial_counts(config: Any) -> None:
+    rows = core.design_rows(config)
+    assert [row.module for row in rows] == list(config.trial_counts())
+    assert {row.module: row.n_trials for row in rows} == config.trial_counts()
+
+
+def test_design_rows_have_no_estimate_for_practice(config: Any) -> None:
+    """practice and cross_hearing produce trials but no duration estimate."""
+    rows = {row.module: row for row in core.design_rows(config)}
+    assert rows["practice"].duration_s is None
+    assert rows["cross_hearing"].duration_s is None
+    assert rows["mcgurk"].duration_s is not None
+
+
+def test_rep_fields_are_the_editable_counts(config: Any) -> None:
+    keys = {field.key for field in core.rep_fields(config)}
+    assert "modules.tbw.reps_per_soa" in keys
+    assert not any("gin" in key for key in keys)
+
+
+def test_preview_reps_updates_the_summary_without_writing(
+    config: Any, tmp_path: Path
+) -> None:
+    preview = core.preview_reps(config, {"modules.dichotic.reps": 10})
+    rows = {row.module: row.n_trials for row in core.design_rows(preview)}
+    assert rows["dichotic"] == 2 * config.trial_counts()["dichotic"]
+    # The original object is untouched, so a cancelled edit changes nothing.
+    assert config.modules.dichotic.reps == 5
+
+
+def test_save_reps_writes_and_returns_the_reloaded_config(tmp_path: Path) -> None:
+    source = Path(__file__).resolve().parents[2] / "config" / "experiment.yaml"
+    target = tmp_path / "config" / "experiment.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(source.read_bytes())
+
+    saved = core.save_reps(target, tmp_path, {"modules.tbw.reps_per_soa": 12})
+    assert saved.modules.tbw.reps_per_soa == 12
+    assert "reps_per_soa: 12" in target.read_text(encoding="utf-8")
+
+
+def test_save_reps_reports_an_invalid_value_as_a_config_error(
+    tmp_path: Path,
+) -> None:
+    source = Path(__file__).resolve().parents[2] / "config" / "experiment.yaml"
+    target = tmp_path / "config" / "experiment.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(source.read_bytes())
+
+    with pytest.raises(core.ConfigError):
+        core.save_reps(target, tmp_path, {"modules.oddball.n_trials": 2})
+    assert target.read_bytes() == source.read_bytes()
+
+
+def test_default_reps_reads_the_bundled_defaults_file() -> None:
+    defaults = core.default_reps(core.detect_runtime())
+    assert defaults["modules.tbw.reps_per_soa"] == 10
+    assert defaults["session.practice_trials"] == 12
+
+
 # ------------------------------------------------------------- status_html
 
 

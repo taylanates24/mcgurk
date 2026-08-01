@@ -1,0 +1,49 @@
+# Fabrika (varsayılan) tekrar sayıları — operatör panelindeki "Varsayılana dön"
+# düğmesinin okuduğu kanonik kaynak (Adım 11, §A11.4).
+#
+# NEDEN AYRI BİR DOSYA: kaynak koddan çalışırken experiment.yaml hem varsayılan
+# hem de düzenlenen dosyadır; "varsayılan" en son kaydedilen değer olurdu ve
+# düğme hiçbir şey yapmazdı.  Bu dosya SALT OKUNURDUR: hiçbir kod buraya
+# yazmaz, yalnızca sıfırlama okur.
+#
+# BURAYA ELLE DOKUNMAYIN — buradaki sayılar tasarımın karar verilmiş hâlidir.
+# Bir oturumun kullandığı değerler config/experiment.yaml'dadır; panelden
+# değiştirilen de odur.
+#
+# Anahtarlar mcgurk/config/edit.py'nin ürettiği alan anahtarlarıyla BİREBİR
+# aynı olmalıdır (YAML yolu düz yazılmış hâli).  tests/mcgurk/test_config_edit.py
+# bunu doğrular: experiment.yaml'daki tasarım değişirse (yeni bir AV çifti, etkin
+# hâle gelen kelime listesi...) bu dosya da güncellenmeli, yoksa test kırmızıya
+# döner.
+#
+# Değerlerin gerekçeleri experiment.yaml'daki yorumlarda; §F.1 hâlâ danışman
+# kararına açık, yani bunlar "minimum"dur, nihai tasarım değil.
+
+version: 1
+
+reps:
+  # Alıştırma — altı modüle iki deneme.
+  session.practice_trials: 12
+
+  # Modül 1 — McGurk.  Hücre başına: gürültü (2) x kulak (2) ile çarpılır.
+  modules.mcgurk.av_pairs[0].reps: 10      # fusion_pair      (V:ga / A:ba)
+  modules.mcgurk.av_pairs[1].reps: 10      # combination_pair (V:ba / A:ga)
+  modules.mcgurk.av_pairs[2].reps: 5       # congruent_ba     (kontrol)
+  modules.mcgurk.av_pairs[3].reps: 5       # congruent_da     (kontrol)
+  modules.mcgurk.av_pairs[4].reps: 5       # congruent_ga     (kontrol)
+
+  # Modül 2 — AVSR.  Hece seti (ba, da, ga); kelime listesi henüz etkin değil
+  # (§F.2), etkinleşince anahtarı buraya eklenmeli.
+  modules.avsr.stimulus_sets[0].reps: 5
+
+  # Modül 3 — TBW.  13 SOA değeri ile çarpılır.
+  modules.tbw.reps_per_soa: 10
+
+  # Modül 4 — Oddball.  Toplam ton sayısı; çarpılmaz.
+  modules.oddball.n_trials: 300
+
+  # Modül 5 — Dikotik dinleme.  6 çift ile çarpılır.
+  modules.dichotic.reps: 5
+
+  # Çapraz dinleme kontrolü (§F.3).  Yarısı sessiz (catch) denemedir.
+  cross_hearing_check.n_trials: 20

@@ -125,11 +125,15 @@ modules:
     # ~16% at p=0.5); below that the rate estimate stops being usable.
     # The congruent pairs are controls, so 5 is enough.
     av_pairs:
-      - {visual: ga, audio: ba, label: fusion_pair,      reps: 10}
+      # Not aligned with extra spaces on purpose: the panel's Ayarlar tab
+      # rewrites this file with ruamel round-trip (Adım 11), which preserves
+      # comments and layout but collapses padding inside a flow mapping.  With
+      # the padding gone, a save is a one-line diff instead of a reformat.
+      - {visual: ga, audio: ba, label: fusion_pair, reps: 10}
       - {visual: ba, audio: ga, label: combination_pair, reps: 10}
-      - {visual: ba, audio: ba, label: congruent_ba,     reps: 5}
-      - {visual: da, audio: da, label: congruent_da,     reps: 5}
-      - {visual: ga, audio: ga, label: congruent_ga,     reps: 5}
+      - {visual: ba, audio: ba, label: congruent_ba, reps: 5}
+      - {visual: da, audio: da, label: congruent_da, reps: 5}
+      - {visual: ga, audio: ga, label: congruent_ga, reps: 5}
     noise_conditions: [null, 5.0]     # null = quiet, number = SNR in dB
     ears: [left, right]
     # BGA/BDA are here because a combination percept has to be expressible;

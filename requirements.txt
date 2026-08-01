@@ -14,6 +14,10 @@ imageio-ffmpeg==0.6.0       # bundled ffmpeg when none is on PATH
 
 # --- Config & data ---
 pyyaml==6.0.3
+# Round-trip YAML editing for the panel's Ayarlar tab (Adım 11): experiment.yaml
+# is heavily commented and pyyaml's dump would delete every comment.  Reading
+# stays on pyyaml — only the writer needs round-trip fidelity.
+ruamel.yaml==0.18.15
 pydantic==2.13.4            # config schema validation (mcgurk/config)
 numpy==2.2.6
 scipy==1.14.1

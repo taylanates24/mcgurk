@@ -14,6 +14,10 @@ arithmetic out of ``av_presenter``:
   returns only anonymous columns (§A10.4 KVKK, §A10.5 read-only).
 * **Tool wrappers** call the PsychoPy-free analysis layer directly and return
   panel-ready values.
+* **The design summary and the editable trial counts** (Adım 11) are projections
+  of ``mcgurk.config``: the numbers come from ``config.trial_counts()`` and the
+  writing from ``mcgurk.config.edit``, so the panel and ``python -m
+  mcgurk.config`` can never report different designs.
 * **Path resolution** answers "where is the read-only code" and "where may I
   write" for both a source checkout and a frozen ``.exe`` (§A10.6); Adım 10c
   wires the frozen branch to the real bundle.
@@ -28,13 +32,17 @@ from __future__ import annotations
 import html
 import sqlite3
 import subprocess
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..analysis.export import export_database
 from ..analysis.measures import session_measures
 from ..analysis.qc_report import session_qc
+from ..config import edit
+from ..config.edit import RepField  # noqa: F401 - re-exported for the Qt shell
+from ..config.loader import ConfigError  # noqa: F401 - the panel catches it
+from ..config.schema import ExperimentConfig
 from ..db.database import Database
 
 # Path resolution (§A10.6) and the launch vocabulary live in the top-level
@@ -429,3 +437,82 @@ def qc_text(path: Path | str, session_id: int) -> str:
     """One session's quality-control report as a console block for the panel."""
     with Database(path, create=False) as db:
         return session_qc(db, session_id).summary_text()
+
+
+# ---------------------------------------------------------------------------
+# Design summary and the editable trial counts (Adım 11)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DesignRow:
+    """One line of the design summary: a module, its trials, its estimate.
+
+    ``duration_s`` is None for the steps that produce trials but no duration
+    estimate — ``practice`` and ``cross_hearing`` have no ``modules.*`` entry
+    and therefore no ``estimated_trial_duration_s`` (which is why the shipped
+    ~59 minutes is a floor, not a prediction).
+    """
+
+    module: str
+    n_trials: int
+    duration_s: float | None
+
+
+def design_rows(config: ExperimentConfig) -> list[DesignRow]:
+    """Trials (and the duration estimate) per module, in session order.
+
+    A thin projection of :meth:`ExperimentConfig.trial_counts` — the same
+    numbers ``python -m mcgurk.config`` prints, so the panel and the command
+    line cannot report different designs.
+    """
+    modules = config.modules.by_name()
+    rows: list[DesignRow] = []
+    for name, count in config.trial_counts().items():
+        module = modules.get(name)
+        duration = (
+            module.estimated_duration_s()
+            if module is not None and module.enabled
+            else None
+        )
+        rows.append(DesignRow(module=name, n_trials=count, duration_s=duration))
+    return rows
+
+
+def rep_fields(config: ExperimentConfig) -> list[RepField]:
+    """The repetition counts the Ayarlar tab may edit, with current values."""
+    return edit.read_reps(config)
+
+
+def preview_reps(
+    config: ExperimentConfig, changes: Mapping[str, int]
+) -> ExperimentConfig:
+    """*config* with the given counts applied, in memory only.
+
+    What the tab's live "Toplam: N deneme / ~X dk" is computed from, so the
+    operator sees the cost of a change before deciding to save it.
+    """
+    return edit.preview_reps(config, changes)
+
+
+def save_reps(
+    config_path: Path | str,
+    project_root: Path | str,
+    changes: Mapping[str, int],
+) -> ExperimentConfig:
+    """Write the counts to the config file and return the re-validated config.
+
+    Comments are preserved and an invalid result is rolled back — see
+    :func:`mcgurk.config.edit.write_reps`.  Raises :class:`ConfigError`, which
+    the Qt shell turns into a dialog.
+    """
+    return edit.write_reps(config_path, project_root, changes)
+
+
+def default_reps(runtime: Runtime) -> dict[str, int]:
+    """The factory counts, read from the read-only bundled defaults file.
+
+    ``resource_root``, not ``writable_root``: the whole point of the defaults
+    file is that it is the copy the operator cannot have edited.
+    """
+    return edit.default_reps(runtime.resource_root)

@@ -10,6 +10,11 @@
 pydantic==2.13.4
 pyyaml==6.0.3
 
+# mcgurk/config/edit.py — the panel's Ayarlar tab writes trial counts back into
+# experiment.yaml with comments intact.  The edit logic is GUI-free and tested
+# here (§A11.3), so the writer is a CI dependency even though the panel is not.
+ruamel.yaml==0.18.15
+
 # mcgurk/stimuli — the DSP that decides burst times, levels, SNR and GIN gap
 # placement is tested against synthetic signals, which needs no ffmpeg and no
 # audio device.  The tests that do shell out to ffmpeg are marked `ffmpeg`.

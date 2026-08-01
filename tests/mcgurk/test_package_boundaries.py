@@ -100,6 +100,9 @@ PURE_LAYERS = (
     "mcgurk.config.schema",
     "mcgurk.config.loader",
     "mcgurk.config.calibration",
+    # config/edit is the panel's Ayarlar tab logic (Adım 11a); it writes YAML
+    # and re-validates, with no Qt and no PsychoPy anywhere near it.
+    "mcgurk.config.edit",
     "mcgurk.db.database",
     "mcgurk.db.backup",
     "mcgurk.db.design",
