@@ -2360,8 +2360,25 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     PsychoPy veri/hook, ptb/ses, ffmpeg, `schema.sql`, gömülü varsayılan config,
     **`tools/`** (runpy dağıtımı için), `stimuli/` **gömülmez**.
   - Build script + `packaging/README` + `TEST_ADIM_10C.md` (Windows + ekran + ses).
-  - Doğası gereği makine-yinelemeli (§D10); derleyip sizin makinenizde test
-    edeceğiz, çıkan sorunları düzelteceğim.
+- **Derleme iterasyonu (kullanıcının Windows makinesinde, 2026-07-30):** exe
+  derlendi; sırayla çıkan donmuş-hata'lar çözüldü —
+  1. **backports** (`No module named 'backports'`): setuptools 78'in vendor'ladığı
+     jaraco.context `from backports import tarfile` yapıyor; gerçek
+     `backports.tarfile` kuruldu + bundle'landı (`4631c2b`).
+  2. **ICU çakışması** (`QtWidgets: procedure not found`): PyInstaller conda
+     PATH'inden yanlış ICU (`icuuc.dll`+`icudt73.dll`) toplamış, Qt6Core Windows
+     ICU'sundan önce onu bulup prosedürü bulamıyordu; spec `a.binaries`'ten
+     `icu*.dll` çıkarıldı → Qt sistem ICU'sunu kullanıyor (`3e3eeb6`).
+  3. **UTF-8 stdio** (panelde Türkçe bozulması): captured alt-süreçlere
+     `PYTHONIOENCODING=utf-8` verildi (`be8628f`).
+  4. **PyQt6'ya geçiş** (kullanıcı kararı): PsychoPy'nin `psychopy.gui`'si yalnız
+     PyQt import ediyor (PySide6 desteklemiyor) ve deney giriş diyaloğu frozen'da
+     bozuk wxgui'ye düşüp çöküyordu; PyInstaller iki Qt binding'i alamadığı için
+     **panel PySide6→PyQt6'ya çevrildi** (tek binding, tek exe). PyQt6 gerçek
+     type-stub taşıdığı için ortaya çıkan `QStatusBar|None` vb. None-güvenlik
+     hataları da düzeltildi. `requirements.txt`: `PyQt6==6.10.2`.
+  - Panel offscreen + `--run verify-stimuli`/`--run checklist` çalışıyor;
+    **`--run session` (deney) testi sıradaki**. `console=True` iterasyon için.
 
 ### Adım 10c-ii — PyInstaller ile Windows `.exe`
 - **Durum:** TESTTE (paketleme dosyaları yazıldı ve commit edildi; **gerçek

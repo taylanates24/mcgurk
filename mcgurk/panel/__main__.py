@@ -16,7 +16,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from mcgurk.config.loader import (  # noqa: E402
     ConfigError,
@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
 
     window = PanelWindow(runtime, config, db_path)
     window.show()
-    # Annotated: QApplication.exec() is Any where PySide6 is absent (CI), which
+    # Annotated: QApplication.exec() is Any where PyQt6 is absent (CI), which
     # would make main() return Any from an int-declared function (no-any-return).
     exit_code: int = app.exec()
     return exit_code

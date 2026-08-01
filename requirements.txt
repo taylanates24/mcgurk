@@ -20,5 +20,8 @@ scipy==1.14.1
 pandas==2.3.3
 soundfile==0.13.1           # 24-bit PCM WAV I/O (scipy can only do 16/32-bit)
 
-# --- Admin panel ---
-PySide6==6.11.0
+# --- Operator panel ---
+# PyQt6 (not PySide6): PsychoPy's own dialogs (psychopy.gui) import PyQt
+# directly, and PyInstaller cannot bundle two Qt bindings, so the panel uses the
+# same binding PsychoPy needs.  PsychoPy already pulls PyQt6 in; pinned here.
+PyQt6==6.10.2

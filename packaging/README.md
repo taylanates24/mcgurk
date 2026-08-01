@@ -67,9 +67,11 @@ gizli import veya veri dosyası yüzünden çalışma anında hata verir. Tipik 
 
 ## Lisans
 
-PySide6 **LGPL v3** ile dağıtılır. Bu uygulama PySide6'yı değiştirmeden dinamik
-olarak bağlar (PyInstaller ayrı DLL'ler olarak paketler), bu LGPL ile uyumludur.
-Dağıtımda PySide6/Qt lisans metinlerinin bulundurulması önerilir.
+Panel **PyQt6** kullanır (PSychoPy'nin `psychopy.gui`'si yalnız PyQt destekler ve
+PyInstaller tek exe'de iki Qt binding'i bundle'layamaz — bu yüzden PySide6 değil
+PyQt6). PyQt6 **GPL v3** (veya ticari) lisanslıdır; PsychoPy de GPL olduğundan bu
+akademik araç GPL ile uyumludur. Dağıtımda PyQt6/Qt ve PsychoPy lisans metinleri
+bulundurulmalıdır. Kapalı kaynak dağıtım gerekirse PyQt6 ticari lisansı gerekir.
 
 ## Kod imzalama
 

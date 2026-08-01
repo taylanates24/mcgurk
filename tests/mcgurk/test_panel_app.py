@@ -1,16 +1,16 @@
-"""Adım 10b — a light smoke test of the PySide6 panel shell.
+"""Adım 10b — a light smoke test of the PyQt6 panel shell.
 
 Not a behavioural GUI test (that is manual, TEST_ADIM_10B.md): this only guards
 against the window failing to build and against the session table not being
 wired to the read-only browser.  It runs off-screen and is skipped wherever
-PySide6 is absent — which is CI, so the Qt shell is never a CI dependency.
+PyQt6 is absent — which is CI, so the Qt shell is never a CI dependency.
 """
 
 from __future__ import annotations
 
 import os
 
-# Must be set before QApplication is created; harmless if PySide6 is missing.
+# Must be set before QApplication is created; harmless if PyQt6 is missing.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from collections.abc import Iterator  # noqa: E402
@@ -19,9 +19,9 @@ from typing import Any  # noqa: E402
 
 import pytest  # noqa: E402
 
-pytest.importorskip("PySide6")
+pytest.importorskip("PyQt6")
 
-from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
 from mcgurk.config.loader import load_config  # noqa: E402
 from mcgurk.db import Block, Database, Participant, SessionRecord, Trial  # noqa: E402

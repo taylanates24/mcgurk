@@ -18,7 +18,7 @@ arithmetic out of ``av_presenter``:
   write" for both a source checkout and a frozen ``.exe`` (§A10.6); Adım 10c
   wires the frozen branch to the real bundle.
 
-This module imports no PsychoPy and no PySide6 — a boundary test enforces the
+This module imports no PsychoPy and no PyQt6 — a boundary test enforces the
 first, and the second is what keeps this layer testable in CI.  No string that
 may be printed or raised uses a character outside cp1254 (§Don'ts).
 """

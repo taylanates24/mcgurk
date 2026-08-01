@@ -1,4 +1,4 @@
-"""Operator panel — the PySide6 shell (Adım 10b).
+"""Operator panel — the PyQt6 shell (Adım 10b).
 
 A thin Qt layer over :mod:`mcgurk.panel.core`.  The window is a button-driven
 front end for a Python-illiterate operator: start a session, run the checklist,
@@ -17,8 +17,11 @@ Two rules shape the wiring:
   ``QProcess`` (asynchronous); the in-process analysis calls run on a worker
   thread.  While either is busy the action buttons are disabled.
 
-This module imports PySide6 but **no PsychoPy** (§A10.2, enforced by the package
-boundary test's AST scan, which never has to import this file).
+This module imports PyQt6 but **no PsychoPy** (§A10.2, enforced by the package
+boundary test's AST scan, which never has to import this file).  PyQt6 is the one
+Qt binding the whole app uses: PsychoPy's own dialogs (``psychopy.gui``) support
+only PyQt, and PyInstaller cannot bundle two Qt bindings, so the panel uses PyQt6
+too rather than PySide6.
 """
 
 from __future__ import annotations
@@ -27,9 +30,9 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QProcess, QProcessEnvironment, Qt, QThread, Signal
-from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import (
+from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
     QGroupBox,
@@ -63,7 +66,7 @@ class _Worker(QThread):
     so the traceback is not lost.
     """
 
-    done = Signal(bool, object)
+    done = pyqtSignal(bool, object)
 
     def __init__(self, fn: Callable[[], object]) -> None:
         super().__init__()
@@ -123,7 +126,7 @@ class PanelWindow(QMainWindow):
         splitter.setStretchFactor(1, 2)
         layout.addWidget(splitter, stretch=1)
 
-        self.statusBar().showMessage("Hazır")
+        self._show_status("Hazır")
 
     def _button(self, text: str, handler: Callable[[], None]) -> QPushButton:
         button = QPushButton(text)
@@ -153,9 +156,9 @@ class PanelWindow(QMainWindow):
             QAbstractItemView.SelectionMode.SingleSelection
         )
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self._table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
+        header = self._table.horizontalHeader()
+        if header is not None:
+            header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self._table, stretch=1)
 
         row = QHBoxLayout()
@@ -183,12 +186,19 @@ class PanelWindow(QMainWindow):
     def _append(self, text: str) -> None:
         self._output.appendPlainText(text)
         scrollbar = self._output.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        if scrollbar is not None:
+            scrollbar.setValue(scrollbar.maximum())
+
+    def _show_status(self, text: str) -> None:
+        # QMainWindow.statusBar() is typed Optional; it is created on first call.
+        bar = self.statusBar()
+        if bar is not None:
+            bar.showMessage(text)
 
     def _set_busy(self, busy: bool, label: str = "") -> None:
         for button in self._action_buttons:
             button.setEnabled(not busy)
-        self.statusBar().showMessage(f"Çalışıyor: {label}" if busy else "Hazır")
+        self._show_status(f"Çalışıyor: {label}" if busy else "Hazır")
 
     def _is_busy(self) -> bool:
         if self._proc is not None or (
@@ -201,7 +211,7 @@ class PanelWindow(QMainWindow):
         return False
 
     def _selected_session_id(self) -> int | None:
-        # Annotated: QTableWidget.currentRow() is Any where PySide6 is absent
+        # Annotated: QTableWidget.currentRow() is Any where PyQt6 is absent
         # (CI), which would make the returned session_id Any (no-any-return).
         row: int = self._table.currentRow()
         if row < 0 or row >= len(self._sessions):
@@ -219,7 +229,7 @@ class PanelWindow(QMainWindow):
             self._sessions = core.list_sessions(self._db_path)
         except core.PanelError as exc:
             self._sessions = []
-            self.statusBar().showMessage(str(exc))
+            self._show_status(str(exc))
         self._table.setRowCount(len(self._sessions))
         for row, session in enumerate(self._sessions):
             values = (
@@ -233,7 +243,7 @@ class PanelWindow(QMainWindow):
             for column, value in enumerate(values):
                 self._table.setItem(row, column, QTableWidgetItem(value))
         if self._sessions:
-            self.statusBar().showMessage(f"{len(self._sessions)} oturum")
+            self._show_status(f"{len(self._sessions)} oturum")
 
     # -- subprocess launches (§A10.1) -------------------------------------
 
@@ -380,12 +390,15 @@ class PanelWindow(QMainWindow):
 
     # -- lifecycle --------------------------------------------------------
 
-    def closeEvent(self, event: QCloseEvent) -> None:
+    def closeEvent(self, event: QCloseEvent | None) -> None:
         """A captured tool blocks close; a detached session does not.
 
         The experiment runs detached, so it keeps going regardless.  Only an
         attached report tool or a worker would be cut off, so closing is
         refused while one is running rather than killing it mid-write.
+
+        ``event`` is typed Optional to match ``QWidget.closeEvent``; in practice
+        Qt always passes one.
         """
         if self._proc is not None or (
             self._worker is not None and self._worker.isRunning()
@@ -396,6 +409,8 @@ class PanelWindow(QMainWindow):
                 "Bir işlem sürüyor. Yine de kapatılsın mı?",
             )
             if answer != QMessageBox.StandardButton.Yes:
-                event.ignore()
+                if event is not None:
+                    event.ignore()
                 return
-        event.accept()
+        if event is not None:
+            event.accept()

@@ -7,7 +7,7 @@ TÜBİTAK-supported academic research project: "Behavioral Assessment of Audiovi
 - **Language**: Python 3.10 (PsychoPy requires <3.12)
 - **Experiment Engine**: PsychoPy — psychophysics-grade timing, video playback (MovieStim), response collection
 - **Pre-experiment UI**: PsychoPy `gui.Dlg` dialogs for login/demographics and admin setup
-- **Admin Panel**: Separate script (`admin.py`) using PySide6 for results browsing and export
+- **Operator Panel**: Separate app (`mcgurk/panel/`, `python -m mcgurk.panel`) using **PyQt6** for launching sessions/checklist and browsing/exporting results. PyQt6 (not PySide6): PsychoPy's `psychopy.gui` supports only PyQt, and PyInstaller cannot bundle two Qt bindings, so the whole app standardises on PyQt6 (Adım 10c-ii)
 - **Database**: SQLite (via Python stdlib `sqlite3`) + CSV export capability
 - **Timing**: PsychoPy `core.Clock` (sub-millisecond precision) for reaction time
 - **Noise Generation**: numpy + scipy for white noise / speech-shaped noise (pre-generated)
@@ -566,7 +566,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 
 ## Key Design Decisions
 1. **Experiment accuracy > UI aesthetics** — PsychoPy chosen for psychophysics-grade timing
-2. **Two separate apps**: PsychoPy for experiment (main.py), PySide6 for admin (admin.py) — avoids event loop conflicts
+2. **Two separate apps**: PsychoPy for the experiment (`mcgurk.ui`), **PyQt6** for the operator panel (`mcgurk.panel`) — separate processes avoid event-loop conflicts. Both use the same Qt binding (PyQt6), which is what PsychoPy's dialogs need
 3. **Incongruent trials have no correct answer.** For `mcgurk` and `dichotic`, `is_correct` is stored as NULL and excluded from accuracy figures. Scoring an incongruent trial against the audio syllable is a category error: Vis-/ga/ + Aud-/ba/ → "DA" is classic fusion, not a mistake. Only the congruent sections (`av_congruent`, `audio_only`, `visual_only`) are scored.
 4. **Reaction time**: both `rt_from_video_end` and `rt_from_options_shown` are always recorded; config selects primary
 5. **Video randomization**: trials are shuffled with a **seeded** RNG and the seed is stored on the session, so any session's trial order can be reproduced
@@ -613,7 +613,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - **Dichotic Listening**: `scripts/generate_dichotic_stimuli.py` uyumlu videolardan **48 kHz stereo PCM WAV** üretir (`assets/dichotic/{konuşmacı}/Left-{l}_Right-{r}.wav`). Çalışma anında dönüştürme yok. Kanal izolasyonu ölçüldü: kanallar arası sızıntı yok.
 - **Videosuz ses sunumu**: `audio_only` ve `dichotic` bölümleri `MovieStim` **oluşturmaz**; `present_audio_only()` ekranda sabitleme haçı bırakır ve deneme sesin kendi süresi kadar sürer. Eskiden bu bölümler sesi 64×64/1 fps siyah bir videonun içinde taşıyordu ve deneme bitiş anı o akışın kare ızgarasına bağlıydı.
 - **Noisy stimuli**: `scripts/generate_noisy_stimuli.py` mevcut, ancak çalışma anındaki karıştırma yolu (`stimuli.mix_noise_into_audio`) kullanılıyor. SNR hesabı şu an tüm dosya RMS'i üzerinden yapılıyor; konuşma-aktif RMS'e geçirilmesi Adım 2'de.
-- **Admin panel**: `admin.py` PySide6 ile ayrı process olarak çalışır, PsychoPy ile aynı process'te çalıştırılamaz.
+- **Operatör paneli**: `mcgurk/panel/` **PyQt6** ile ayrı process olarak çalışır, PsychoPy ile aynı process'te çalıştırılamaz. Deneyi/checklist'i subprocess (`--run`) olarak açar (Adım 10). (Eski `legacy/admin.py` PySide6'ydı.)
 
 ## Git Workflow
 - `master`: stable releases
@@ -627,7 +627,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't add a silent fallback for the audio backend — if ptb is unavailable, stop
 - Don't call `random.shuffle` unseeded — the trial order must be reproducible from the stored seed
 - Don't mix audio at runtime for noisy conditions — use pre-generated files. *(Current code still mixes at runtime with a cache; moving this offline is Adım 2.)*
-- Don't mix PsychoPy and PySide6 in the same process — separate entry points
+- Don't run the PyQt6 operator panel in the same process as the PsychoPy experiment — separate entry points/processes (the panel launches the experiment via `--run`). Both use PyQt6, but their event loops must not share a process
 - Don't store experiment data in git (data/ is gitignored)
 - Don't use PsychoPy Builder GUI — all code is hand-written Coder style
 - Don't import PsychoPy from `mcgurk/config`, `mcgurk/db` or `mcgurk/stimuli` — CI has none, and a test enforces it

@@ -14,7 +14,7 @@ and runs the very same ``main`` functions, so ``python -m mcgurk.app_entry
 tested.
 
 Handlers are imported lazily, inside each branch, so importing this module (for
-the routing tests) pulls in neither PySide6 nor PsychoPy.
+the routing tests) pulls in neither PyQt6 nor PsychoPy.
 """
 
 from __future__ import annotations

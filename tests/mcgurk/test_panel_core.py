@@ -1,6 +1,6 @@
 """Adım 10a — the operator panel's GUI-free core.
 
-Everything here runs without a screen, a sound card, PsychoPy or PySide6: the
+Everything here runs without a screen, a sound card, PsychoPy or PyQt6: the
 launch commands are built as plain argv lists, the result browsing reads a
 throwaway database, and the analysis wrappers call the PsychoPy-free layer.  The
 frozen (``.exe``) branch of the path resolution is exercised with constructed

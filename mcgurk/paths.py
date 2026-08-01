@@ -10,7 +10,7 @@ changes.  Frozen under PyInstaller they split: the code lives in the read-only
 
 Keeping this in one place, used by all entry points, is what §A10.6 asks for: a
 single path layer that is correct from source and frozen alike.  It imports no
-PsychoPy and no PySide6 — a boundary test enforces the first — so ``mcgurk.ui``
+PsychoPy and no PyQt6 — a boundary test enforces the first — so ``mcgurk.ui``
 and ``mcgurk.checklist`` can depend on it without pulling anything heavy in.
 """
 

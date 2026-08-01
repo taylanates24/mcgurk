@@ -2,7 +2,7 @@
 
 ``core`` is the GUI-free, PsychoPy-free logic (Adım 10a): launch-command
 builders, read-only anonymous result browsing, analysis wrappers and
-source/frozen path resolution.  The PySide6 shell (``app``) and the frozen
+source/frozen path resolution.  The PyQt6 shell (``app``) and the frozen
 ``.exe`` come in Adım 10b/10c and build on top of it.  Nothing here imports
 PsychoPy (§A10.2).
 """

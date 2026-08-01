@@ -3,7 +3,7 @@
 The dispatcher must route ``exe --run <subcommand>`` to the same ``main`` the
 panel's command builders target.  ``parse_run`` is pure; the routing is checked
 by monkeypatching each handler, so no session, checklist or tool actually runs.
-The handlers are imported lazily, so importing this module needs neither PySide6
+The handlers are imported lazily, so importing this module needs neither PyQt6
 nor PsychoPy — these tests run in CI.
 """
 
@@ -68,7 +68,7 @@ def test_main_unknown_subcommand_raises() -> None:
 
 
 def test_main_routes_panel_by_default(monkeypatch) -> None:
-    pytest.importorskip("PySide6")  # panel entry imports PySide6
+    pytest.importorskip("PyQt6")  # panel entry imports PyQt6
     import mcgurk.panel.__main__ as panel_main_mod
 
     monkeypatch.setattr(panel_main_mod, "main", lambda rest: 0)

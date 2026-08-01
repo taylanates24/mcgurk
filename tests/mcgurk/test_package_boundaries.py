@@ -117,7 +117,7 @@ PURE_LAYERS = (
     "mcgurk.analysis.measures",
     "mcgurk.analysis.qc_report",
     # panel/core is the operator panel's logic; it drives PsychoPy only through
-    # separate processes (§A10.1) and must import without PsychoPy or PySide6.
+    # separate processes (§A10.1) and must import without PsychoPy or PyQt6.
     "mcgurk.panel.core",
     # paths is the shared source/frozen path layer; app_entry is the frozen
     # dispatcher — both are pure and import their heavy handlers lazily.
