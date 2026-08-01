@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import sqlite3
 import subprocess
-import sys
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,100 +36,31 @@ from ..analysis.measures import session_measures
 from ..analysis.qc_report import session_qc
 from ..db.database import Database
 
-
-class PanelError(RuntimeError):
-    """Raised for a panel-core problem the operator has to act on."""
-
-
-# ---------------------------------------------------------------------------
-# Path resolution (§A10.6)
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Runtime:
-    """Where the panel is running from.
-
-    ``executable`` is what spawns a subprocess: the Python interpreter from a
-    source checkout, or the frozen ``.exe`` itself.  ``resource_root`` is the
-    read-only code/data root (the checkout, or PyInstaller's unpacked
-    ``_MEIPASS``); ``writable_root`` is where ``data/``, ``backups/``, ``logs/``,
-    ``config/`` and ``stimuli/`` live and may be written.  From a source
-    checkout the two roots are the same directory.
-    """
-
-    frozen: bool
-    executable: str
-    resource_root: Path
-    writable_root: Path
-
-
-def resolve_roots(
-    *,
-    frozen: bool,
-    source_root: Path,
-    meipass: Path | None,
-    exe_dir: Path | None,
-) -> tuple[Path, Path]:
-    """Return ``(resource_root, writable_root)`` for the given situation.
-
-    Pure, so the frozen branch is testable without actually being frozen:
-
-    * source (``frozen=False``) — both roots are ``source_root``;
-    * frozen — ``resource_root`` is ``meipass`` (the read-only unpacked bundle)
-      and ``writable_root`` is ``exe_dir`` (next to the ``.exe`` — a portable
-      layout; Adım 10c may add a ``%APPDATA%`` fallback for read-only install
-      locations, which is why this stays a pure decision function).
-    """
-    if not frozen:
-        return source_root, source_root
-    if meipass is None or exe_dir is None:
-        raise PanelError(
-            "Donmus calismada _MEIPASS ve exe dizini gerekli, ikisi de verilmedi."
-        )
-    return meipass, exe_dir
-
-
-def detect_runtime() -> Runtime:
-    """Build the :class:`Runtime` for the current process (thin wrapper)."""
-    frozen = bool(getattr(sys, "frozen", False))
-    executable = sys.executable
-    # ``mcgurk/panel/core.py`` -> repository root is three levels up.
-    source_root = Path(__file__).resolve().parents[2]
-
-    if frozen:
-        exe_dir = Path(executable).resolve().parent
-        meipass = Path(getattr(sys, "_MEIPASS", exe_dir))
-        resource_root, writable_root = resolve_roots(
-            frozen=True, source_root=source_root, meipass=meipass, exe_dir=exe_dir
-        )
-    else:
-        resource_root, writable_root = resolve_roots(
-            frozen=False, source_root=source_root, meipass=None, exe_dir=None
-        )
-    return Runtime(
-        frozen=frozen,
-        executable=executable,
-        resource_root=resource_root,
-        writable_root=writable_root,
-    )
-
+# Path resolution (§A10.6) and the launch vocabulary live in the top-level
+# ``mcgurk.paths`` so the session, the checklist, the tools and the frozen
+# dispatcher share them without depending on the panel.  Re-exported here for
+# the panel's callers and its tests.
+from ..paths import (  # noqa: F401
+    RUN_FLAG,
+    SUB_CHECKLIST,
+    SUB_RUN_MODULE,
+    SUB_SESSION,
+    SUB_VERIFY_BACKUP,
+    SUB_VERIFY_STIMULI,
+    PanelError,
+    Runtime,
+    detect_runtime,
+    ensure_writable_config,
+    resolve_roots,
+)
 
 # ---------------------------------------------------------------------------
 # Launch command builders (§A10.1)
 # ---------------------------------------------------------------------------
 
-#: The frozen exe dispatches its own work behind ``--run <subcommand>``.  Adım
-#: 10c writes that dispatcher; 10a fixes the vocabulary the panel targets so the
-#: two agree.  From a source checkout the same jobs run as ``-m <module>`` or as
-#: a ``tools/`` script instead.
-RUN_FLAG = "--run"
-SUB_SESSION = "session"
-SUB_CHECKLIST = "checklist"
-SUB_VERIFY_STIMULI = "verify-stimuli"
-SUB_VERIFY_BACKUP = "verify-backup"
-SUB_RUN_MODULE = "run-module"
-
+#: From a source checkout the same jobs run as ``-m <module>`` (session,
+#: checklist) or as a ``tools/`` script (verify_*, run_module) instead of the
+#: frozen ``exe --run <subcommand>``.
 MODULE_UI = "mcgurk.ui"
 MODULE_CHECKLIST = "mcgurk.checklist"
 

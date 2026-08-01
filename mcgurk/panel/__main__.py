@@ -44,10 +44,14 @@ def main(argv: list[str] | None = None) -> int:
     # message box rather than printed.
     app = QApplication(sys.argv)
 
+    # Shared path layer (§A10.6): the config is the repo file from source, the
+    # writable copy beside the .exe when frozen (created from the bundled
+    # default on first run).
+    config_path = args.config or core.ensure_writable_config(runtime)
     try:
         config = load_config(
-            args.config,
-            project_root=runtime.resource_root,
+            config_path,
+            project_root=runtime.writable_root,
             check_filesystem=False,
         )
     except ConfigError as exc:

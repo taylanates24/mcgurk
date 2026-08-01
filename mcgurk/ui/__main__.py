@@ -23,6 +23,7 @@ from mcgurk.config.loader import (  # noqa: E402
 from mcgurk.db.database import DatabaseError  # noqa: E402
 from mcgurk.engine import EngineError  # noqa: E402
 from mcgurk.logging_setup import setup_logging  # noqa: E402
+from mcgurk.paths import detect_runtime, ensure_writable_config  # noqa: E402
 from mcgurk.stimuli.manifest import ManifestError  # noqa: E402
 from mcgurk.ui.session import run_session  # noqa: E402
 
@@ -52,8 +53,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Path resolution goes through the shared layer (§A10.6): from a source
+    # checkout ``writable_root`` is the repository root (behaviour unchanged);
+    # frozen it is the writable location beside the .exe, and the config is the
+    # writable copy (created from the bundled default on first run).
+    runtime = detect_runtime()
+    config_path = args.config or ensure_writable_config(runtime)
     try:
-        config = load_config(args.config, project_root=_PROJECT_ROOT)
+        config = load_config(config_path, project_root=runtime.writable_root)
     except ConfigError as exc:
         print(f"HATA: {exc}", file=sys.stderr)
         return 1
@@ -63,16 +70,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Aygıt bu koşu için ezildi: {args.device!r} (config değişmedi)")
 
     setup_logging(
-        resolve_path(_PROJECT_ROOT, config.paths.logs),
+        resolve_path(runtime.writable_root, config.paths.logs),
         console_level=config.logging.console_level,
         file_level=config.logging.file_level,
     )
 
-    db_path = args.db or resolve_path(_PROJECT_ROOT, config.database.path)
+    db_path = args.db or resolve_path(runtime.writable_root, config.database.path)
     try:
         return run_session(
             config,
-            project_root=_PROJECT_ROOT,
+            project_root=runtime.writable_root,
             db_path=db_path,
             limit=args.limit,
             offer_resume=not args.new_session,

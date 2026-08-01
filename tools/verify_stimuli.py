@@ -23,6 +23,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from mcgurk.config.loader import ConfigError, load_config, resolve_path  # noqa: E402
 from mcgurk.logging_setup import setup_logging  # noqa: E402
+from mcgurk.paths import detect_runtime, ensure_writable_config  # noqa: E402
 from mcgurk.stimuli.verify import verify  # noqa: E402
 
 
@@ -41,19 +42,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Shared path layer (§A10.6): repo root from source, the writable location
+    # beside the .exe when frozen (where the operator places stimuli/).
+    runtime = detect_runtime()
+    config_path = args.config or ensure_writable_config(runtime)
     try:
-        config = load_config(args.config, project_root=_PROJECT_ROOT)
+        config = load_config(config_path, project_root=runtime.writable_root)
     except ConfigError as exc:
         print(f"KIRMIZI  {exc}", file=sys.stderr)
         return 1
 
     setup_logging(
-        resolve_path(_PROJECT_ROOT, config.paths.logs),
+        resolve_path(runtime.writable_root, config.paths.logs),
         console_level=args.log_level,
         file_level=config.logging.file_level,
     )
 
-    report = verify(config, _PROJECT_ROOT, deep=not args.quick)
+    report = verify(config, runtime.writable_root, deep=not args.quick)
     print(report.text())
     print()
     if report.failures:

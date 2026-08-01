@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 10 — 10a TAMAMLANDI; 10b (PySide6 paneli) kod olarak commit edildi, **manuel ekran testi bekliyor (TESTTE)**. Sıra: **10b manuel test → 10c (.exe paketleme) → prova oturumu → master merge + v1.0.0**
+Aktif adım: 10 — 10a TAMAMLANDI; 10b + 10c-i kod olarak commit edildi, **manuel test bekliyor (TESTTE)**. 10c ikiye bölündü: 10c-i (yol katmanı + --run dağıtıcısı, CI-testli) ✓, 10c-ii (PyInstaller .exe) sırada. Sıra: **10c-ii → 10b/10c manuel testler → prova oturumu → master merge + v1.0.0**
 
 ## Durum tablosu
 
@@ -28,7 +28,8 @@ Aktif adım: 10 — 10a TAMAMLANDI; 10b (PySide6 paneli) kod olarak commit edild
 | 9c | Dokümantasyon (+ prova/merge en son kapıda) | TAMAMLANDI | 2026-07-30 | `94c90bc` |
 | 10a | Panel çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-07-30 | `15d428f` |
 | 10b | PySide6 paneli (GUI kabuğu) | TESTTE | 2026-07-30 | `d276cc9` |
-| 10c | PyInstaller ile Windows .exe | BEKLİYOR | | |
+| 10c-i | Donmuş yol katmanı + --run dağıtıcısı | TESTTE | 2026-07-30 | |
+| 10c-ii | PyInstaller ile Windows .exe | BEKLİYOR | | |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
 analiz kütüphanesi, 9b QC + testler, 9c dokümanlar. Prova oturumu ve master merge
@@ -2316,6 +2317,51 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     yalnız kurulum kontrolü.
   - **10c (.exe):** `resolve_roots`/`detect_runtime` gerçek bundle'a bağlanır;
     `--run` dağıtıcısı yazılır; PyInstaller spec; `stimuli/` exe yanına konur.
+
+### Adım 10c-i — Donmuş-farkında yol katmanı + `--run` dağıtıcısı (CI-testli)
+- **Durum:** TESTTE (kod commit edildi; ekran gerektirmeyen CLI manuel kontrolleri
+  bekliyor — kullanıcı kararı 2026-07-30: "şimdiki halini commit, 10c-ii'ye geç".
+  7b/7c precedent'i.) **10c, kullanıcı onayıyla 10c-i (kod, CI-testli) + 10c-ii
+  (PyInstaller derleme, elle) diye bölündü.**
+- **Tamamlanma:** — (manuel kontrol sonrası). Otomatik testler yeşil: yerel 889,
+  **PySide6'sız CI taklidi venv'inde 854 passed** (10b tuzağı önden yakalandı),
+  `ruff` + `mypy` temiz.
+- **Commit:**
+- **Ne yapıldı:**
+  - **`mcgurk/paths.py`** (yeni, saf leaf, PsychoPy'siz) — tek yol-çözümleme
+    otoritesi (§A10.6). 10a'nın `Runtime`/`resolve_roots`/`detect_runtime`'ı
+    buraya taşındı; `panel/core` geriye-uyumlu re-export ediyor (10a/10b testleri
+    kırılmadı). `ensure_writable_config`: donmuş halde ilk çalıştırmada gömülü
+    varsayılan `config/experiment.yaml`'ı `writable_root/config/`'e kopyalar,
+    düzenlenmiş kopyayı **ezmez**; kaynaktan repo config'ini döndürür. Paylaşılan
+    altkomut sözcük dağarcığı (`RUN_FLAG`, `SUB_*`) da burada — builder ile
+    dağıtıcı tek kaynaktan, drift yok.
+  - **`mcgurk/app_entry.py`** (yeni) — donmuş exe giriş noktası: `--run
+    session|checklist|verify-stimuli|verify-backup|run-module` → ilgili
+    `main()`/tool'a; bayraksız → panel. Handler'lar lazy import (CI/PySide6
+    dostu); tool'lar `runpy` ile bundle'dan koşulur (tools paketi gerekmez).
+  - **Giriş noktaları bağlandı:** `ui/__main__`, `checklist`, `panel/__main__`,
+    `tools/verify_stimuli` artık `_PROJECT_ROOT` yerine
+    `paths.detect_runtime().writable_root` + `ensure_writable_config`. Kaynaktan
+    iki kök özdeş → **sıfır regresyon** (doğrudan doğrulandı: dağıtıcı checklist =
+    doğrudan checklist, `ui --help` sorunsuz).
+  - **Testler:** `test_paths.py` (donmuş `detect_runtime`, ilk-çalıştırma config
+    kopyası, düzenlemeyi ezmeme), `test_app_entry.py` (parse_run + yönlendirme,
+    mock'lu); `PURE_LAYERS`'a `mcgurk.paths` + `mcgurk.app_entry`.
+- **Alınan kararlar:**
+  - Donmuş halde `project_root = writable_root`: stimuli/data/logs/backups/config
+    hepsi orada; gömülü tek şey varsayılan config (ilk-çalıştırma kopyası) + paket
+    verisi (`schema.sql`, `Path(__file__).with_name` ile _MEIPASS'ten otomatik).
+  - Tek exe + `--run` dağıtıcısı (iki exe değil): §A10.1 ayrı-süreç kuralı korunur.
+  - **PySide6'sız CI venv'inde önden doğrulama** kalıcı pratik oldu (scratchpad'de
+    duruyor) — GUI/donmuş kodda "yerelde geçer CI'da patlar" sınıfını yakalar.
+- **Bilinen sınırlar / sonraki adıma not (10c-ii):**
+  - PyInstaller spec (`packaging/mcgurk.spec`): giriş `mcgurk/app_entry.py`;
+    PsychoPy veri/hook, ptb/ses, ffmpeg, `schema.sql`, gömülü varsayılan config,
+    **`tools/`** (runpy dağıtımı için), `stimuli/` **gömülmez**.
+  - Build script + `packaging/README` + `TEST_ADIM_10C.md` (Windows + ekran + ses).
+  - Doğası gereği makine-yinelemeli (§D10); derleyip sizin makinenizde test
+    edeceğiz, çıkan sorunları düzelteceğim.
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 

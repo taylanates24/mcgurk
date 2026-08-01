@@ -33,11 +33,10 @@ from .config.calibration import CalibrationError, load_calibration
 from .config.loader import ConfigError, load_config, resolve_path
 from .config.schema import ExperimentConfig
 from .db.backup import latest_backup
+from .paths import detect_runtime, ensure_writable_config
 from .stimuli import verify as stimuli_verify
 
 logger = logging.getLogger(__name__)
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class Status(Enum):
@@ -343,6 +342,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Shared path layer (§A10.6): repo root from source, the writable location
+    # beside the .exe when frozen; the config is the writable copy there.
+    runtime = detect_runtime()
+    config_path = args.config or ensure_writable_config(runtime)
     try:
         # check_filesystem=False: the file gates are reported as RED lines here,
         # not raised as a ConfigError.  The schema still applies its
@@ -350,14 +353,14 @@ def main(argv: list[str] | None = None) -> int:
         # stop the load — that is the config being genuinely unusable, and the
         # message names exactly which field is missing.
         config = load_config(
-            args.config, project_root=_PROJECT_ROOT, check_filesystem=False
+            config_path, project_root=runtime.writable_root, check_filesystem=False
         )
     except ConfigError as exc:
         print(f"KIRMIZI  Config yüklenemedi:\n{exc}", file=sys.stderr)
         return 1
 
     checks = run_checks(
-        config, _PROJECT_ROOT, probe_hardware=not args.no_hardware
+        config, runtime.writable_root, probe_hardware=not args.no_hardware
     )
     title = (
         f"Oturum öncesi kontrol — {config.experiment.name} "
