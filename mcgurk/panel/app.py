@@ -27,7 +27,7 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QProcess, Qt, QThread, Signal
+from PySide6.QtCore import QProcess, QProcessEnvironment, Qt, QThread, Signal
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -289,6 +289,12 @@ class PanelWindow(QMainWindow):
         self._set_busy(True, label)
         proc = QProcess(self)
         proc.setWorkingDirectory(str(self._runtime.resource_root))
+        # Force the child's stdio to UTF-8 so its Turkish output decodes cleanly
+        # in the panel: a redirected pipe otherwise uses the Windows ANSI code
+        # page (cp1254), which _drain would then mis-read as UTF-8.
+        env = QProcessEnvironment.systemEnvironment()
+        env.insert("PYTHONIOENCODING", "utf-8")
+        proc.setProcessEnvironment(env)
         proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         proc.readyReadStandardOutput.connect(lambda: self._drain(proc))
         proc.finished.connect(lambda code, _status: self._captured_finished(label, code))
