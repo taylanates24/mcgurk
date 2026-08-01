@@ -33,6 +33,26 @@ _TOOL_SCRIPTS = {
 }
 
 
+def _force_utf8_when_piped() -> None:
+    """Emit UTF-8 on stdout/stderr when they are pipes (captured by the panel).
+
+    A frozen build ignores ``PYTHONIOENCODING`` and defaults a *redirected*
+    stream to the Windows ANSI code page (cp1254), so the panel — which reads the
+    pipe as UTF-8 — would show mojibake.  ``reconfigure`` is a runtime call, not
+    an env var, so the frozen interpreter honours it.  A real console (a direct
+    terminal run) is left alone: its own code page already renders the text.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            if not stream.isatty():
+                reconfigure(encoding="utf-8")
+        except (ValueError, OSError):
+            pass
+
+
 def parse_run(argv: list[str]) -> tuple[str | None, list[str]]:
     """Split ``--run <sub> ...`` into ``(subcommand, rest)``.
 
@@ -75,6 +95,7 @@ def _run_tool_script(script: str, rest: list[str]) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_when_piped()
     args = list(sys.argv[1:] if argv is None else argv)
     subcommand, rest = parse_run(args)
 
