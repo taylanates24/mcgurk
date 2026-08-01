@@ -18,6 +18,7 @@ getiriyor.
 | Yeni dosyalar | `mcgurk/config/edit.py`, `config/experiment.defaults.yaml`, `tests/mcgurk/test_config_edit.py` |
 | Yeni testler | 27 (config düzenleme) + 8 (panel çekirdeği) + 7 (Ayarlar sekmesi smoke) |
 | Benim açılış denemem | Panel offscreen açıldı; 11 spinbox doğru değerlerle doldu, canlı toplam 797 -> 897 (oddball 300 -> 400) güncellendi |
+| Paketleme (§E11.1) | `.exe` yeniden derlendi (2026-08-02): `ruamel` (32 dosya) + `experiment.defaults.yaml` bundle'da; donmuş panel açılıyor; `--run checklist` çıkış 0. **Test 8 kullanıcı tarafından geçildi.** |
 
 ## Ön koşullar
 

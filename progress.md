@@ -2523,9 +2523,21 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
 - **Doğrulama:** `pytest` 939 passed / 59 skipped (yerel); Qt'siz-PsychoPy'siz CI
   venv'inde `pytest -m "not psychopy"` 896 passed / 58 skipped; `ruff` + `mypy`
   her iki ortamda temiz.
+- **Paketleme kapanışı (§E11.1) — TAMAM (2026-08-02).** `tools/build_exe.py
+  --clean` ile yeniden derlendi (çıkış 0, ~82 s) ve doğrulandı:
+  - `_internal/ruamel/yaml/` **32 dosya**, `_internal/config/experiment.defaults.yaml`
+    **bundle'da** — `collect_all("ruamel.yaml")` ve yeni veri girdisi iş görüyor.
+  - `.exe` offscreen açıldı ve **ayakta kaldı**; `panel.core -> config.edit ->
+    ruamel` import zinciri geçiyor demektir (eksik olsa süreç QApplication'dan
+    önce ölürdü). `.exe --run checklist --no-hardware` tam Türkçe rapor +
+    çıkış 0 (Adım 10c regresyonu yok).
+  - **Kullanıcı, paketlenmiş app'te Ayarlar sekmesini elle doğruladı**
+    (2026-08-02): Kaydet ve Varsayılana dön donmuş halde çalışıyor.
+  - **Derleme `dist/McGurkSSD/`'yi tamamen siler.** Bu turda `stimuli/` (70 MB),
+    `config/`, `logs/`, `backups/` derlemeden önce taşınıp sonra geri kondu.
+    Sonraki derlemelerde de aynısı yapılmalı, yoksa operatörün kopyaladığı
+    uyaran seti ve yazılabilir config gider.
 - **Bilinen sınırlar / sonraki adıma not:**
-  - **Paketlenmiş app yeniden derlenmedi** (§E11.1) — `ruamel` bundle'ı ve donmuş
-    config yazımı `TEST_ADIM_11.md` Test 8'de doğrulanacak.
   - §A11.5 uyarısı ekranda: değişiklik yalnız sonraki oturumları etkiler. Yine de
     **veri toplama başladıktan sonra** tekrar sayısını değiştirmek oturumları
     karşılaştırılamaz kılar; sekme bunu da yazıyor, ama kararı veren danışmandır
