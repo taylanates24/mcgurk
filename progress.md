@@ -29,7 +29,7 @@ Aktif adım: 10 — 10a TAMAMLANDI; 10b + 10c-i + 10c-ii kod olarak commit edild
 | 10a | Panel çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-07-30 | `15d428f` |
 | 10b | PySide6 paneli (GUI kabuğu) | TESTTE | 2026-07-30 | `d276cc9` |
 | 10c-i | Donmuş yol katmanı + --run dağıtıcısı | TESTTE | 2026-07-30 | `b5141e6` |
-| 10c-ii | PyInstaller ile Windows .exe | TESTTE | 2026-07-30 | |
+| 10c-ii | PyInstaller ile Windows .exe | TESTTE | 2026-07-30 | `b6a3f6f` |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
 analiz kütüphanesi, 9b QC + testler, 9c dokümanlar. Prova oturumu ve master merge
@@ -2368,7 +2368,7 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
   derleme + Windows manuel testi kullanıcının makinesinde** — §D10 gereği
   makine-yinelemeli. Kullanıcı kararı 2026-07-30: "commit et, push la".)
 - **Tamamlanma:** — (Windows'ta derleme + `TEST_ADIM_10C.md` sonrası).
-- **Commit:**
+- **Commit:** `b6a3f6f`
 - **Ne yapıldı:**
   - **`packaging/mcgurk_app.py`** — PyInstaller giriş betiği (mutlak import; donmuş
     `__main__`'de relative-import kırılmasını önler). Kaynaktan da çalışır.
