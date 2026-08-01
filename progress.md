@@ -30,6 +30,8 @@ Aktif adım: 10 TAMAMLANDI (kod + paketleme + manuel doğrulama, 2026-08-01). **
 | 10b | PyQt6 paneli (GUI kabuğu) | TAMAMLANDI | 2026-08-01 | `d276cc9` |
 | 10c-i | Donmuş yol katmanı + --run dağıtıcısı | TAMAMLANDI | 2026-08-01 | `b5141e6` |
 | 10c-ii | PyInstaller ile Windows .exe | TAMAMLANDI | 2026-08-01 | `b6a3f6f` |
+| 11a | Config-düzenleme çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-08-02 | `e946eb9` |
+| 11b | PyQt6 "Ayarlar" sekmesi | TAMAMLANDI | 2026-08-02 | `f669199` |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
 analiz kütüphanesi, 9b QC + testler, 9c dokümanlar. Prova oturumu ve master merge
@@ -2428,6 +2430,106 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     gizli import/veri dosyası hatası **beklenir**; `mcgurk.spec`'ten çözülür.
   - Bu son kod adımı. Sonrası: prova oturumu (paketlenmiş app) → `develop →
     master` merge + `git tag v1.0.0` = dağıtılabilir Windows uygulaması.
+
+### Adım 11a — Config-düzenleme çekirdeği (GUI'siz, CI-testli)
+- **Durum:** TAMAMLANDI
+- **Tamamlanma:** 2026-08-02
+- **Commit:** `e946eb9`
+- **Ne yapıldı:**
+  - **`mcgurk/config/edit.py`** (yeni, saf — PsychoPy'siz, PyQt6'sız, sınır
+    testine eklendi): `RepField` (anahtar, etiket, değer, alt/üst sınır, YAML
+    yolu, açıklama), `read_reps`, `preview_reps`, `write_reps`, `default_reps`.
+  - **`ruamel.yaml==0.18.15`** — `requirements.txt` **ve** `requirements-ci.txt`.
+    Yalnız **yazma** ruamel'den geçiyor; okuma pyyaml'da kaldı (`loader.py`).
+  - **`config/experiment.defaults.yaml`** (yeni, salt-okunur) — "Varsayılana
+    dön"ün kanonik kaynağı (§A11.4). Düz `anahtar: sayı` eşlemesi.
+  - **`mcgurk/panel/core.py`** — `DesignRow`/`design_rows`, `rep_fields`,
+    `preview_reps`, `save_reps`, `default_reps(runtime)`; `ConfigError` ve
+    `RepField` yeniden dışa verildi.
+  - **Testler:** `tests/mcgurk/test_config_edit.py` (27) + `test_panel_core.py`'ye
+    8 test.
+- **Alınan kararlar:**
+  - **"Varsayılan"ın kaynağı: (a) ayrı `config/experiment.defaults.yaml`**
+    (PLAN_AYARLAR_SEKMESI §Açık nokta'daki öneri). Kaynakta `experiment.yaml`
+    hem varsayılan hem düzenlenen dosya; (b) seçeneği kaynakta hiç çalışmazdı,
+    (c) koda gömmek §A.9 ile çelişirdi. Bir test, defaults dosyasının
+    anahtarlarının `read_reps`'inkilerle **birebir** aynı olmasını zorluyor —
+    tasarım değişirse (yeni AV çifti, etkinleşen kelime listesi) dosya
+    güncellenene kadar CI kırmızı kalır.
+  - **Alan anahtarı = düz YAML yolu** (`modules.mcgurk.av_pairs[0].reps`), etikete
+    göre değil: şema `av_pairs[].label`'ın tekilliğini zorlamıyor, tekrarlı bir
+    etiket iki alanı sessizce birleştirirdi.
+  - **Tek alan tanımı, iki tüketici:** `_fields_from_mapping()` düz bir eşleme
+    alıyor; okuma model dump'ını, yazma ruamel belgesini veriyor. İki ayrı
+    türetme kaçınılmaz olarak ayrışır ve ayrışma "panelin düzenlediği anahtarı
+    defaults dosyası tanımıyor" olarak görünürdü.
+  - **`config/experiment.yaml`'daki 4 satırın hizalama boşlukları kaldırıldı.**
+    ruamel round-trip'i akış (flow) eşlemesi içindeki hizalamayı koruyamıyor;
+    boşluklar dururken **ilk kaydetme** onları sessizce silerdi. Şimdi
+    round-trip **bayt bayt birebir** ve bunu bir test koruyor
+    (`test_write_reps_without_changes_is_byte_identical`) — ruamel'in bir gün
+    bu dosyayı yeniden biçimlendirmesi kırmızı test olarak görünür, sessiz bir
+    450 satırlık diff olarak değil.
+  - **Doğrulamada `check_filesystem=False`.** Dosya sistemi kapıları kalibrasyon
+    ve hazır uyaran setiyle ilgili; bir tekrar sayısı ikisini de etkileyemez.
+    Açık bırakmak, `stimuli/` henüz kopyalanmadığı için sağlam bir düzenlemeyi
+    geri alırdı.
+  - **`gin` düzenlenmiyor** — segmentler hazır setten geliyor ve `reps_per_gap`
+    `4_of_6` eşik kuralına (dolayısıyla yayımlanmış normlara) bağlı. Sekmede
+    **pasif bir grup** olarak nedeniyle birlikte gösteriliyor: yokluğu "unutulmuş"
+    diye okunmasın.
+  - **Yazma atomik** (`.tmp` + `os.replace`) ve **LF** olarak yapılıyor: metin
+    kipinde yazmak Windows'ta CRLF'e çevirir ve bir sonraki kaydetmeyi tüm
+    dosyanın diff'ine dönüştürürdü.
+- **Bilinen sınırlar:**
+  - Spinbox üst sınırları (`_MAX_REPS=100`, `_MAX_TRIALS=5000`) **UI korkuluğu**,
+    tasarım kuralı değil; daha büyüğü hâlâ metin düzenleyiciyle mümkün.
+  - Bir modül **devre dışıysa** alanları hiç görünmez (sayısı zaten oturuma
+    girmiyor).
+
+### Adım 11b — PyQt6 "Ayarlar" sekmesi
+- **Durum:** TAMAMLANDI (kullanıcı manuel testi 2026-08-02'de geçti — `TEST_ADIM_11.md`)
+- **Tamamlanma:** 2026-08-02
+- **Commit:** `f669199`
+- **Ne yapıldı:**
+  - **`mcgurk/panel/app.py`** — ana pencere `QTabWidget`'a alındı: **"Panel"**
+    (mevcut içerik, dokunulmadı) + **"Ayarlar"**. Sekme: uyarı metni (§A11.5),
+    modüle göre gruplu `QSpinBox`'lar + yanlarında "ne ile çarpılır" açıklaması,
+    pasif GIN grubu, canlı `TOPLAM: N deneme / yaklaşık X dk` satırı,
+    **Kaydet** + **Varsayılana dön**, düzenlenen dosyanın tam yolu.
+  - **`PanelWindow(..., config_path=...)`** — düzenlenecek dosya dışarıdan
+    veriliyor; `__main__` `ensure_writable_config(runtime)` sonucunu geçiriyor
+    (donmuşta `.exe` yanındaki yazılabilir kopya).
+  - **`packaging/mcgurk.spec`** — `collect_all("ruamel.yaml")` (namespace paketi
+    + clib uzantısı statik taramada kaçabiliyor) ve `experiment.defaults.yaml`
+    bundle'a eklendi.
+  - **`tests/mcgurk/test_panel_app.py`** — QTabWidget'a göre güncellendi + 7 yeni
+    test (alanlar dolu, canlı toplam yazmıyor, geçersiz değer uyarı veriyor,
+    Kaydet yorumları koruyor, geçersiz kayıt geri alınıyor, reset kaydetmiyor).
+    Her pencere **tmp'deki bir config kopyasıyla** kuruluyor: aksi hâlde bir test
+    deponun kendi `experiment.yaml`'ını düzenlerdi.
+- **Alınan kararlar:**
+  - **"Varsayılana dön" kaydetmiyor** — spinbox'ları fabrika değerlerine getirip
+    canlı toplamı tazeliyor, yazma operatörün Kaydet'ine kalıyor. Doğrudan diske
+    yazan bir sıfırlama geri alınamaz bir tıklama olurdu.
+  - **Başarılı kayıtta diyalog yok** (durum çubuğu + Çıktı satırı). Her kayıttan
+    sonra kapatılacak bir modal, operatörü diyalogları okumadan kapatmaya alıştırır
+    — geri-alma bildirenini de dahil.
+  - **Ayarlar butonları da `_action_buttons`'a girdi:** checklist/analiz sürerken
+    kilitli.
+  - Offscreen testte modal `QMessageBox` **event loop'u bloke ediyor** (Qt
+    offscreen platformunda bile). Testler `critical`/`question`'ı
+    monkeypatch'liyor; bulundu çünkü ilk koşum 120 sn'de asıldı.
+- **Doğrulama:** `pytest` 939 passed / 59 skipped (yerel); Qt'siz-PsychoPy'siz CI
+  venv'inde `pytest -m "not psychopy"` 896 passed / 58 skipped; `ruff` + `mypy`
+  her iki ortamda temiz.
+- **Bilinen sınırlar / sonraki adıma not:**
+  - **Paketlenmiş app yeniden derlenmedi** (§E11.1) — `ruamel` bundle'ı ve donmuş
+    config yazımı `TEST_ADIM_11.md` Test 8'de doğrulanacak.
+  - §A11.5 uyarısı ekranda: değişiklik yalnız sonraki oturumları etkiler. Yine de
+    **veri toplama başladıktan sonra** tekrar sayısını değiştirmek oturumları
+    karşılaştırılamaz kılar; sekme bunu da yazıyor, ama kararı veren danışmandır
+    (§F.1 hâlâ açık).
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 
