@@ -64,7 +64,8 @@ Kullanıcı kararı (2026-08-02): **panelde düzenlenebilir alanlar** (salt-okun
 - **`mcgurk/panel/app.py`**: ana pencere `QTabWidget`'a alınır:
   - **"Panel"** sekmesi = mevcut içerik (aksiyon çubuğu + sonuç tablosu + çıktı).
   - **"Ayarlar"** sekmesi = modüle göre gruplu `QSpinBox`'lar + canlı
-    "Toplam: N deneme / ~X dk" etiketi + **"Kaydet"** butonu.
+    "Toplam: N deneme / ~X dk" etiketi + **"Kaydet"** ve **"Varsayılana dön"**
+    butonları.
   - **Dikkat:** `test_panel_app.py` offscreen smoke testi mevcut layout'a bağlı
     (buton kümesi kontrolü); QTabWidget'a geçişte güncellenmeli.
 
@@ -73,9 +74,23 @@ Kullanıcı kararı (2026-08-02): **panelde düzenlenebilir alanlar** (salt-okun
   içi kopyasında; **kaydetmeden**). `config.trial_counts()` + `estimated_duration_s()`.
 - **Kaydet** → `save_reps` → yaz + doğrula → başarılıysa config'i yeniden yükle,
   özeti tazele, durum çubuğunda onay; başarısızsa hata diyaloğu, disk değişmez.
+- **"Varsayılana dön"** → spinbox'ları **fabrika/varsayılan** değerlere döndürür
+  (henüz kaydetmez; operatör görüp Kaydet'e basar). Onay istenir. "Varsayılan"ın
+  kaynağı bir tasarım kararı — bkz. §Açık nokta.
 - **Not (kullanıcıya gösterilecek):** değişiklik yalnız **sonraki** oturumları
   etkiler; her oturum kendi config'ini `sessions.config_snapshot`'a yazar, yani
   geçmiş oturumlar etkilenmez.
+
+## Açık nokta — "Varsayılan"ın kaynağı
+`experiment.yaml` hem varsayılan hem aktif dosya (kaynakta
+`resource_root == writable_root`), o yüzden "varsayılana dön" için ayrı bir
+referans gerekir. Seçenekler:
+- **(a) `config/experiment.defaults.yaml`** (önerilen): salt-okunur, git'te
+  tutulan kanonik varsayılan tekrar değerleri; reset bundan okur. Kaynakta ve
+  donmuşta tutarlı. Uygulayan session bu dosyayı mevcut tasarımdan üretir.
+- (b) Donmuş bundle'daki varsayılan config (`resource_root`): donmuşta pristine
+  ama kaynakta aktif dosyayla aynı → reset kaynakta işe yaramaz.
+- (c) Koda gömülü sabitler — §A.9 (parametreler config'ten) ile çelişir.
 
 ## Alternatif (değerlendirildi, seçilmedi)
 - Sekme yerine butonla açılan **modal iletişim kutusu**: mevcut paneli daha az
