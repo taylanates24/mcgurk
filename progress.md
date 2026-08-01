@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 10 — 10a TAMAMLANDI; 10b + 10c-i kod olarak commit edildi, **manuel test bekliyor (TESTTE)**. 10c ikiye bölündü: 10c-i (yol katmanı + --run dağıtıcısı, CI-testli) ✓, 10c-ii (PyInstaller .exe) sırada. Sıra: **10c-ii → 10b/10c manuel testler → prova oturumu → master merge + v1.0.0**
+Aktif adım: 10 — 10a TAMAMLANDI; 10b + 10c-i + 10c-ii kod olarak commit edildi, **manuel test bekliyor (TESTTE)**. 10c bölündü: 10c-i (yol katmanı + --run dağıtıcısı) ✓, 10c-ii (PyInstaller .exe — paketleme dosyaları yazıldı, gerçek derleme kullanıcının Windows makinesinde) ✓. **Adım 10'un tüm kodu yazıldı.** Sıra: **Windows'ta derleme + 10b/10c manuel testler → prova oturumu → master merge + v1.0.0**
 
 ## Durum tablosu
 
@@ -29,7 +29,7 @@ Aktif adım: 10 — 10a TAMAMLANDI; 10b + 10c-i kod olarak commit edildi, **manu
 | 10a | Panel çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-07-30 | `15d428f` |
 | 10b | PySide6 paneli (GUI kabuğu) | TESTTE | 2026-07-30 | `d276cc9` |
 | 10c-i | Donmuş yol katmanı + --run dağıtıcısı | TESTTE | 2026-07-30 | `b5141e6` |
-| 10c-ii | PyInstaller ile Windows .exe | BEKLİYOR | | |
+| 10c-ii | PyInstaller ile Windows .exe | TESTTE | 2026-07-30 | |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
 analiz kütüphanesi, 9b QC + testler, 9c dokümanlar. Prova oturumu ve master merge
@@ -2362,6 +2362,39 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
   - Build script + `packaging/README` + `TEST_ADIM_10C.md` (Windows + ekran + ses).
   - Doğası gereği makine-yinelemeli (§D10); derleyip sizin makinenizde test
     edeceğiz, çıkan sorunları düzelteceğim.
+
+### Adım 10c-ii — PyInstaller ile Windows `.exe`
+- **Durum:** TESTTE (paketleme dosyaları yazıldı ve commit edildi; **gerçek
+  derleme + Windows manuel testi kullanıcının makinesinde** — §D10 gereği
+  makine-yinelemeli. Kullanıcı kararı 2026-07-30: "commit et, push la".)
+- **Tamamlanma:** — (Windows'ta derleme + `TEST_ADIM_10C.md` sonrası).
+- **Commit:**
+- **Ne yapıldı:**
+  - **`packaging/mcgurk_app.py`** — PyInstaller giriş betiği (mutlak import; donmuş
+    `__main__`'de relative-import kırılmasını önler). Kaynaktan da çalışır.
+  - **`packaging/mcgurk.spec`** — onedir; PsychoPy yığını `collect_all`
+    (psychopy, psychtoolbox, pyglet, ffpyplayer, sounddevice, soundfile,
+    imageio_ffmpeg, questplus) + `copy_metadata` (sürüm okuyanlar); paket verisi
+    (`schema.sql`, gömülü varsayılan `config`, `word_lists`, **`tools/`** runpy
+    dağıtımı için); **`stimuli/` gömülmez**; `console=True` (iterasyon için,
+    v1.0.0'da pencereli yapılabilir).
+  - **`tools/build_exe.py`** — spec ile PyInstaller çağırır, çıktı/`stimuli`
+    yerleşimini bildirir, PyInstaller yoksa nazik hata (`--clean`).
+  - **`packaging/README.md`** — derleme, writable/`stimuli` yerleşimi, onedir
+    gerekçesi, bilinen sorunlar (spec knob'ları), PySide6 LGPL, SmartScreen notu.
+  - **`requirements-dev.txt`** — `pyinstaller==6.16.0` (CI'ya/runtime'a eklenmedi).
+  - **`TEST_ADIM_10C.md`** — Windows + ekran + ses manuel test (5 kabul kriteri;
+    paketlenmiş panelde Adım 10b'yi de doğrular).
+- **Kod tarafında doğrulandı** (gerçek derleme değil): `mcgurk_app.py --run
+  checklist` kaynaktan uçtan uca çalışıyor; `build_exe.py` PyInstaller yokken
+  nazik hata; spec `py_compile` geçerli; ruff + mypy temiz (yerel + PySide6'sız
+  CI venv); `pytest -m "not psychopy"` 890 passed.
+- **Bilinen sınırlar / sonraki adıma not:**
+  - **Gerçek `.exe` derleme yapılmadı** — PyInstaller bu ortamda kurulu değil ve
+    PsychoPy freezing Windows'a özgü yineleme ister (§D10). İlk derlemede eksik
+    gizli import/veri dosyası hatası **beklenir**; `mcgurk.spec`'ten çözülür.
+  - Bu son kod adımı. Sonrası: prova oturumu (paketlenmiş app) → `develop →
+    master` merge + `git tag v1.0.0` = dağıtılabilir Windows uygulaması.
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 
