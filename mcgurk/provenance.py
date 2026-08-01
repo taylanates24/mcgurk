@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 _GIT_TIMEOUT_S = 5
 
+#: Keep git from flashing a console window when called by the windowed frozen
+#: app (provenance is recorded at session start).  0 on non-Windows.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def package_version(name: str) -> str | None:
     """Installed version of *name*, or None when it is not installed."""
@@ -44,6 +48,7 @@ def _run_git(repo_root: Path, *args: str) -> str | None:
             text=True,
             timeout=_GIT_TIMEOUT_S,
             check=False,
+            creationflags=_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug("git çalıştırılamadı (%s): %s", args, exc)

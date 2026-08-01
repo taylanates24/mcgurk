@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 _TIMEOUT_S = 300
 
+#: Keep ffmpeg (a console program) from flashing a console window when it is
+#: spawned by the windowed frozen app (the panel's "Uyaranları doğrula" runs a
+#: deep verify that probes every file).  0 on non-Windows, where the flag does
+#: not exist; ``getattr`` keeps this importable and type-checkable everywhere.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 class FFmpegError(StimulusError):
     """ffmpeg could not be found, or a conversion failed."""
@@ -58,7 +64,7 @@ def run(*args: str) -> str:
     try:
         result = subprocess.run(
             command, capture_output=True, text=True, errors="replace",
-            timeout=_TIMEOUT_S, check=False,
+            timeout=_TIMEOUT_S, check=False, creationflags=_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise FFmpegError(f"ffmpeg çalıştırılamadı: {exc}") from exc
@@ -80,7 +86,7 @@ def _inspect(path: Path) -> str:
     try:
         result = subprocess.run(
             command, capture_output=True, text=True, errors="replace",
-            timeout=_TIMEOUT_S, check=False,
+            timeout=_TIMEOUT_S, check=False, creationflags=_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise FFmpegError(f"ffmpeg çalıştırılamadı: {exc}") from exc
