@@ -355,3 +355,31 @@ def test_measures_text_missing_session_raises(db_path: Path) -> None:
 
     with pytest.raises(MeasuresError):
         core.measures_text(db_path, session_id=999)
+
+
+# ------------------------------------------------------------- session deletion
+
+
+def test_delete_session_removes_it_and_backs_up_first(
+    db_path: Path, tmp_path: Path
+) -> None:
+    backups = tmp_path / "backups"
+    (session,) = core.list_sessions(db_path)  # the fixture's one session
+    result = core.delete_session(db_path, session.session_id, backup_dir=backups)
+
+    # Backed up before deleting, so the session is recoverable.
+    assert result.backup_path.is_file()
+    assert result.deleted == {
+        "responses": 2,  # two answered trials
+        "trials": 3,
+        "blocks": 1,
+        "sessions": 1,
+    }
+    assert core.list_sessions(db_path) == []
+
+
+def test_delete_session_missing_raises(db_path: Path, tmp_path: Path) -> None:
+    from mcgurk.db.database import DatabaseError
+
+    with pytest.raises(DatabaseError):
+        core.delete_session(db_path, 999, backup_dir=tmp_path / "backups")

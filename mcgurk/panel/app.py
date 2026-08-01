@@ -49,6 +49,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..config.loader import resolve_path
 from ..config.schema import ExperimentConfig
 from . import core
 
@@ -166,6 +167,7 @@ class PanelWindow(QMainWindow):
         row.addWidget(self._button("Analiz", self.show_measures))
         row.addWidget(self._button("QC raporu", self.show_qc))
         row.addWidget(self._button("Dışa aktar...", self.export_selected))
+        row.addWidget(self._button("Sil...", self.delete_selected))
         row.addStretch()
         layout.addLayout(row)
         return group
@@ -365,6 +367,51 @@ class PanelWindow(QMainWindow):
             f"Dışa aktarım (oturum {session_id})",
         )
 
+    def delete_selected(self) -> None:
+        """Delete the selected session, after an explicit confirmation (§A10.5).
+
+        A fresh backup is taken before the delete (in ``core.delete_session``),
+        so the operator can recover from a mistaken deletion.
+        """
+        session_id = self._selected_session_id()
+        if session_id is None:
+            return
+        if self._is_busy():
+            return
+        row = next(
+            (s for s in self._sessions if s.session_id == session_id), None
+        )
+        who = (
+            f"{row.participant_code} ({row.group_code}), {row.n_trials} deneme"
+            if row is not None
+            else f"oturum {session_id}"
+        )
+        answer = QMessageBox.warning(
+            self,
+            "Oturumu sil",
+            f"Oturum {session_id} — {who}\n\n"
+            "Bu oturum ve TÜM denemeleri kalıcı olarak silinecek.\n"
+            "Silmeden önce otomatik bir yedek alınır. Emin misiniz?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        backup_dir = resolve_path(
+            self._runtime.writable_root, self._config.paths.backups
+        )
+
+        def _do() -> str:
+            result = core.delete_session(
+                self._db_path, session_id, backup_dir=backup_dir
+            )
+            return (
+                f"Oturum {session_id} silindi: {result.deleted}. "
+                f"Silmeden önceki yedek: {result.backup_path}"
+            )
+
+        self._run_worker(_do, f"Oturum {session_id} silme")
+
     def _run_worker(self, fn: Callable[[], object], label: str) -> None:
         if self._is_busy():
             return
@@ -387,6 +434,9 @@ class PanelWindow(QMainWindow):
             self._append(f"[{label}] HATA: {result}")
         self._worker = None
         self._set_busy(False)
+        # Cheap and harmless after read-only ops; after a delete it drops the
+        # removed session from the table.
+        self.refresh_sessions()
 
     # -- lifecycle --------------------------------------------------------
 

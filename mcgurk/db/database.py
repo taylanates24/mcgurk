@@ -333,6 +333,47 @@ class Database:
         ).fetchone()
         return dict(row) if row else None
 
+    def delete_session(self, session_id: int) -> dict[str, int]:
+        """Delete a session and everything under it; return the counts removed.
+
+        Destructive and irreversible (the panel gates it behind a confirmation
+        and a fresh backup, §A10.5).  The foreign keys are enforced and have no
+        ``ON DELETE CASCADE``, so children are removed first, in dependency
+        order.  All-or-nothing: any error rolls the whole delete back.
+        """
+        if self.get_session(session_id) is None:
+            raise DatabaseError(f"Oturum bulunamadı: {session_id}")
+        cursor = self.conn.cursor()
+        try:
+            responses = cursor.execute(
+                "DELETE FROM responses WHERE trial_id IN ("
+                "SELECT t.trial_id FROM trials t "
+                "JOIN blocks b ON b.block_id = t.block_id "
+                "WHERE b.session_id = ?)",
+                (session_id,),
+            ).rowcount
+            trials = cursor.execute(
+                "DELETE FROM trials WHERE block_id IN ("
+                "SELECT block_id FROM blocks WHERE session_id = ?)",
+                (session_id,),
+            ).rowcount
+            blocks = cursor.execute(
+                "DELETE FROM blocks WHERE session_id = ?", (session_id,)
+            ).rowcount
+            sessions = cursor.execute(
+                "DELETE FROM sessions WHERE session_id = ?", (session_id,)
+            ).rowcount
+        except sqlite3.Error:
+            self.conn.rollback()
+            raise
+        self.conn.commit()
+        return {
+            "responses": responses,
+            "trials": trials,
+            "blocks": blocks,
+            "sessions": sessions,
+        }
+
     def count_sessions(self) -> int:
         """Total number of sessions ever started.
 

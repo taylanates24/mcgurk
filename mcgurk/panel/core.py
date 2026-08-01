@@ -350,6 +350,30 @@ def export_all(
         return export_database(db, out_dir, formats=formats)
 
 
+@dataclass(frozen=True)
+class DeleteResult:
+    """The outcome of deleting a session: where it was backed up, and counts."""
+
+    backup_path: Path
+    deleted: dict[str, int]
+
+
+def delete_session(
+    path: Path | str, session_id: int, *, backup_dir: Path | str
+) -> DeleteResult:
+    """Back up the database, then delete one session and all its data.
+
+    A fresh ``VACUUM INTO`` backup is taken *before* the delete (§A10.5: a
+    12-month study has to survive an accidental deletion), so a regretted delete
+    is recoverable from *backup_dir*.  The panel gates this behind an explicit
+    confirmation; this function assumes the operator already confirmed.
+    """
+    with Database(path, create=False) as db:
+        backup_path = db.backup(backup_dir, label=f"pre_delete_session{session_id}")
+        deleted = db.delete_session(session_id)
+    return DeleteResult(backup_path=backup_path, deleted=deleted)
+
+
 def measures_text(path: Path | str, session_id: int) -> str:
     """One session's per-module measures as a console block for the panel."""
     with Database(path, create=False) as db:

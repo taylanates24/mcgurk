@@ -104,9 +104,13 @@ Panelde **Yenile** → oturumu seçin:
 3. **Dışa aktar...** → klasör seç → `trials_flat.csv` açılıyor; **`participants.csv`'de
    ad yok** (KVKK).
 4. **Yedek doğrula...** → son yedek kullanılabilir mi.
+5. **Sil...** (isteğe bağlı) → bir oturumu seçip silin. **Onay** ister; onaylayınca
+   **önce otomatik yedek** alır (`backups\...pre_delete_session<N>...`), sonra
+   oturumu ve tüm denemelerini siler; tablo yenilenir. (Mini provanın `MINI-01`'ini
+   silmek için iyi bir yer.)
 
 **Kontrol:** Sonuçlar listesi **anonim**; hiçbir ekranda ad yok. Uzun işlerde panel
-donmuyor.
+donmuyor. Silme onaysız çalışmıyor ve silmeden önce yedek alıyor.
 
 ## Test 3: Kasıtlı bozma senaryoları (~10 dk)
 Her biri **açık davranış** göstermeli:

@@ -103,6 +103,7 @@ def test_window_has_the_expected_action_buttons(window: PanelWindow) -> None:
         "Analiz",
         "QC raporu",
         "Dışa aktar...",
+        "Sil...",
         "Yenile",
     ):
         assert expected in labels

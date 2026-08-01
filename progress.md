@@ -2380,10 +2380,20 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
      hataları da düzeltildi. `requirements.txt`: `PyQt6==6.10.2`.
   - **Uçtan uca doğrulandı (2026-08-01):** çift-tık panel, `--run session` deney
     (giriş → denemeler → yedek), panelden checklist/verify/analiz/QC/export,
-    Türkçe düzgün. `console=True` iterasyon için bırakıldı — v1.0.0'da pencereli
-    (`console=False`) yapılabilir.
+    Türkçe düzgün. Ardından mini prova (`--limit 1`) da geçti.
+  - **Release cilası (2026-08-01, kullanıcı isteği):**
+    - **`console=False`** (pencereli): operatör konsol penceresi görmez. Pencereli
+      frozen build'de `sys.stdout=None` olduğundan `app_entry._setup_stdio`
+      captured `--run` alt-komutlarında stdout'u panelin pipe'ına (fd 1/2)
+      utf-8 olarak yeniden bağlar; yoksa panelin yakaladığı rapor boş kalırdı.
+      **Rebuild sonrası panelde checklist/verify çıktısının GÖRÜNDÜĞÜ
+      doğrulanmalı** — görünmezse `console=True`'ya dönülür.
+    - **Oturum silme** (panelde "Sil..." butonu): açık onay + **silmeden önce
+      otomatik yedek** (§A10.5). `db.delete_session` bağımlılık sırasıyla siler
+      (cascade yok), `core.delete_session` önce `VACUUM INTO` yedeği alır.
   - **Sonraki adıma not:** prova oturumu bu paketlenmiş app üzerinde koşulacak
-    (`TEST_ADIM_9C.md`), sonra `develop→master` merge + `git tag v1.0.0`.
+    (`TEST_ADIM_10_PROVA.md` — 9C'nin paketlenmiş biçime uyarlanmış hâli + mini
+    prova), sonra `develop→master` merge + `git tag v1.0.0`.
 
 ### Adım 10c-ii — PyInstaller ile Windows `.exe`
 - **Durum:** TAMAMLANDI (2026-08-01; `.exe` kullanıcının Windows makinesinde
