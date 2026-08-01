@@ -28,7 +28,7 @@ Aktif adım: 10 — 10a TAMAMLANDI; 10b + 10c-i kod olarak commit edildi, **manu
 | 9c | Dokümantasyon (+ prova/merge en son kapıda) | TAMAMLANDI | 2026-07-30 | `94c90bc` |
 | 10a | Panel çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-07-30 | `15d428f` |
 | 10b | PySide6 paneli (GUI kabuğu) | TESTTE | 2026-07-30 | `d276cc9` |
-| 10c-i | Donmuş yol katmanı + --run dağıtıcısı | TESTTE | 2026-07-30 | |
+| 10c-i | Donmuş yol katmanı + --run dağıtıcısı | TESTTE | 2026-07-30 | `b5141e6` |
 | 10c-ii | PyInstaller ile Windows .exe | BEKLİYOR | | |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
@@ -2326,7 +2326,7 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
 - **Tamamlanma:** — (manuel kontrol sonrası). Otomatik testler yeşil: yerel 889,
   **PySide6'sız CI taklidi venv'inde 854 passed** (10b tuzağı önden yakalandı),
   `ruff` + `mypy` temiz.
-- **Commit:**
+- **Commit:** `b5141e6`
 - **Ne yapıldı:**
   - **`mcgurk/paths.py`** (yeni, saf leaf, PsychoPy'siz) — tek yol-çözümleme
     otoritesi (§A10.6). 10a'nın `Runtime`/`resolve_roots`/`detect_runtime`'ı
