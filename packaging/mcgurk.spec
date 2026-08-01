@@ -73,9 +73,25 @@ datas += [
 # stimuli/ is NOT bundled (hundreds of MB); the operator places it beside the
 # .exe (dist/McGurkSSD/stimuli/).  See packaging/README.md and TEST_ADIM_10C.md.
 
-# Trim obvious dev/test-only packages.  matplotlib is deliberately NOT excluded:
-# PsychoPy imports it in places, and a size pass is safer once the build runs.
-excludes = ["tkinter", "pytest", "_pytest", "IPython", "jedi", "ruff", "mypy"]
+# Exclusions.
+#   * PyQt6/PyQt5: the env has PyQt6 too (pulled in by PsychoPy), but PyInstaller
+#     refuses two Qt bindings in one frozen app.  The panel uses PySide6 (a hard
+#     dependency), so PyQt is the one to drop; PsychoPy reaches Qt through qtpy,
+#     which then binds to the only one present, PySide6.  If the experiment's
+#     gui.Dlg misbehaves in the frozen app, force it with QT_API=pyside6.
+#   * matplotlib is deliberately NOT excluded: PsychoPy imports it in places, and
+#     a size pass is safer once the build runs.
+excludes = [
+    "PyQt6",
+    "PyQt5",
+    "tkinter",
+    "pytest",
+    "_pytest",
+    "IPython",
+    "jedi",
+    "ruff",
+    "mypy",
+]
 
 block_cipher = None
 
