@@ -1,9 +1,15 @@
-"""Adım 10b — a light smoke test of the PyQt6 panel shell.
+"""Adım 10b/11b — a light smoke test of the PyQt6 panel shell.
 
-Not a behavioural GUI test (that is manual, TEST_ADIM_10B.md): this only guards
-against the window failing to build and against the session table not being
-wired to the read-only browser.  It runs off-screen and is skipped wherever
-PyQt6 is absent — which is CI, so the Qt shell is never a CI dependency.
+Not a behavioural GUI test (that is manual, TEST_ADIM_10B.md / TEST_ADIM_11.md):
+this only guards against the window failing to build, against the session table
+not being wired to the read-only browser, and — since Adım 11b — against the
+Ayarlar tab losing its wiring to ``core``.  It runs off-screen and is skipped
+wherever PyQt6 is absent, which is CI, so the Qt shell is never a CI dependency.
+
+Every window here is built with an explicit ``config_path`` pointing into
+``tmp_path``.  Without it the panel would resolve the repository's own
+``config/experiment.yaml``, and a test that clicks Kaydet would edit the shipped
+design.
 """
 
 from __future__ import annotations
@@ -21,12 +27,19 @@ import pytest  # noqa: E402
 
 pytest.importorskip("PyQt6")
 
-from PyQt6.QtWidgets import QApplication, QPushButton  # noqa: E402
+from PyQt6.QtWidgets import (  # noqa: E402
+    QApplication,
+    QMessageBox,
+    QPushButton,
+    QTabWidget,
+)
 
 from mcgurk.config.loader import load_config  # noqa: E402
 from mcgurk.db import Block, Database, Participant, SessionRecord, Trial  # noqa: E402
 from mcgurk.panel import core  # noqa: E402
 from mcgurk.panel.app import PanelWindow  # noqa: E402
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
@@ -37,8 +50,17 @@ def qapp() -> Iterator[QApplication]:
 
 
 @pytest.fixture
-def config(write_config: Any, config_dict: dict[str, Any]) -> Any:
-    return load_config(write_config(config_dict), check_filesystem=False)
+def config_path(tmp_path: Path) -> Path:
+    """A byte copy of the shipped config, so Kaydet writes here and not in git."""
+    path = tmp_path / "config" / "experiment.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes((PROJECT_ROOT / "config" / "experiment.yaml").read_bytes())
+    return path
+
+
+@pytest.fixture
+def config(config_path: Path, tmp_path: Path) -> Any:
+    return load_config(config_path, project_root=tmp_path, check_filesystem=False)
 
 
 @pytest.fixture
@@ -85,10 +107,32 @@ def db_path(tmp_path: Path, config: Any) -> Path:
 
 
 @pytest.fixture
+def no_dialogs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Answer the modal dialogs instead of showing them.
+
+    A ``QMessageBox`` blocks on the event loop even under the offscreen
+    platform plugin, so an unpatched ``critical()`` hangs the test run rather
+    than failing it.  ``question`` answers Yes — the tests that use it are the
+    ones exercising what happens *after* a confirmation.
+    """
+    monkeypatch.setattr(
+        QMessageBox, "critical", staticmethod(lambda *a, **k: None)
+    )
+    monkeypatch.setattr(
+        QMessageBox, "information", staticmethod(lambda *a, **k: None)
+    )
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes),
+    )
+
+
+@pytest.fixture
 def window(
-    qapp: QApplication, config: Any, db_path: Path
+    qapp: QApplication, config: Any, db_path: Path, config_path: Path
 ) -> Iterator[PanelWindow]:
-    win = PanelWindow(core.detect_runtime(), config, db_path)
+    win = PanelWindow(core.detect_runtime(), config, db_path, config_path=config_path)
     yield win
     win.close()
 
@@ -105,8 +149,20 @@ def test_window_has_the_expected_action_buttons(window: PanelWindow) -> None:
         "Dışa aktar...",
         "Sil...",
         "Yenile",
+        # Adım 11b
+        "Kaydet",
+        "Varsayılana dön",
     ):
         assert expected in labels
+
+
+def test_window_has_a_panel_and_a_settings_tab(window: PanelWindow) -> None:
+    tabs = window.findChildren(QTabWidget)
+    assert len(tabs) == 1
+    assert [tabs[0].tabText(i) for i in range(tabs[0].count())] == [
+        "Panel",
+        "Ayarlar",
+    ]
 
 
 def test_window_lists_sessions_anonymously(window: PanelWindow) -> None:
@@ -124,10 +180,80 @@ def test_refresh_is_idempotent(window: PanelWindow) -> None:
 
 
 def test_missing_database_leaves_an_empty_table(
-    qapp: QApplication, config: Any, tmp_path: Path
+    qapp: QApplication, config: Any, tmp_path: Path, config_path: Path
 ) -> None:
-    win = PanelWindow(core.detect_runtime(), config, tmp_path / "nope.sqlite")
+    win = PanelWindow(
+        core.detect_runtime(),
+        config,
+        tmp_path / "nope.sqlite",
+        config_path=config_path,
+    )
     try:
         assert win._table.rowCount() == 0
     finally:
         win.close()
+
+
+# ------------------------------------------------------- Ayarlar (Adım 11b)
+
+
+def test_settings_fields_start_at_the_config_values(
+    window: PanelWindow, config: Any
+) -> None:
+    spins = window._spins
+    assert spins["modules.tbw.reps_per_soa"].value() == config.modules.tbw.reps_per_soa
+    assert spins["session.practice_trials"].value() == config.session.practice_trials
+    # GIN is read-only, so it has no spin box at all.
+    assert not any("gin" in key for key in spins)
+
+
+def test_settings_total_updates_live_without_writing(
+    window: PanelWindow, config_path: Path
+) -> None:
+    before = config_path.read_bytes()
+    assert "TOPLAM: 797 deneme" in window._design_label.text()
+
+    window._spins["modules.dichotic.reps"].setValue(10)
+    assert "TOPLAM: 827 deneme" in window._design_label.text()
+    # Live means in memory: nothing has reached the disk yet.
+    assert config_path.read_bytes() == before
+
+
+def test_settings_report_an_impossible_value_instead_of_a_total(
+    window: PanelWindow,
+) -> None:
+    window._spins["modules.oddball.n_trials"].setValue(1)
+    assert window._design_label.text().startswith("Geçersiz değer")
+
+
+def test_save_settings_writes_the_config_and_keeps_comments(
+    window: PanelWindow, config_path: Path
+) -> None:
+    window._spins["modules.tbw.reps_per_soa"].setValue(12)
+    window.save_settings()
+
+    text = config_path.read_text(encoding="utf-8")
+    assert "reps_per_soa: 12" in text
+    assert "reps is PER CELL" in text  # a comment next to an edited field
+    assert window._config.modules.tbw.reps_per_soa == 12
+
+
+def test_save_settings_rolls_back_an_invalid_design(
+    window: PanelWindow, config_path: Path, no_dialogs: None
+) -> None:
+    before = config_path.read_bytes()
+    window._spins["modules.oddball.n_trials"].setValue(2)
+    window.save_settings()
+    assert config_path.read_bytes() == before
+    assert window._config.modules.oddball.n_trials == 300
+
+
+def test_reset_puts_the_factory_values_in_the_spin_boxes(
+    window: PanelWindow, config_path: Path, no_dialogs: None
+) -> None:
+    before = config_path.read_bytes()
+    window._spins["modules.dichotic.reps"].setValue(9)
+    window.reset_settings()  # no_dialogs answers the confirmation with Yes
+    assert window._spins["modules.dichotic.reps"].value() == 5
+    # A reset does not save: the operator sees the cost first (§C11 11b).
+    assert config_path.read_bytes() == before

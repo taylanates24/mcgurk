@@ -49,6 +49,7 @@ mcgurk/                          # new platform (Adım 1→)
 ├── config/
 │   ├── schema.py                # Pydantic models, §G — extra="forbid"
 │   ├── loader.py                # load, validate, design summary
+│   ├── edit.py                  # panel-editable rep counts; ruamel round-trip write (Adım 11)
 │   ├── calibration.py           # 02_kalibrasyon.md JSON (Turkish keys → aliases)
 │   ├── word_lists.py            # AVSR word-list schema + reader (Adım 5)
 │   └── __main__.py              # python -m mcgurk.config
@@ -96,6 +97,7 @@ mcgurk/                          # new platform (Adım 1→)
 ├── logging_setup.py
 └── provenance.py                # git commit, OS, package versions
 config/experiment.yaml           # new single source of truth (§G)
+config/experiment.defaults.yaml  # read-only factory rep counts — "Varsayılana dön" (Adım 11)
 stimuli/                         # prepared set + manifest.json (gitignored)
 tools/verify_backup.py           # an untested backup is not a backup
 tools/prepare_stimuli.py         # assets/ -> stimuli/
@@ -515,6 +517,28 @@ Validated by `mcgurk/config/schema.py`; **unknown fields are an error**.
 - `modules.avsr.stimulus_sets[].list` points at a `config/word_lists/*.yaml`
   file, read by the loader (§F.2 — the recording session has not happened, so
   the shipped list is an empty template with `enabled: false`).
+- **The repetition counts are editable from the panel** (Adım 11):
+  `mcgurk/config/edit.py` exposes the per-module counts as `RepField`s and
+  writes them back with **ruamel round-trip**, so the file's ~200 lines of
+  explanation survive. What is easy to get wrong here:
+  - **Writing is the only thing that uses ruamel**; reading stays on pyyaml.
+    Re-dumping with pyyaml would delete every comment in the file.
+  - **A write is validated and rolled back if it fails.** The new bytes go to
+    disk, `load_config` runs, and a design the schema refuses (a zero rep, an
+    oddball count too small to carry its targets) restores the previous bytes
+    and raises. There is no partially-valid config worth keeping — the next
+    session has to start.
+  - **A no-op write is byte-identical, and a test asserts it.** That is what
+    makes "only the edited key changes" true rather than intended; it is also
+    why the `av_pairs` lines carry no alignment padding, which ruamel cannot
+    reproduce inside a flow mapping.
+  - **The factory values live in `config/experiment.defaults.yaml`**, not in
+    code (§A.9) and not in `experiment.yaml` — from a source checkout that file
+    *is* the one being edited, so it cannot be its own reference. A test pins
+    its keys to `read_reps`'s, so a design change cannot leave the reset stale.
+  - **`gin` is not editable.** Its trials are prepared segments and
+    `reps_per_gap` is tied to the `4_of_6` threshold rule and the published
+    norms; the tab shows it disabled, with the reason.
 - `stimulus_prep.*`: everything `tools/prepare_stimuli.py` needs — the seed,
   the `speaker_id` → source-folder map, the token list, and the video/audio/
   burst/noise/GIN/tone parameters. The SNRs to prepare are **derived** from the
@@ -613,7 +637,8 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - **Dichotic Listening**: `scripts/generate_dichotic_stimuli.py` uyumlu videolardan **48 kHz stereo PCM WAV** üretir (`assets/dichotic/{konuşmacı}/Left-{l}_Right-{r}.wav`). Çalışma anında dönüştürme yok. Kanal izolasyonu ölçüldü: kanallar arası sızıntı yok.
 - **Videosuz ses sunumu**: `audio_only` ve `dichotic` bölümleri `MovieStim` **oluşturmaz**; `present_audio_only()` ekranda sabitleme haçı bırakır ve deneme sesin kendi süresi kadar sürer. Eskiden bu bölümler sesi 64×64/1 fps siyah bir videonun içinde taşıyordu ve deneme bitiş anı o akışın kare ızgarasına bağlıydı.
 - **Noisy stimuli**: `scripts/generate_noisy_stimuli.py` mevcut, ancak çalışma anındaki karıştırma yolu (`stimuli.mix_noise_into_audio`) kullanılıyor. SNR hesabı şu an tüm dosya RMS'i üzerinden yapılıyor; konuşma-aktif RMS'e geçirilmesi Adım 2'de.
-- **Operatör paneli**: `mcgurk/panel/` **PyQt6** ile ayrı process olarak çalışır, PsychoPy ile aynı process'te çalıştırılamaz. Deneyi/checklist'i subprocess (`--run`) olarak açar (Adım 10). (Eski `legacy/admin.py` PySide6'ydı.)
+- **Operatör paneli**: `mcgurk/panel/` **PyQt6** ile ayrı process olarak çalışır, PsychoPy ile aynı process'te çalıştırılamaz. Deneyi/checklist'i subprocess (`--run`) olarak açar (Adım 10). (Eski `legacy/admin.py` PySide6'ydı.) İki sekme: **Panel** (Adım 10) ve **Ayarlar** (Adım 11 — tekrar sayıları).
+- **Modal `QMessageBox` offscreen testte de bloke eder.** Qt'nin `offscreen` platform eklentisi pencereyi çizmez ama event loop'u yine döndürür, yani `QMessageBox.critical(...)` bir yanıt bekleyerek asılır — test kırmızıya dönmez, süresiz takılır (Adım 11b'de 120 sn'lik timeout olarak bulundu). Bir handler'ın diyalog yolunu test edecekseniz `critical`/`question`/`information`'ı monkeypatch'leyin.
 
 ## Git Workflow
 - `master`: stable releases
@@ -662,4 +687,8 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Don't present GIN to a deaf ear or diotically — it is monaural; `ear_selection: good_ear` needs the ear passed in from the session flow, and the deaf ear measures nothing
 - Don't report a GIN threshold wider than the tested range as a number — if no duration meets the criterion it is `None` ("ulaşılamadı"), not the longest gap
 - Don't read a GIN threshold without the false-alarm count beside it — a participant who presses often catches short gaps by chance and reads as more acute than they are
+- Don't rewrite `config/experiment.yaml` by dumping it with pyyaml — the file is mostly explanation, and a dump deletes all of it; the writer is `mcgurk/config/edit.py`'s ruamel round trip
+- Don't leave an unvalidated config on disk — write, `load_config`, and restore the previous bytes if it fails; the operator's next session has to start
+- Don't hard-code the factory repetition counts for "Varsayılana dön" — they are design (§A.9) and live in `config/experiment.defaults.yaml`, whose keys a test pins to `read_reps`'s
+- Don't expose GIN's `reps_per_gap` as an editable count — it is tied to the `4_of_6` threshold rule and the published norms, and the segments come from the prepared set
 - Don't buffer every GIN segment up front like oddball's tones — thirty six-second files are hundreds of MB; load one ahead, and load the first before the clock starts

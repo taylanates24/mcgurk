@@ -1,12 +1,19 @@
-"""Operator panel — the PyQt6 shell (Adım 10b).
+"""Operator panel — the PyQt6 shell (Adım 10b, Ayarlar tab in Adım 11b).
 
-A thin Qt layer over :mod:`mcgurk.panel.core`.  The window is a button-driven
-front end for a Python-illiterate operator: start a session, run the checklist,
-verify the stimuli/backups, browse results and export/measure/QC a session.  All
-the logic — building the launch commands, reading the database, formatting the
-reports — lives in ``core``; this file only wires it to widgets (§A10.3).
+A thin Qt layer over :mod:`mcgurk.panel.core`.  The window has two tabs:
 
-Two rules shape the wiring:
+* **Panel** — the button-driven front end for a Python-illiterate operator:
+  start a session, run the checklist, verify the stimuli/backups, browse
+  results and export/measure/QC a session.
+* **Ayarlar** — the per-module repetition counts, as spin boxes over
+  ``config/experiment.yaml`` (Adım 11).  Until now raising a trial count meant
+  hand-editing a 450-line commented YAML file.
+
+All the logic — building the launch commands, reading the database, formatting
+the reports, writing the config — lives in ``core``; this file only wires it to
+widgets (§A10.3).
+
+Three rules shape the wiring:
 
 * **The panel never shares a process with PsychoPy (§A10.1).**  The experiment
   and the hardware checklist are launched as *separate processes*.  The
@@ -16,6 +23,10 @@ Two rules shape the wiring:
 * **Long work never freezes the UI (§C10 10b).**  Subprocesses run through
   ``QProcess`` (asynchronous); the in-process analysis calls run on a worker
   thread.  While either is busy the action buttons are disabled.
+* **A settings change only reaches the next session (§A11.5).**  Every session
+  stores its own config in ``sessions.config_snapshot``, so nothing already
+  collected moves; the tab says so on screen, because an operator who thinks
+  otherwise would avoid a change they are entitled to make.
 
 This module imports PyQt6 but **no PsychoPy** (§A10.2, enforced by the package
 boundary test's AST scan, which never has to import this file).  PyQt6 is the one
@@ -35,16 +46,21 @@ from PyQt6.QtGui import QCloseEvent, QFont
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
+    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
+    QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -56,6 +72,30 @@ from . import core
 logger = logging.getLogger(__name__)
 
 _SESSION_COLUMNS = ("Oturum", "Katılımcı", "Grup", "Başlangıç", "Durum", "Deneme")
+
+#: Group titles for the Ayarlar tab, keyed by ``RepField.module``.  Turkish and
+#: cp1254-safe (the em dash is 0x97 there); a module with no entry falls back to
+#: its own name, so adding one to the config cannot leave a nameless group box.
+_MODULE_TITLES = {
+    "practice": "Alıştırma",
+    "mcgurk": "Modül 1 — McGurk",
+    "avsr": "Modül 2 — AVSR",
+    "tbw": "Modül 3 — TBW (zamansal bağlama penceresi)",
+    "oddball": "Modül 4 — Oddball (dikkat kontrolü)",
+    "dichotic": "Modül 5 — Dikotik dinleme",
+    "cross_hearing": "Çapraz dinleme kontrolü",
+}
+
+#: Shown above the spin boxes.  §A11.5: the operator has to know that raising a
+#: count is safe for the data already collected — and that it is *not* safe for
+#: the comparability of a study half-run at one design and half at another.
+_SETTINGS_NOTICE = (
+    "Buradaki değişiklikler yalnızca BUNDAN SONRAKİ oturumları etkiler: her "
+    "oturum kendi ayarlarını veritabanına kaydeder, geçmiş veriler değişmez.\n"
+    "Veri toplama başladıktan sonra tekrar sayısını değiştirmek oturumları "
+    "birbiriyle karşılaştırılamaz hâle getirebilir — değiştirmeden önce "
+    "danışmanla konuşun."
+)
 
 
 class _Worker(QThread):
@@ -92,16 +132,25 @@ class PanelWindow(QMainWindow):
         config: ExperimentConfig,
         db_path: Path,
         *,
+        config_path: Path | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._runtime = runtime
         self._config = config
         self._db_path = db_path
+        # The file the Ayarlar tab edits.  Frozen this is the writable copy
+        # beside the .exe, not the read-only one inside the bundle (§A10.6);
+        # ``ensure_writable_config`` is the one authority on which.  Passed in
+        # by ``__main__`` so a caller can point the panel somewhere else — a
+        # test must never be able to rewrite the repository's own config by
+        # default.
+        self._config_path = config_path or core.ensure_writable_config(runtime)
         self._proc: QProcess | None = None
         self._worker: _Worker | None = None
         self._sessions: list[core.SessionRow] = []
         self._action_buttons: list[QPushButton] = []
+        self._spins: dict[str, QSpinBox] = {}
 
         self.setWindowTitle(
             f"McGurk / SSD Operatör Paneli - {config.experiment.name} "
@@ -114,9 +163,16 @@ class PanelWindow(QMainWindow):
     # -- construction -----------------------------------------------------
 
     def _build_ui(self) -> None:
-        central = QWidget()
-        self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
+        tabs = QTabWidget()
+        tabs.addTab(self._build_panel_tab(), "Panel")
+        tabs.addTab(self._build_settings_tab(), "Ayarlar")
+        self.setCentralWidget(tabs)
+        self._tabs = tabs
+        self._show_status("Hazır")
+
+    def _build_panel_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
 
         layout.addLayout(self._build_action_bar())
 
@@ -126,8 +182,7 @@ class PanelWindow(QMainWindow):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         layout.addWidget(splitter, stretch=1)
-
-        self._show_status("Hazır")
+        return page
 
     def _button(self, text: str, handler: Callable[[], None]) -> QPushButton:
         button = QPushButton(text)
@@ -187,6 +242,219 @@ class PanelWindow(QMainWindow):
         self._output.setFont(font)
         layout.addWidget(self._output)
         return group
+
+    # -- Ayarlar tab (Adım 11b) -------------------------------------------
+
+    def _build_settings_tab(self) -> QWidget:
+        """Spin boxes over the editable trial counts, with a live total."""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        notice = QLabel(_SETTINGS_NOTICE)
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+
+        # Scrolled: seven group boxes do not fit a small laptop screen, and a
+        # settings pane that hides its Kaydet button below the fold is worse
+        # than no settings pane.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        inner = QWidget()
+        inner_layout = QVBoxLayout(inner)
+        for group in self._build_settings_groups():
+            inner_layout.addWidget(group)
+        inner_layout.addWidget(self._build_readonly_note())
+        inner_layout.addStretch()
+        scroll.setWidget(inner)
+        layout.addWidget(scroll, stretch=1)
+
+        self._design_label = QLabel()
+        self._design_label.setWordWrap(True)
+        font = QFont("Consolas")
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        self._design_label.setFont(font)
+        layout.addWidget(self._design_label)
+
+        row = QHBoxLayout()
+        row.addWidget(self._button("Kaydet", self.save_settings))
+        row.addWidget(self._button("Varsayılana dön", self.reset_settings))
+        row.addStretch()
+        layout.addLayout(row)
+
+        # Which file the two buttons above act on.  Frozen this is not the path
+        # the operator would guess (it is beside the .exe, not inside it), and
+        # a support question about "the config" needs an answer on screen.
+        path_label = QLabel(f"Düzenlenen dosya: {self._config_path}")
+        path_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        path_label.setEnabled(False)
+        layout.addWidget(path_label)
+
+        self._refresh_design_preview()
+        return page
+
+    def _build_settings_groups(self) -> list[QGroupBox]:
+        """One group box per module, in the order the fields come back in."""
+        groups: list[QGroupBox] = []
+        current: QFormLayout | None = None
+        current_module = ""
+        for field in core.rep_fields(self._config):
+            if current is None or field.module != current_module:
+                box = QGroupBox(_MODULE_TITLES.get(field.module, field.module))
+                current = QFormLayout(box)
+                current_module = field.module
+                groups.append(box)
+            spin = QSpinBox()
+            spin.setRange(field.minimum, field.maximum)
+            spin.setValue(field.value)
+            # A four-digit counter stretched across the pane reads as a text
+            # field; kept narrow, the row reads as "label -> number".
+            spin.setMaximumWidth(90)
+            if field.note:
+                spin.setToolTip(field.note)
+            spin.valueChanged.connect(self._refresh_design_preview)
+            self._spins[field.key] = spin
+            row = QHBoxLayout()
+            row.addWidget(spin)
+            if field.note:
+                note = QLabel(field.note)
+                note.setEnabled(False)
+                row.addWidget(note)
+            row.addStretch()
+            current.addRow(field.label, row)
+        return groups
+
+    def _build_readonly_note(self) -> QGroupBox:
+        """Why GIN has no spin box — otherwise its absence reads as an omission.
+
+        A group box like the others, disabled: "this module exists and is not
+        editable" is a different message from "this module was forgotten".
+        """
+        gin = self._config.modules.gin
+        box = QGroupBox("Modül 6 — GIN (değiştirilemez)")
+        layout = QVBoxLayout(box)
+        label = QLabel(
+            f"{gin.total_trials()} segment, boşluk başına {gin.reps_per_gap} "
+            "sunum. Segmentler hazır uyaran setinden gelir ve sunum sayısı "
+            f"{gin.threshold_criterion} eşik kuralına bağlıdır; buradan "
+            "değiştirmek klinik normları geçersiz kılardı."
+        )
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        box.setEnabled(False)
+        return box
+
+    def _current_changes(self) -> dict[str, int]:
+        return {key: spin.value() for key, spin in self._spins.items()}
+
+    def _refresh_design_preview(self) -> None:
+        """Recompute "Toplam: N deneme / ~X dk" from the spin boxes.
+
+        In memory only — nothing is written until Kaydet.  The numbers come
+        from ``config.trial_counts()`` on a preview copy, so they are produced
+        by the same code the session runs rather than by arithmetic repeated
+        here.
+        """
+        try:
+            preview = core.preview_reps(self._config, self._current_changes())
+        except core.ConfigError as exc:
+            self._design_label.setText(f"Geçersiz değer: {exc}")
+            return
+        rows = core.design_rows(preview)
+        per_module = "  ".join(f"{row.module} {row.n_trials}" for row in rows)
+        total = sum(row.n_trials for row in rows)
+        minutes = preview.estimated_duration_s() / 60
+        self._design_label.setText(
+            f"{per_module}\n"
+            f"TOPLAM: {total} deneme  /  yaklaşık {minutes:.1f} dk "
+            "(alt sınır: yönergeler ve geçişler sayılmaz)"
+        )
+
+    def _reload_settings_fields(self) -> None:
+        """Put the saved config's values back into the spin boxes."""
+        self._set_spin_values(
+            {field.key: field.value for field in core.rep_fields(self._config)}
+        )
+
+    def _set_spin_values(self, values: dict[str, int]) -> list[str]:
+        """Set the named spin boxes, refreshing the total once at the end.
+
+        Signals are blocked during the loop: without that, setting seven values
+        would rebuild the preview config seven times, and the intermediate
+        states can be invalid designs whose error message flashes past.
+        Returns the keys that had no value to set.
+        """
+        missing: list[str] = []
+        for key, spin in self._spins.items():
+            if key not in values:
+                missing.append(key)
+                continue
+            spin.blockSignals(True)
+            spin.setValue(values[key])
+            spin.blockSignals(False)
+        self._refresh_design_preview()
+        return missing
+
+    def save_settings(self) -> None:
+        """Write the spin-box values to the config, validate, roll back on error."""
+        if self._is_busy():
+            return
+        try:
+            config = core.save_reps(
+                self._config_path, self._runtime.writable_root, self._current_changes()
+            )
+        except core.ConfigError as exc:
+            self._append(f"[Ayarlar] HATA: {exc}")
+            QMessageBox.critical(self, "Ayarlar kaydedilemedi", str(exc))
+            return
+        self._config = config
+        self._reload_settings_fields()
+        total = sum(row.n_trials for row in core.design_rows(config))
+        # No confirmation dialog on the happy path: the status bar, the changed
+        # total and the output line already say it worked, and a modal the
+        # operator has to dismiss after every save trains them to click through
+        # dialogs — including the one that reports a rollback.
+        self._append(
+            f"\n[Ayarlar] kaydedildi: {self._config_path} "
+            f"({total} deneme). Bundan sonraki oturumlar bu tasarımı kullanır."
+        )
+        self._show_status(f"Ayarlar kaydedildi - {total} deneme")
+
+    def reset_settings(self) -> None:
+        """Put the factory counts into the spin boxes — without saving them.
+
+        Deliberately not a save: the operator sees what the defaults would cost
+        (the live total updates) and then decides.  A reset that wrote straight
+        to disk would be an undoable click.
+        """
+        answer = QMessageBox.question(
+            self,
+            "Varsayılana dön",
+            "Tüm tekrar sayıları fabrika değerlerine dönecek.\n\n"
+            "Bu işlem dosyaya YAZMAZ; değerleri görüp Kaydet'e basmanız "
+            "gerekir. Devam edilsin mi?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            defaults = core.default_reps(self._runtime)
+        except core.ConfigError as exc:
+            self._append(f"[Ayarlar] HATA: {exc}")
+            QMessageBox.critical(self, "Varsayılanlar okunamadı", str(exc))
+            return
+        missing = self._set_spin_values(defaults)
+        if missing:
+            # A field the defaults file does not know about (a newly enabled
+            # stimulus set, say).  Left untouched rather than guessed at, and
+            # said out loud: a silent partial reset is the worst outcome here.
+            self._append(
+                "[Ayarlar] varsayilan dosyasinda karsiligi olmayan alanlar "
+                "degistirilmedi: " + ", ".join(missing)
+            )
+        self._show_status("Varsayılan değerler yüklendi - kaydetmek için Kaydet")
 
     # -- helpers ----------------------------------------------------------
 

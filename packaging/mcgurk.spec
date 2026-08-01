@@ -35,6 +35,14 @@ for _pkg in (
     "soundfile",
     "imageio_ffmpeg",
     "questplus",
+    # ruamel.yaml lives under the `ruamel` *namespace* package and pulls its
+    # submodules in lazily, so PyInstaller's static scan sees only the few the
+    # panel names.  The Ayarlar tab writes experiment.yaml through it (Adim 11)
+    # and a missing submodule would surface only when the operator pressed
+    # Kaydet.  The C accelerator (_ruamel_yaml.pyd) is deliberately not chased:
+    # it serves the safe/unsafe parsers, and the writer here is round-trip mode,
+    # which is pure Python.
+    "ruamel.yaml",
 ):
     _d, _b, _h = collect_all(_pkg)
     datas += _d
@@ -67,12 +75,17 @@ hiddenimports += ["backports", "backports.tarfile"]
 #   * schema.sql   — mcgurk/db/database.py reads it via Path(__file__).with_name
 #   * experiment.yaml — the bundled default; copied to the writable config on
 #     first run (mcgurk/paths.ensure_writable_config)
+#   * experiment.defaults.yaml — the factory repetition counts the Ayarlar
+#     tab's "Varsayilana don" reads (Adim 11).  Read from resource_root, never
+#     the writable copy: the whole point is that the operator cannot have
+#     edited it.
 #   * word_lists/  — AVSR list templates (disabled today; bundled for later)
 #   * tools/       — the --run dispatcher runs verify_stimuli / verify_backup /
 #     run_module via runpy, so the scripts must be in the bundle
 datas += [
     (os.path.join(_ROOT, "mcgurk", "db", "schema.sql"), os.path.join("mcgurk", "db")),
     (os.path.join(_ROOT, "config", "experiment.yaml"), "config"),
+    (os.path.join(_ROOT, "config", "experiment.defaults.yaml"), "config"),
     (os.path.join(_ROOT, "config", "word_lists"), os.path.join("config", "word_lists")),
     (os.path.join(_ROOT, "tools"), "tools"),
 ]

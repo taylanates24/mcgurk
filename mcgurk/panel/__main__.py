@@ -66,7 +66,9 @@ def main(argv: list[str] | None = None) -> int:
 
     db_path = args.db or resolve_path(runtime.writable_root, config.database.path)
 
-    window = PanelWindow(runtime, config, db_path)
+    # The Ayarlar tab edits this exact file (Adım 11b), so it is handed over
+    # rather than resolved a second time inside the window.
+    window = PanelWindow(runtime, config, db_path, config_path=config_path)
     window.show()
     # Annotated: QApplication.exec() is Any where PyQt6 is absent (CI), which
     # would make main() return Any from an int-declared function (no-any-return).
