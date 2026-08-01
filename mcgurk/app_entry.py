@@ -20,7 +20,9 @@ the routing tests) pulls in neither PyQt6 nor PsychoPy.
 from __future__ import annotations
 
 import runpy
+import subprocess
 import sys
+from typing import Any
 
 from . import paths
 
@@ -76,6 +78,32 @@ def _setup_stdio() -> None:
             pass
 
 
+def _suppress_child_consoles() -> None:
+    """Windowed frozen app: don't let console children flash their own window.
+
+    A windowed build (``console=False``) has no console, so every console child
+    it spawns — ffmpeg during a deep verify, git for provenance, or whatever
+    PsychoPy runs during its hardware init — opens its own console window.  We
+    already pass ``CREATE_NO_WINDOW`` at our own ffmpeg/git call sites; this
+    catches the ones we do not control by defaulting every ``subprocess`` child
+    to no window.  Frozen Windows only, so source/dev (which has a console) is
+    left untouched.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    flag = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if not flag:
+        return
+    original_init = subprocess.Popen.__init__
+
+    def _init(self: Any, *args: Any, **kwargs: Any) -> None:
+        if not kwargs.get("creationflags"):
+            kwargs["creationflags"] = flag
+        original_init(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = _init  # type: ignore[method-assign]
+
+
 def parse_run(argv: list[str]) -> tuple[str | None, list[str]]:
     """Split ``--run <sub> ...`` into ``(subcommand, rest)``.
 
@@ -119,6 +147,7 @@ def _run_tool_script(script: str, rest: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     _setup_stdio()
+    _suppress_child_consoles()
     args = list(sys.argv[1:] if argv is None else argv)
     subcommand, rest = parse_run(args)
 
