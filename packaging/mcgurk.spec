@@ -116,6 +116,17 @@ a = Analysis(  # noqa: F821
     noarchive=False,
 )
 
+# Drop the stray ICU that PyInstaller's dependency scan pulls in (icuuc.dll /
+# icudt*.dll — grabbed from conda's Library\bin on the build PATH).  It is an
+# older ICU than Qt6 6.11 needs and, being under _internal/, it shadows the ICU
+# that ships in Windows at runtime, so Qt6Core.dll fails to load with
+# "procedure not found" (DLL load failed while importing QtWidgets).  No env
+# package depends on it (a source run has no bundled ICU either); removing it
+# lets Qt fall back to the system ICU, exactly as from source.
+a.binaries = [
+    b for b in a.binaries if not os.path.basename(b[0]).lower().startswith("icu")
+]
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)  # noqa: F821
 
 exe = EXE(  # noqa: F821
