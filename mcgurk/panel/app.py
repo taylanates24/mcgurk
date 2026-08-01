@@ -31,7 +31,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtGui import QCloseEvent, QFont
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -180,13 +180,20 @@ class PanelWindow(QMainWindow):
         self._output.setPlaceholderText(
             "İşlem çıktıları ve raporlar burada görünür."
         )
+        # Monospace so the checklist/verify report columns line up (the status
+        # words are replaced with coloured dots, padded to the same width).
+        font = QFont("Consolas")
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        self._output.setFont(font)
         layout.addWidget(self._output)
         return group
 
     # -- helpers ----------------------------------------------------------
 
     def _append(self, text: str) -> None:
-        self._output.appendPlainText(text)
+        # appendHtml so a leading YESIL/UYARI/KIRMIZI becomes a coloured dot;
+        # core.status_html escapes everything else, so there is no injection.
+        self._output.appendHtml(core.status_html(text))
         scrollbar = self._output.verticalScrollBar()
         if scrollbar is not None:
             scrollbar.setValue(scrollbar.maximum())

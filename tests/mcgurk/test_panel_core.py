@@ -383,3 +383,28 @@ def test_delete_session_missing_raises(db_path: Path, tmp_path: Path) -> None:
 
     with pytest.raises(DatabaseError):
         core.delete_session(db_path, 999, backup_dir=tmp_path / "backups")
+
+
+# ------------------------------------------------------------- status_html
+
+
+def test_status_html_turns_verdicts_into_coloured_dots() -> None:
+    out = core.status_html("YESIL    Uyaran seti\nKIRMIZI  Ses\nUYARI    Mod")
+    assert "#1a9e1a" in out  # green (YESIL)
+    assert "#c0392b" in out  # red (KIRMIZI)
+    assert "#d19a00" in out  # amber (UYARI)
+    assert "&#9679;" in out  # filled dot, as an HTML entity
+    # the verdict words are replaced by the dot, not shown as text
+    assert "YESIL" not in out
+    assert "KIRMIZI" not in out
+
+
+def test_status_html_escapes_and_stays_ascii() -> None:
+    out = core.status_html("YESIL deger < 5 & artti")
+    assert "&lt;" in out and "&amp;" in out  # escaped, no injection
+    out.encode("ascii")  # no literal U+25CF -> cp1254 console rule holds
+
+
+def test_status_html_leaves_non_verdict_lines_without_a_dot() -> None:
+    # "SONUC" does not start with a verdict word, even though KIRMIZI appears later
+    assert "&#9679;" not in core.status_html("SONUC: KIRMIZI yok")

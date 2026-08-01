@@ -25,6 +25,7 @@ may be printed or raised uses a character outside cp1254 (§Don'ts).
 
 from __future__ import annotations
 
+import html
 import sqlite3
 import subprocess
 from collections.abc import Iterable, Sequence
@@ -53,6 +54,50 @@ from ..paths import (  # noqa: F401
     ensure_writable_config,
     resolve_roots,
 )
+
+# ---------------------------------------------------------------------------
+# Output rendering — colour the GREEN/RED/WARN verdicts for the panel
+# ---------------------------------------------------------------------------
+
+#: Status word -> dot colour.  The checklist/verify tools print these words
+#: (cp1254-safe, so a direct terminal run is fine); the panel turns a leading
+#: one into a filled coloured dot.
+_STATUS_COLOURS = {
+    "YESIL": "#1a9e1a",  # green
+    "UYARI": "#d19a00",  # amber
+    "KIRMIZI": "#c0392b",  # red
+}
+
+#: The filled circle (U+25CF) written as an HTML entity, NOT a literal: the
+#: character is outside cp1254 and would trip the console-encoding test, but it
+#: is only ever shown in the panel's Qt widget (never printed), and the entity
+#: is plain ASCII in the source.
+_DOT = "&#9679;"
+
+
+def status_html(text: str) -> str:
+    """Render captured tool output as HTML, a leading verdict word as a dot.
+
+    A line beginning ``YESIL``/``UYARI``/``KIRMIZI`` gets a filled green/amber/
+    red dot in place of the word; the word's remaining width is padded so the
+    report's columns stay aligned in a monospace pane.  Every other line is
+    escaped and its spacing preserved.  Pure and ASCII-only, so it is
+    CI-testable and does not affect the cp1254 console rule.
+    """
+    rendered: list[str] = []
+    for line in text.split("\n"):
+        dot_line = None
+        for word, colour in _STATUS_COLOURS.items():
+            if line.startswith(word):
+                pad = "&nbsp;" * (len(word) - 1)
+                rest = html.escape(line[len(word) :]).replace(" ", "&nbsp;")
+                dot_line = f'<span style="color:{colour}">{_DOT}</span>{pad}{rest}'
+                break
+        if dot_line is None:
+            dot_line = html.escape(line).replace(" ", "&nbsp;")
+        rendered.append(dot_line)
+    return "<br>".join(rendered)
+
 
 # ---------------------------------------------------------------------------
 # Launch command builders (§A10.1)
