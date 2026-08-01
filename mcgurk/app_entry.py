@@ -33,16 +33,39 @@ _TOOL_SCRIPTS = {
 }
 
 
-def _force_utf8_when_piped() -> None:
-    """Emit UTF-8 on stdout/stderr when they are pipes (captured by the panel).
+def _setup_stdio() -> None:
+    """Make stdout/stderr usable and UTF-8 for captured ``--run`` subcommands.
 
-    A frozen build ignores ``PYTHONIOENCODING`` and defaults a *redirected*
-    stream to the Windows ANSI code page (cp1254), so the panel — which reads the
-    pipe as UTF-8 — would show mojibake.  ``reconfigure`` is a runtime call, not
-    an env var, so the frozen interpreter honours it.  A real console (a direct
-    terminal run) is left alone: its own code page already renders the text.
+    Two frozen-build quirks are handled:
+
+    * The release build is **windowed** (``console=False``), so a frozen process
+      has ``sys.stdout``/``sys.stderr`` set to ``None``.  A ``--run`` subcommand,
+      though, is launched by the panel with its output redirected to a pipe
+      (fd 1/2 valid), so reattach to that pipe as UTF-8 — otherwise the panel's
+      captured checklist/verify report would be empty.  When there is no valid
+      handle (the panel itself, double-clicked) the reattach fails and is
+      skipped, which is fine: the GUI does not print.
+    * A frozen build ignores ``PYTHONIOENCODING`` and defaults a *redirected*
+      stream to the Windows ANSI code page (cp1254); ``reconfigure`` (a runtime
+      call the interpreter honours) forces UTF-8 so the panel, which reads the
+      pipe as UTF-8, does not show mojibake.  A real console is left alone.
     """
-    for stream in (sys.stdout, sys.stderr):
+    import io
+
+    for name, fd in (("stdout", 1), ("stderr", 2)):
+        stream = getattr(sys, name, None)
+        if stream is None:
+            try:
+                reopened = io.TextIOWrapper(
+                    io.FileIO(fd, "w", closefd=False),
+                    encoding="utf-8",
+                    errors="replace",
+                    line_buffering=True,
+                )
+            except OSError:
+                continue
+            setattr(sys, name, reopened)
+            continue
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is None:
             continue
@@ -95,7 +118,7 @@ def _run_tool_script(script: str, rest: list[str]) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    _force_utf8_when_piped()
+    _setup_stdio()
     args = list(sys.argv[1:] if argv is None else argv)
     subcommand, rest = parse_run(args)
 

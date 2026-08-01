@@ -139,9 +139,12 @@ exe = EXE(  # noqa: F821
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    # console=True during 10c-ii iteration so import/startup errors are visible.
-    # Flip to False (windowed) for the v1.0.0 release once the build is stable.
-    console=True,
+    # console=False (windowed) for the release: the operator sees no console
+    # window.  A windowed frozen build has sys.stdout = None, so app_entry
+    # reattaches stdout/stderr to the panel's pipe for --run subcommands (see
+    # mcgurk/app_entry._setup_stdio).  For build debugging, flip back to True to
+    # see import/startup errors in a terminal.
+    console=False,
     disable_windowed_traceback=False,
 )
 
