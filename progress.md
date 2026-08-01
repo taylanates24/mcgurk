@@ -1,7 +1,7 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-07-30
-Aktif adım: 10 — 10a TAMAMLANDI; 10b + 10c-i + 10c-ii kod olarak commit edildi, **manuel test bekliyor (TESTTE)**. 10c bölündü: 10c-i (yol katmanı + --run dağıtıcısı) ✓, 10c-ii (PyInstaller .exe — paketleme dosyaları yazıldı, gerçek derleme kullanıcının Windows makinesinde) ✓. **Adım 10'un tüm kodu yazıldı.** Sıra: **Windows'ta derleme + 10b/10c manuel testler → prova oturumu → master merge + v1.0.0**
+Aktif adım: 10 TAMAMLANDI (kod + paketleme + manuel doğrulama, 2026-08-01). **Paketlenmiş `.exe` uçtan uca çalışıyor** (panel açılıyor, deney PsychoPy exe içinde koşuyor, yazmalar writable konuma gidiyor, Türkçe düzgün, analiz/QC/export çalışıyor). Sıra: **prova oturumu (paketlenmiş app) → develop→master merge + `git tag v1.0.0`** (kullanıcı onayıyla).
 
 ## Durum tablosu
 
@@ -27,9 +27,9 @@ Aktif adım: 10 — 10a TAMAMLANDI; 10b + 10c-i + 10c-ii kod olarak commit edild
 | 9b | QC + entegrasyon/başarısızlık testleri | TAMAMLANDI | 2026-07-30 | `e24c01a` |
 | 9c | Dokümantasyon (+ prova/merge en son kapıda) | TAMAMLANDI | 2026-07-30 | `94c90bc` |
 | 10a | Panel çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-07-30 | `15d428f` |
-| 10b | PySide6 paneli (GUI kabuğu) | TESTTE | 2026-07-30 | `d276cc9` |
-| 10c-i | Donmuş yol katmanı + --run dağıtıcısı | TESTTE | 2026-07-30 | `b5141e6` |
-| 10c-ii | PyInstaller ile Windows .exe | TESTTE | 2026-07-30 | `b6a3f6f` |
+| 10b | PyQt6 paneli (GUI kabuğu) | TAMAMLANDI | 2026-08-01 | `d276cc9` |
+| 10c-i | Donmuş yol katmanı + --run dağıtıcısı | TAMAMLANDI | 2026-08-01 | `b5141e6` |
+| 10c-ii | PyInstaller ile Windows .exe | TAMAMLANDI | 2026-08-01 | `b6a3f6f` |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
 analiz kütüphanesi, 9b QC + testler, 9c dokümanlar. Prova oturumu ve master merge
@@ -2271,11 +2271,12 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     `pandas` gerektirir (PsychoPy **gerektirmez**). PowerShell'de `python` base
     ortama düşerse bu bağımlılıklar bulunamaz — mcgurk ortamı kullanılmalı.
 
-### Adım 10b — PySide6 paneli (GUI kabuğu)
-- **Durum:** TESTTE (kod commit edildi; manuel ekran testi bekliyor —
-  kullanıcı kararı 2026-07-30: "şimdiki halini commit/push, sonra devam".
-  7b/7c precedent'i: commit önce, manuel test sonra; onaya kadar TAMAMLANDI değil.)
-- **Tamamlanma:** — (manuel test sonrası). Otomatik testler yeşil (872 test, CI
+### Adım 10b — PyQt6 paneli (GUI kabuğu)
+- **Durum:** TAMAMLANDI (2026-08-01, paketlenmiş app üzerinde manuel doğrulandı —
+  panel açılıyor, tüm butonlar çalışıyor, Türkçe düzgün, sonuç listesi anonim).
+  **Not:** panel 10c-ii'de PySide6→PyQt6'ya çevrildi (PsychoPy gui'si PyQt
+  gerektiriyor); ayrıntı 10c-ii kaydında.
+- **Tamamlanma:** 2026-08-01. Otomatik testler yeşil (872 test, CI
   alt kümesi; +4 offscreen smoke), `ruff` + `mypy` temiz. `TEST_ADIM_10B.md`
   ekran testi **bekliyor**.
 - **Commit:** `d276cc9`
@@ -2319,11 +2320,11 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     `--run` dağıtıcısı yazılır; PyInstaller spec; `stimuli/` exe yanına konur.
 
 ### Adım 10c-i — Donmuş-farkında yol katmanı + `--run` dağıtıcısı (CI-testli)
-- **Durum:** TESTTE (kod commit edildi; ekran gerektirmeyen CLI manuel kontrolleri
-  bekliyor — kullanıcı kararı 2026-07-30: "şimdiki halini commit, 10c-ii'ye geç".
-  7b/7c precedent'i.) **10c, kullanıcı onayıyla 10c-i (kod, CI-testli) + 10c-ii
-  (PyInstaller derleme, elle) diye bölündü.**
-- **Tamamlanma:** — (manuel kontrol sonrası). Otomatik testler yeşil: yerel 889,
+- **Durum:** TAMAMLANDI (2026-08-01; dağıtıcı donmuş exe'de `--run
+  verify-stimuli/checklist/session` ile uçtan uca çalıştı). **10c, kullanıcı
+  onayıyla 10c-i (kod, CI-testli) + 10c-ii (PyInstaller derleme, elle) diye
+  bölündü.**
+- **Tamamlanma:** 2026-08-01. Otomatik testler yeşil: yerel 889,
   **PySide6'sız CI taklidi venv'inde 854 passed** (10b tuzağı önden yakalandı),
   `ruff` + `mypy` temiz.
 - **Commit:** `b5141e6`
@@ -2377,14 +2378,19 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
      **panel PySide6→PyQt6'ya çevrildi** (tek binding, tek exe). PyQt6 gerçek
      type-stub taşıdığı için ortaya çıkan `QStatusBar|None` vb. None-güvenlik
      hataları da düzeltildi. `requirements.txt`: `PyQt6==6.10.2`.
-  - Panel offscreen + `--run verify-stimuli`/`--run checklist` çalışıyor;
-    **`--run session` (deney) testi sıradaki**. `console=True` iterasyon için.
+  - **Uçtan uca doğrulandı (2026-08-01):** çift-tık panel, `--run session` deney
+    (giriş → denemeler → yedek), panelden checklist/verify/analiz/QC/export,
+    Türkçe düzgün. `console=True` iterasyon için bırakıldı — v1.0.0'da pencereli
+    (`console=False`) yapılabilir.
+  - **Sonraki adıma not:** prova oturumu bu paketlenmiş app üzerinde koşulacak
+    (`TEST_ADIM_9C.md`), sonra `develop→master` merge + `git tag v1.0.0`.
 
 ### Adım 10c-ii — PyInstaller ile Windows `.exe`
-- **Durum:** TESTTE (paketleme dosyaları yazıldı ve commit edildi; **gerçek
-  derleme + Windows manuel testi kullanıcının makinesinde** — §D10 gereği
-  makine-yinelemeli. Kullanıcı kararı 2026-07-30: "commit et, push la".)
-- **Tamamlanma:** — (Windows'ta derleme + `TEST_ADIM_10C.md` sonrası).
+- **Durum:** TAMAMLANDI (2026-08-01; `.exe` kullanıcının Windows makinesinde
+  derlendi ve `TEST_ADIM_10C.md` uçtan uca doğrulandı — çift-tık panel, "Oturum
+  başlat" deneyi exe içinde koştu, yazmalar writable konuma gitti, Türkçe düzgün,
+  analiz/QC/export çalıştı. Derleme iterasyonu aşağıda.)
+- **Tamamlanma:** 2026-08-01 (Windows'ta derleme + `TEST_ADIM_10C.md`).
 - **Commit:** `b6a3f6f`
 - **Ne yapıldı:**
   - **`packaging/mcgurk_app.py`** — PyInstaller giriş betiği (mutlak import; donmuş
