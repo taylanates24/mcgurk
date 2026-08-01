@@ -9,3 +9,7 @@ mypy==2.3.0
 # Windows .exe packaging (steps.md ADIM 10c-ii).  Not a runtime or CI
 # dependency; used only to build the operator app on the Windows machine.
 pyinstaller==6.16.0
+# setuptools 78 vendors jaraco.context, which does `from backports import
+# tarfile`; the frozen pkg_resources runtime hook fails ("No module named
+# 'backports'") unless the real package is present, so PyInstaller can bundle it.
+backports.tarfile==1.2.0

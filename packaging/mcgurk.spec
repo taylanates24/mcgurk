@@ -55,6 +55,13 @@ for _pkg in (
 ):
     datas += copy_metadata(_pkg)
 
+# setuptools 78 vendors jaraco.context, which does `from backports import
+# tarfile`.  From source, setuptools' VendorImporter remaps that; frozen, it
+# does not, so the pkg_resources runtime hook dies with "No module named
+# 'backports'" unless the real package is bundled (installed via
+# requirements-dev.txt).
+hiddenimports += ["backports", "backports.tarfile"]
+
 # Project data the code reads at runtime, kept relative to the bundle root so it
 # lands where the source layout expects it (resource_root == _MEIPASS frozen):
 #   * schema.sql   — mcgurk/db/database.py reads it via Path(__file__).with_name
