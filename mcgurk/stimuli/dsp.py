@@ -73,6 +73,31 @@ def frame_rms(
     return np.asarray(np.sqrt(np.mean(np.square(windows), axis=1)))
 
 
+def rms_envelope(x: np.ndarray, sample_rate: int, frame_ms: float) -> np.ndarray:
+    """RMS of a *frame_ms* window at **every sample position** of *x*.
+
+    ``frame_rms`` steps the window by whole frames (or by a hop), which makes
+    every measurement built on it depend on where the grid happens to fall.
+    Shifting the same waveform by a fraction of a frame — which alignment does
+    on every trial — then changes the answer: on this corpus that moved the
+    measured burst by up to 13 ms and the measured speech level by up to 1 dB,
+    the second one large enough to fail the set's own level tolerance.  Both
+    numbers decide what the participant is presented with, so neither may
+    depend on the grid (Adım 12a).
+
+    Computed from a cumulative sum of squares: O(n) rather than the n x frame
+    matrix a sample-hop ``frame_rms`` would build, which for a 2.6 s token at a
+    20 ms window would be ~400 MB.
+    """
+    mono = np.asarray(to_mono(x), dtype=np.float64)
+    frame = max(1, int(round(frame_ms * sample_rate / 1000.0)))
+    if mono.size < frame:
+        return np.array([rms(mono)])
+    cumulative = np.concatenate([[0.0], np.cumsum(np.square(mono))])
+    sums = cumulative[frame:] - cumulative[:-frame]
+    return np.asarray(np.sqrt(np.maximum(sums, 0.0) / frame))
+
+
 def active_speech_level_dbfs(
     x: np.ndarray,
     sample_rate: int,
@@ -85,10 +110,15 @@ def active_speech_level_dbfs(
     Whole-file RMS is the wrong measure for this corpus: the tokens are
     roughly 43% silence and the silent fraction differs between them, so
     equalising whole-file RMS leaves the speech itself several dB apart
-    (steps.md §C Adım 2).  A frame counts as active when it is within
-    *threshold_db* of the loudest frame.
+    (steps.md §C Adım 2).  A window counts as active when it is within
+    *threshold_db* of the loudest window.
+
+    The envelope is sampled every sample rather than every half frame: which
+    windows fall inside the activity threshold used to depend on the grid
+    phase, and on the noisier speakers that moved the measured level by up to
+    1 dB — twice the tolerance the prepared set is checked against.
     """
-    frames = frame_rms(x, sample_rate, frame_ms, hop_ms=frame_ms / 2.0)
+    frames = rms_envelope(x, sample_rate, frame_ms)
     loudest = float(np.max(frames)) if frames.size else 0.0
     if loudest <= _FLOOR:
         raise DSPError("Sinyal sessiz — aktif konuşma seviyesi ölçülemez")
@@ -154,17 +184,28 @@ def detect_burst(
 ) -> float:
     """Time of the acoustic burst in *x*, in seconds.
 
-    Envelope based, at *frame_ms* resolution: find the first frame that rises
-    *threshold_db* above the signal's own noise floor and stays there for
+    Envelope based, at *frame_ms* resolution: find the first position that
+    rises *threshold_db* above the signal's own noise floor and stays there for
     *min_duration_ms*, then walk back to where it left the floor.  Walking back
     matters because the threshold crossing happens partway up the onset, and
     the alignment target is the onset itself.
+
+    **The envelope is read at every sample** (``rms_envelope``), not once per
+    frame.  With abutting frames the answer depended on where the grid fell:
+    shifting the *same* waveform by a fraction of a frame moved the measured
+    burst by up to 13 ms on this corpus, because a pre-burst frame sitting near
+    the walk-back's floor+3 dB line flips sides and the walk-back then runs on
+    to the next frame below it.  That is not a rounding detail — both the
+    alignment target (a video's own burst) and the token's burst come from this
+    function, so the instability went into the A/V offset of the presented
+    stimulus, differently for each token.  A finer hop is not enough either:
+    at 0.125 ms one token of speaker 4 still moved by 4.5 ms (Adım 12a).
 
     Raises:
         DSPError: when nothing in the signal stands out from its floor, which
             means the token is unusable rather than merely quiet.
     """
-    envelope = frame_rms(x, sample_rate, frame_ms)
+    envelope = rms_envelope(x, sample_rate, frame_ms)
     if envelope.size == 0:
         raise DSPError("Sinyal boş — patlama anı ölçülemez")
 
@@ -184,27 +225,38 @@ def detect_burst(
             "anlamlı biçimde aşmıyor"
         )
 
-    sustain = max(1, int(round(min_duration_ms / frame_ms)))
+    sustain = max(1, int(round(min_duration_ms * sample_rate / 1000.0)))
     above = envelope >= threshold
-    onset: int | None = None
-    for index in range(envelope.size - sustain + 1):
-        if above[index] and above[index : index + sustain].all():
-            onset = index
-            break
+    onset = _first_sustained(above, sustain)
     if onset is None:
         raise DSPError(
             f"Patlama tespit edilemedi: eşiği {min_duration_ms:.0f} ms boyunca "
             "aşan bir bölge yok"
         )
 
-    # Back off to the last frame that was still at the floor (+3 dB), capped so
-    # a noisy recording cannot drag the onset arbitrarily early.
+    # Back off to the last position that was still at the floor (+3 dB), capped
+    # so a noisy recording cannot drag the onset arbitrarily early.
     quiet = floor * 10.0 ** (3.0 / 20.0)
-    limit = max(0, onset - int(round(50.0 / frame_ms)))
-    index = onset
-    while index > limit and envelope[index - 1] > quiet:
-        index -= 1
-    return index * frame_ms / 1000.0
+    limit = max(0, onset - int(round(0.050 * sample_rate)))
+    window = envelope[limit:onset]
+    at_floor = np.flatnonzero(window <= quiet)
+    index = limit if at_floor.size == 0 else limit + int(at_floor[-1]) + 1
+    return index / sample_rate
+
+
+def _first_sustained(above: np.ndarray, sustain: int) -> int | None:
+    """First index where *above* is true for *sustain* consecutive positions.
+
+    A run-length scan rather than a Python loop over samples: at sample
+    resolution the loop would run over a hundred thousand positions per token.
+    """
+    if above.size < sustain:
+        return None
+    # Cumulative count of false positions: a window is all-true when the count
+    # does not increase across it.
+    blocked = np.concatenate([[0], np.cumsum(~above)])
+    starts = np.flatnonzero(blocked[sustain:] - blocked[:-sustain] == 0)
+    return int(starts[0]) if starts.size else None
 
 
 # ------------------------------------------------------------- time shifting

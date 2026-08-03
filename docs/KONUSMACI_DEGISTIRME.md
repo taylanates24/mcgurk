@@ -3,7 +3,7 @@
 Bu belge, deneyde kullanılan **konuşmacıyı** (yüz + ses kaydı) nasıl
 değiştireceğinizi anlatır. İki ayrı durum var:
 
-- **A. Hâlihazırda hazırlanmış** bir konuşmacıya geçmek (şu an id 1 ve 2 hazır).
+- **A. Hâlihazırda hazırlanmış** bir konuşmacıya geçmek (şu an id 1–8 hazır).
 - **B. Yeni bir konuşmacı** eklemek (kayıt + hazırlık gerekir).
 
 Her iki durumda da tek doğruluk kaynağı `config/experiment.yaml`'dır; kod
@@ -29,7 +29,7 @@ konuşmacıyla toplandığı bellidir.
      fixed_id: 1
    ```
    - `fixed` → her katılımcıya `fixed_id`'deki konuşmacı.
-   - `balanced` → oturum sayısına göre sırayla döner (1, 2, 1, 2, …).
+   - `balanced` → oturum sayısına göre id sırasıyla döner (1, 2, … 8, 1, …).
    - `random` → oturum tohumundan üretilebilir rastgele seçim.
 
 2. **`modules.<modül>.speaker_id`** — dev aracının (`tools/run_module.py`) ve
@@ -43,8 +43,21 @@ konuşmacıyla toplandığı bellidir.
 
 ## A. Hazır bir konuşmacıya geçmek (en hızlı yol)
 
-Şu an `stimulus_prep.speakers` altında **id 1** (`female_speaker_1`) ve **id 2**
-(`male_speaker_1`) hazır.
+`stimulus_prep.speakers` altında **sekiz konuşmacı** hazır (Adım 12a):
+
+| id | Cinsiyet | Klasör | | id | Cinsiyet | Klasör |
+|---|---|---|---|---|---|---|
+| 1 | Kadın | `assets/speaker_1_female` | | 5 | Kadın | `assets/speaker_5_female` |
+| 2 | Erkek | `assets/speaker_2_male` | | 6 | Kadın | `assets/speaker_6_female` |
+| 3 | Erkek | `assets/speaker_3_male` | | 7 | Erkek | `assets/speaker_7_male` |
+| 4 | Erkek | `assets/speaker_4_male` | | 8 | Kadın | `assets/speaker_8_female` |
+
+Klasör adı **id ile başlar** (`speaker_<id>_<cinsiyet>`). Eski kural
+(`{cinsiyet}_speaker_{n}`) cinsiyet içinde sayıyordu; o kuralla konuşmacı id 5
+`female_speaker_2` klasöründe otururdu ve hata ayıklayan biri bunu yanlış okurdu.
+
+Her konuşmacının bir de **etiketi** var (`label`) — operatörün oturum menüsünde
+gördüğü ad. Veriye yazılan şey id'dir; etiket yalnızca yüzü adlandırır.
 
 1. `config/experiment.yaml`'ı açın.
 2. **Gerçek oturum için** `speaker_selection.fixed_id`'yi istediğiniz id yapın:
@@ -73,19 +86,31 @@ Bu kadar. Yeni konuşmacı **hazır olduğu** için başka bir şey gerekmez.
 
 ## B. Yeni bir konuşmacı eklemek (kayıt + hazırlık)
 
-Diyelim yeni konuşmacı **id 3** olacak.
+Diyelim yeni konuşmacı **id 9** olacak.
 
 ### 1. Ham kayıtları yerleştirin
 
-`assets/` altına yeni bir klasör açın (ör. `assets/female_speaker_2/`) ve
+`assets/` altına yeni bir klasör açın (`assets/speaker_9_<cinsiyet>/`) ve
 **uyumlu çekimleri** koyun — her token için görsel ve işitsel **aynı** olan doğal
 kayıt:
 
 ```
-assets/female_speaker_2/Vis-ba_Aud-ba.mp4
-assets/female_speaker_2/Vis-da_Aud-da.mp4
-assets/female_speaker_2/Vis-ga_Aud-ga.mp4
+assets/speaker_9_female/Vis-ba_Aud-ba.mp4
+assets/speaker_9_female/Vis-da_Aud-da.mp4
+assets/speaker_9_female/Vis-ga_Aud-ga.mp4
 ```
+
+Kayıtlar `Vis-<g>_Aud-<s>_Speaker-<n>.mp4` desenli düz bir teslim klasöründen
+geliyorsa elle kopyalamayın:
+
+```bash
+python tools/import_speakers.py --dry-run --source <teslim_klasoru>
+```
+
+Bu araç yalnız uyumlu takeleri, config'in söylediği klasöre kopyalar; hedefte
+aynı içerik varsa atlar, **farklı** içerik varsa durur (sessizce üzerine yazmak,
+hazırlanmış setin hangi kayıttan geldiğini belirsizleştirirdi). `--dry-run`
+çıkarınca gerçekten kopyalar.
 
 - Dosya adları **tam olarak** `Vis-<token>_Aud-<token>.mp4` olmalı.
 - Token listesi `stimulus_prep.tokens` (şu an `[ba, da, ga]`) ile aynı olmalı.
@@ -102,13 +127,15 @@ assets/female_speaker_2/Vis-ga_Aud-ga.mp4
 ```yaml
 stimulus_prep:
   speakers:
-    - {id: 1, source: assets/female_speaker_1}
-    - {id: 2, source: assets/male_speaker_1}
-    - {id: 3, source: assets/female_speaker_2}   # yeni
+    - {id: 1, source: assets/speaker_1_female, label: "Konuşmacı 1 — Kadın"}
+    # ... 2-8 ...
+    - {id: 9, source: assets/speaker_9_female, label: "Konuşmacı 9 — Kadın"}  # yeni
   tokens: [ba, da, ga]
 ```
 
 - `id` benzersiz olmalı, `source` klasör benzersiz olmalı (şema kontrol eder).
+- `label` operatör menüsünde görünen addır; bir test her konuşmacının etiketi
+  olmasını şart koşar, yani etiketsiz bir satır menüde boş satır bırakamaz.
 
 ### 3. Uyaranları hazırlayın
 
@@ -137,10 +164,10 @@ A bölümündeki gibi:
 ```yaml
 speaker_selection:
   strategy: fixed
-  fixed_id: 3
+  fixed_id: 9
 ```
 
-(ya da `balanced`/`random` ile 3'ü de havuza dâhil edin; balanced/random
+(ya da `balanced`/`random` ile 9'u da havuza dâhil edin; balanced/random
 `stimulus_prep.speakers`'daki **tüm** id'ler arasında seçer.)
 
 Ardından:
@@ -149,14 +176,14 @@ Ardından:
 python -m mcgurk.config
 ```
 
-Hata yoksa hazır. Konuşmacı 3, artık gerçek oturumlarda sunulur.
+Hata yoksa hazır. Konuşmacı 9, artık gerçek oturumlarda sunulur.
 
 ---
 
 ## Kontrol listesi
 
 - [ ] Ham kayıtlar `assets/<klasör>/Vis-<t>_Aud-<t>.mp4` adıyla yerinde (her token)
-- [ ] `stimulus_prep.speakers`'a `{id, source}` eklendi (benzersiz)
+- [ ] `stimulus_prep.speakers`'a `{id, source, label}` eklendi (benzersiz)
 - [ ] `python tools/prepare_stimuli.py` hatasız bitti
 - [ ] `python tools/verify_stimuli.py` çıkış 0
 - [ ] `speaker_selection` (gerçek oturum) ve/veya `modules.*.speaker_id` (dev)

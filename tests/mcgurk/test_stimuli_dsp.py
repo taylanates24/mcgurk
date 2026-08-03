@@ -99,6 +99,70 @@ def test_leading_digital_silence_does_not_move_the_burst() -> None:
     assert measured == pytest.approx(0.8, abs=0.002)
 
 
+def _token_with_a_gradual_lead_in(
+    rng: np.random.Generator, burst_s: float, total_s: float = 2.0
+) -> np.ndarray:
+    """A token whose level creeps up before the burst, as real speech does.
+
+    Breath and lip noise put the 200 ms before the burst near the walk-back's
+    floor+3 dB line, which is where the frame grid used to decide the answer.
+    An abruptly starting synthetic token cannot show that.
+    """
+    signal = _quiet(int(total_s * SR), rng)
+    start = int(burst_s * SR)
+    lead = int(0.2 * SR)
+    ramp = np.linspace(1.0, 4.0, lead)
+    signal[start - lead : start] *= ramp
+    length = int(0.3 * SR)
+    time = np.arange(length) / SR
+    signal[start : start + length] += 0.3 * np.sin(2 * np.pi * 500 * time)
+    return signal
+
+
+def test_the_burst_moves_with_the_signal_and_nothing_else() -> None:
+    """Shifting the same waveform must move the reading by exactly the shift.
+
+    It did not: with abutting frames the reading depended on where the frame
+    grid fell, by up to 13 ms on the real corpus (Adım 12a).  Both the
+    alignment target and the token's own burst come from this function, so that
+    instability landed in the A/V offset the participant is presented with —
+    differently for each token.
+
+    The shifts step by **one sample**, covering every phase of the window.  A
+    coarser step is how this was nearly missed: stepping by the envelope's own
+    hop only ever samples one phase, and the measurement looks perfect.
+    """
+    rng = np.random.default_rng(7)
+    token = _token_with_a_gradual_lead_in(rng, 1.0)
+
+    readings = []
+    for shift in range(48):  # every phase of the 1 ms window
+        padded = np.concatenate([np.zeros(shift), token])
+        measured = dsp.detect_burst(
+            padded, SR, threshold_db=12.0, min_duration_ms=10.0
+        )
+        readings.append(measured - shift / SR)
+
+    assert max(readings) - min(readings) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_the_active_level_does_not_depend_on_the_window_phase() -> None:
+    """Same waveform, same level — whatever the alignment shift happened to be.
+
+    Aligning a token trims a few samples off the front, which used to move the
+    measured level by up to 1 dB on the noisier speakers: enough to fail the
+    prepared set's own 0.5 dB tolerance while the audio was in fact identical.
+    """
+    rng = np.random.default_rng(8)
+    token = _token_with_a_gradual_lead_in(rng, 1.0)
+
+    levels = [
+        dsp.active_speech_level_dbfs(token[shift:], SR, 30.0)
+        for shift in range(48)
+    ]
+    assert max(levels) - min(levels) == pytest.approx(0.0, abs=0.01)
+
+
 def test_a_signal_with_no_onset_is_an_error() -> None:
     """Uniform noise has no burst; guessing one would misalign every trial."""
     rng = np.random.default_rng(5)

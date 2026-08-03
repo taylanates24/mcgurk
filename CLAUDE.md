@@ -414,9 +414,9 @@ The tree below describes what is inside `legacy/` for reference only.
 ├── requirements.txt
 ├── main.py                      # Experiment entry point (PsychoPy)
 ├── admin.py                     # Admin panel entry point (PySide6)
-├── assets/
-│   ├── female_speaker_1/        # Vis-{x}_Aud-{y}.mp4
-│   ├── male_speaker_1/
+├── assets/                      # shared, not frozen — renamed in Adım 12a
+│   ├── speaker_1_female/        # Vis-{x}_Aud-{y}.mp4 (was female_speaker_1)
+│   ├── speaker_2_male/          # … through speaker_8_female
 │   └── noisy/                   # Pre-generated noisy versions
 ├── src/
 │   ├── __init__.py
@@ -461,7 +461,7 @@ The tree below describes what is inside `legacy/` for reference only.
 
 ## Asset Conventions
 - Video location: `assets/{speaker_folder}/Vis-{visual}_Aud-{audio}.mp4`
-- Speaker folders follow pattern: `{gender}_speaker_{n}` (e.g., `female_speaker_1`, `male_speaker_1`)
+- Speaker folders follow pattern: `speaker_{id}_{gender}` (e.g., `speaker_1_female`, `speaker_2_male`) — the id comes first and equals `speaker_id`. The old `{gender}_speaker_{n}` numbered within a gender, so speaker id 5 would have lived in `female_speaker_2` (renamed in Adım 12a). Eight speakers are prepared; a session uses one
 - **Auto-discovery**: speakers are detected at runtime by scanning `assets/` — adding a new folder like `female_speaker_2/` with the correct video files is enough, no code or config change needed
 - Syllables (Phase 1): `ba`, `da`, `ga`
 - Audio is embedded in the source video, but is **never played from it** — it is extracted to a separate wav and scheduled independently (see A/V sync strategy below)

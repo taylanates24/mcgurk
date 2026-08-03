@@ -993,6 +993,11 @@ class SpeakerSource(StrictModel):
 
     id: int = Field(ge=1)
     source: Path
+    #: What the operator reads when picking a speaker (Adım 12).  The id is
+    #: what goes into the data; this only names the person on screen, so it is
+    #: config rather than code (§A.9).  Optional because an older
+    #: ``sessions.config_snapshot`` has no label and still has to load.
+    label: str | None = None
 
 
 class VideoPrep(StrictModel):

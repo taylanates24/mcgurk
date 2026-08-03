@@ -22,12 +22,23 @@ def _build(data: dict[str, Any]) -> ExperimentConfig:
 
 def test_the_shipped_config_declares_its_speakers(config_dict: dict[str, Any]) -> None:
     config = _build(config_dict)
-    assert config.stimulus_prep.speaker_ids() == [1, 2]
-    assert config.stimulus_prep.source_for(2).as_posix().endswith("male_speaker_1")
+    assert config.stimulus_prep.speaker_ids() == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert config.stimulus_prep.source_for(2).as_posix().endswith("speaker_2_male")
+
+
+def test_every_speaker_has_a_name_the_operator_can_read(
+    config_dict: dict[str, Any]
+) -> None:
+    """The session menu (Adım 12) lists labels; an id is not a face.
+
+    Adding a ninth speaker without one would put a blank row in the menu.
+    """
+    for speaker in _build(config_dict).stimulus_prep.speakers:
+        assert speaker.label, f"konuşmacı {speaker.id} etiketsiz"
 
 
 def test_an_unknown_speaker_id_is_named(config_dict: dict[str, Any]) -> None:
-    config_dict["modules"]["mcgurk"]["speaker_id"] = 7
+    config_dict["modules"]["mcgurk"]["speaker_id"] = 99
     with pytest.raises(ValueError, match="olmayan speaker_id"):
         _build(config_dict)
 

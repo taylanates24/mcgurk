@@ -130,9 +130,17 @@ hata vermeden kaydırabilir. Pinleri gevşetmeyin.
 ### Uyaranlar
 
 Ham kayıtlar (`assets/`) ve hazırlanmış set (`stimuli/`) depoya dâhil değildir
-(`.gitignore`). Ham kayıt `assets/{cinsiyet}_speaker_{n}/Vis-{hece}_Aud-{hece}.mp4`
+(`.gitignore`). Ham kayıt `assets/speaker_{id}_{cinsiyet}/Vis-{hece}_Aud-{hece}.mp4`
 desenindeki **uyumlu** çekimlerdir; hangi klasörün hangi `speaker_id` olduğu
-`config/experiment.yaml` → `stimulus_prep` bölümünde yazılıdır.
+`config/experiment.yaml` → `stimulus_prep` bölümünde yazılıdır. Sekiz konuşmacı
+hazırdır (dördü kadın, dördü erkek); oturumda **biri** kullanılır, yani konuşmacı
+sayısı deneme sayısını değil seçeneği büyütür. Ayrıntı:
+[docs/KONUSMACI_DEGISTIRME.md](docs/KONUSMACI_DEGISTIRME.md).
+
+Teslim edilen ham kayıtlar `Vis-<g>_Aud-<s>_Speaker-<n>.mp4` desenli düz bir
+klasördeyse `python tools/import_speakers.py` yalnız uyumlu takeleri config'in
+gösterdiği klasörlere ayıklar; var olan ve **aynı** hedefi atlar, **farklı**
+hedefte durur.
 
 ### Hazırlanmış uyaran seti (`stimuli/`)
 

@@ -47,10 +47,13 @@ def test_fixed_speaker_uses_the_configured_id() -> None:
 def test_balanced_speaker_rotates_by_session_count(write_config, config_dict) -> None:
     config_dict["speaker_selection"]["strategy"] = "balanced"
     config = _load(config_dict, write_config)
-    ids = config.stimulus_prep.speaker_ids()  # [1, 2]
-    assert select_speaker(config, session_count=0, seed=1) == ids[0]
-    assert select_speaker(config, session_count=1, seed=1) == ids[1]
-    assert select_speaker(config, session_count=2, seed=1) == ids[0]  # wraps
+    # Derived, not written out: the shipped set went from two speakers to
+    # eight in Adım 12a, and a hard-coded pair would have said "wraps" about
+    # the third speaker.
+    ids = config.stimulus_prep.speaker_ids()
+    for count, expected in enumerate(ids):
+        assert select_speaker(config, session_count=count, seed=1) == expected
+    assert select_speaker(config, session_count=len(ids), seed=1) == ids[0]  # wraps
 
 
 def test_random_speaker_is_in_range_and_reproducible(write_config, config_dict) -> None:

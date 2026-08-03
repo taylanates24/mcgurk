@@ -327,18 +327,40 @@ konuşmacının gerçekten sunulduğu ekranlı test 12c'de.
   kadın konuşmacı). Menüdeki oturum sayısı sayacı bunu görünür kılar, ama
   **dengeleme kuralı danışman kararıdır** — `speaker_selection: balanced`
   bugün id sırasına göre döner, cinsiyete göre değil.
-- **Hazır set ~4 kat büyüyor** (2 -> 8 konuşmacı). Konuşmacıya bağlı olmayan
-  kısımlar (GIN segmentleri, gürültü, tonlar) paylaşılıyor, ama video/token/
-  gürültülü/dikotik dosyaları konuşmacı başına çoğalıyor. Sonuçları: hazırlama
-  daha uzun sürer, `stimuli/` klasörü operatörün `.exe` yanına kopyalayacağı
-  ölçüde büyür ve `.exe` yeniden derlemesinde taşınacak veri artar. **Gerçek
-  boyut 12a'da ölçülüp buraya yazılacak.**
-- **Bir konuşmacının hazırlığı takılabilir.** Patlama (burst) zamanları her
-  konuşmacı için ayrı ölçülüyor ve hat, `burst.alignment_tolerance_ms` ihlalinde
-  **durur** (yarım hazırlanmış set diye bir şey yok — §A.12). Yeni bir
-  konuşmacıda bu olursa seçenekler: o konuşmacıyı config'e almamak, ya da
-  eşiği/kaynağı gözden geçirmek. Toleransı "geçsin diye" gevşetmek **yasak** —
-  o eşik hizalamanın doğru yapıldığının tek kanıtı.
+- **Hazır set ~2.6 kat büyüdü** (2 -> 8 konuşmacı): **70 MB -> 185 MB**, 141
+  dosyadan 393 dosyaya (24 video, 72 token, 216 gürültülü, 48 dikotik).
+  Konuşmacıya bağlı olmayan kısımlar paylaşıldığı için 4 kat değil: GIN
+  segmentleri (25 MB), SSN (4.2 MB) ve tonlar tek kopya. Konuşmacı başına
+  ~20 MB ekleniyor (video 3.3 + ses 3.1 + gürültülü 9.2 + dikotik 4.1).
+  Hazırlama tek geçişte ~6 dakika sürüyor. Sonuçları: `stimuli/` operatörün
+  `.exe` yanına kopyalayacağı ölçüde büyür ve `.exe` yeniden derlemesinde
+  taşınacak veri 2.6 katına çıkar (12d).
+- **Bir konuşmacının hazırlığı takıldı — ve nedeni ölçüm katmanıydı (çözüldü).**
+  Hat konuşmacı 4'te durdu (`hizalama hatası 5.1 ms, tolerans 5.0`). Sebep
+  kayıt değil, `dsp.detect_burst`'ün kendisiydi: zarfı bitişik 1 ms'lik
+  karelerle örneklüyordu, yani **ölçüm kare ızgarasının fazına bağlıydı**. Aynı
+  dalga biçimi birkaç örnek kaydırılıp yeniden ölçüldüğünde sonuç 13 ms'ye
+  varan farkla değişiyordu (konuşmacı 1 /ba/: 12.98 ms; konuşmacı 2 /ga/: 8.92
+  ms — yani **hâlihazırda kullanılan iki konuşmacıda da vardı**). Hizalama
+  hedefi de token patlaması da bu fonksiyondan geldiği için belirsizlik doğrudan
+  sunulan uyaranın A/V ofsetine giriyordu, token başına farklı miktarda.
+  `active_speech_level_dbfs` aynı kusuru taşıyordu (1 dB'e varan sapma; seviye
+  toleransı 0.5 dB).
+  - **Çözüm:** her iki ölçüm de zarfı **örnek çözünürlüğünde** okuyor
+    (`dsp.rms_envelope`, kümülatif toplamla O(n)). 24 token'ın hepsinde
+    kaydırma yayılımı tam **0.000 ms / 0.000 dB**. Toleranslar **değişmedi**
+    (5.0 ms / 0.5 dB) ve set temiz doğrulanıyor ("en büyük sapma 0.0 ms").
+  - **Ara hop yetmiyor:** 0.125 ms'lik hop 24 token'ın 23'ünde işe yarıyor ama
+    konuşmacı 4 /da/ hâlâ 4.46 ms oynuyordu. Bunu ölçerken dikkat: kaydırma
+    adımı hop'un katı seçilirse ızgara fazı hiç değişmez ve ölçüm kusursuz
+    görünür — regresyon testi bu yüzden **tek örneklik** adımlarla ilerliyor.
+  - Toleransı "geçsin diye" gevşetmek **yasak**tı ve gevşetilmedi; düzeltilen
+    ölçümün kendisiydi. Danışmana anlatılırken bu ayrım önemli: patlama anı
+    tanımı değişmedi, tekrarlanabilir hale geldi.
+- **Konuşmacı başına patlama yayılımı** (12a ölçümü, tokenlar arası):
+  1 → 24.9 ms, **2 → 239.6 ms**, 3 → 15.4, 4 → 12.4, 5 → 6.7, **6 → 48.6**,
+  7 → 18.4, 8 → 17.7 ms. Konuşmacı 2 hâlâ açık ara en geniş olanı, yani
+  fotodiyot kontrolüne eklenecek konuşmacı odur (aşağıdaki not); 6 ikinci sırada.
 - **Deneme sayısı değişmez.** Oturum başına tek konuşmacı kullanıldığı için 797
   deneme / ~58.8 dk aynı kalır; konuşmacı sayısı tasarımı büyütmez, seçeneği
   büyütür.

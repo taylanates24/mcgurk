@@ -385,9 +385,24 @@ stimulus_prep:
   # congruent recordings of each speaker are used as sources: they are the
   # natural takes.  The six incongruent mp4s are an older re-mux of the same
   # tokens and are ignored.
+  #
+  # The folder name carries the id first (speaker_<id>_<cinsiyet>), not the old
+  # {cinsiyet}_speaker_{n}: that one numbered within a gender, so speaker id 5
+  # would have lived in "female_speaker_2" — exactly what someone debugging a
+  # session reads wrong.  Raw recordings are outside git (.gitignore); the
+  # folders are filled by tools/import_speakers.py from the delivery.
+  #
+  # "label" is what the operator picks from in the session menu (Adım 12).  The
+  # id is what is written to the data; the label only names the face.
   speakers:
-    - {id: 1, source: assets/female_speaker_1}
-    - {id: 2, source: assets/male_speaker_1}
+    - {id: 1, source: assets/speaker_1_female, label: "Konuşmacı 1 — Kadın"}
+    - {id: 2, source: assets/speaker_2_male, label: "Konuşmacı 2 — Erkek"}
+    - {id: 3, source: assets/speaker_3_male, label: "Konuşmacı 3 — Erkek"}
+    - {id: 4, source: assets/speaker_4_male, label: "Konuşmacı 4 — Erkek"}
+    - {id: 5, source: assets/speaker_5_female, label: "Konuşmacı 5 — Kadın"}
+    - {id: 6, source: assets/speaker_6_female, label: "Konuşmacı 6 — Kadın"}
+    - {id: 7, source: assets/speaker_7_male, label: "Konuşmacı 7 — Erkek"}
+    - {id: 8, source: assets/speaker_8_female, label: "Konuşmacı 8 — Kadın"}
   tokens: [ba, da, ga]
 
   video:
