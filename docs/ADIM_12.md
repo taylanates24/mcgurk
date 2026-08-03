@@ -1,0 +1,229 @@
+# ADIM 12 — Konuşmacı ve modül seçimi (operatör menüsü)
+
+> **Bu bir Adım 12 promptudur.** `docs/steps.md` §A (değişmez kurallar) ve §B
+> (her adımda işletilecek döngü: **önce plan-onay → uygula → doğrula → manuel
+> test → commit**) bu adım için de aynen geçerlidir. Alt adımlara böl
+> (12a/12b/12c), her birinde ayrı plan-onay/test/commit. `progress.md`'yi her
+> kapanışta güncelle. **Türkçe konuş, kod/commit İngilizce.**
+>
+> **Önce oku:** `mcgurk/ui/session.py` (oturum akışı ve `select_speaker`),
+> `mcgurk/ui/login.py` (diyalog deseni), `mcgurk/config/schema.py`
+> (doğrulayıcılar), `mcgurk/analysis/measures.py` (`session_measures`).
+
+## §0. Bağlam ve amaç
+
+**İstek danışmandan geldi (2026-08-03):** (1) birden fazla konuşmacı olsun ve
+menüden istediğimizi seçebilelim; (2) istediğimiz deneyleri koşabilelim —
+"sadece McGurk", "sadece dikotik" gibi.
+
+Bugün ikisi de yapılamıyor:
+
+- **Konuşmacı** `speaker_selection.strategy` ile config'ten geliyor
+  (`fixed` / `balanced` / `random`) ve oturum başında kod tarafında seçiliyor;
+  operatörün seçeceği bir yer yok.
+- **Modüller** `session.module_order`'daki her etkin modül sırayla koşuluyor
+  (`mcgurk/ui/session.py`, `_run_flow`); oturuma özel alt küme diye bir şey yok.
+
+**Amaç:** Operatör, oturum başında bir menüden **konuşmacıyı** ve **koşulacak
+modülleri** seçebilsin; seçim veriye doğru biçimde yansısın; kısmi oturumlara
+bölünen bir katılımcının sonuçları tek raporda birleşebilsin.
+
+### Zaten var olan altyapı (yeniden yazılmayacak)
+
+Bu adım büyük ölçüde **var olanı açığa çıkarmak**:
+
+| Ne | Nerede | Durum |
+|---|---|---|
+| İki konuşmacının hazır uyaran seti | `stimuli/manifest.json` | **Hazır** — 6 video, 18 token, 12 dikotik, 54 gürültülü kayıt; konuşmacı 1 (`female_speaker_1`) ve 2 (`male_speaker_1`) |
+| Konuşmacı seçme mantığı | `ui/session.py: select_speaker()` | `fixed`/`balanced`/`random` çalışıyor, saf ve testli |
+| Modülün konuşmacısını ezme | `modules/*.plan_trials(speaker_id=…)` | Çalışıyor — modülün config'teki `speaker_id`'sini eziyor |
+| Konuşmacının kaydı | `trials.design_extra.speaker_id`, `db.session_speaker_id()` | Çalışıyor; resume geri okuyor |
+| Koşmayan modülün analizde atlanması | `analysis/measures.py: session_measures()` | Çalışıyor — "koşmayan modül sonuçta yoktur" |
+| Resume'un snapshot'tan kurulması | `ui/session.py`, `config_from_snapshot` | Çalışıyor |
+
+**Eksik olan:** bir menü, konuşmacının okunabilir adı, oturuma özel modül alt
+kümesi, ve alt kümenin veriye yazılması.
+
+### Kullanıcı kararları (2026-08-03)
+
+1. **Menü her oturumda çıkar, önceden dolu gelir.** Tam tasarım ve config'teki
+   konuşmacı seçili gelir; Enter'a basmak bugünkü davranışın aynısıdır.
+2. **Katılımcının konuşmacısı değiştirilebilir, ama uyarılır.** Menü önceki
+   konuşmacıyı varsayılan yapar; başkası seçilirse onay ister ve
+   `operator_notes`'a yazar.
+3. **Katılımcı düzeyinde analiz bu adıma dahildir.** Modül seçimi, oturumların
+   bölünmesini yaygınlaştıracağı için `session_measures` tek başına yetmez.
+
+## §A12. Bu adıma özel değişmez kurallar
+
+`steps.md` §A'ya **ek olarak**:
+
+1. **Seçim, oturumun config anlık görüntüsüne yazılır.** Seçilmeyen modüller
+   snapshot'ta `enabled: false`, `session.module_order` kısaltılmış,
+   `speaker_selection` seçilen id'ye sabitlenmiş olur. Gerekçe: snapshot zaten
+   "bu oturumun tasarımı" demek (§G); alt kümeyi oraya yazmak resume'u, analizi
+   ve QC'yi **kendiliğinden** doğru kılar. Alternatif — `config/experiment.yaml`'ı
+   her oturumda elle değiştirmek — tasarımı herkes için değiştirirdi.
+   - Şema doğrulayıcıları bu kombinasyonu kabul ediyor (kontrol edildi):
+     `_module_order_matches_modules`, `_screens_cover_the_session`,
+     `_design_matches_the_stimulus_set`, `AVSRConfig._at_least_one_enabled_set`
+     hepsi devre dışı modülü atlıyor. **Bir test bunu kalıcı kılmalı:** türetilen
+     config `config_from_snapshot` turundan geçmeli.
+2. **Veritabanı şeması değişmez** — sürüm 5'te kalır. Seçim zaten snapshot'ta ve
+   `trials.design_extra.speaker_id`'de duruyor; yeni bir sütun ikinci bir doğruluk
+   kaynağı olurdu.
+3. **Varsayılan davranış değişmez.** Menü önceden dolu gelir; hiçbir şeye
+   dokunmadan onaylamak Adım 8'deki oturumun aynısını koşar.
+4. **Seçim mantığı GUI'den ayrı ve CI-testli** (§A10.3). Karar
+   `mcgurk/config/selection.py`'de (PsychoPy'siz, PyQt6'siz); diyalog ince kabuk,
+   `ui/login.py`'deki `build_participant` / `show_login_dialog` ayrımı gibi.
+5. **Parametreler config'ten** (§A.9). Konuşmacı adları koda gömülmez —
+   `stimulus_prep.speakers[].label`.
+6. **cp1254-güvenli** metinler (`test_console_encoding.py`).
+7. **Kısmi oturum gizlenmez.** QC raporu ve panel, yalnız bir alt kümenin
+   koşulduğu oturumu açıkça işaretler; kısmi bir oturumu tam sanmak, eksik
+   modülü "veri yok" diye okumaya yol açar.
+
+## §C12. Alt adımlar
+
+### ADIM 12a — Seçim çekirdeği + CLI (GUI'siz, CI-testli)
+
+**Yapılacaklar:**
+
+- **`mcgurk/config/selection.py`** (yeni, saf):
+  - `SessionSelection` — `speaker_id`, `modules: tuple[str, ...]`, `practice: bool`,
+    `cross_hearing: bool`.
+  - `available_speakers(config) -> list[SpeakerChoice]` — id + etiket + kaynak.
+  - `available_modules(config) -> list[ModuleChoice]` — ad, Türkçe etiket, deneme
+    sayısı (`config.trial_counts()`'tan).
+  - `default_selection(config, *, session_count, seed) -> SessionSelection` —
+    bugünkü davranış: tam tasarım + `speaker_selection` stratejisinin verdiği
+    konuşmacı.
+  - `apply(config, selection) -> ExperimentConfig` — derin kopya üzerinde
+    §A12.1'i uygular; sonucu `model_validate` turundan geçirip döndürür.
+  - `SelectionError(ConfigError)` — hiç ölçüm modülü seçilmemiş, bilinmeyen modül
+    adı, hazır sette olmayan konuşmacı.
+  - `select_speaker()` buraya **taşınır** (`ui/session.py:87`'den; zaten saf ve
+    testli), `ui.session`'dan yeniden dışa verilir ki mevcut testler kırılmasın.
+- **`mcgurk/config/schema.py`**: `SpeakerSource.label: str | None` — operatöre
+  gösterilen ad. Opsiyonel, çünkü eski `sessions.config_snapshot` kayıtlarının
+  yeniden kurulabilmesi gerekiyor.
+- **`config/experiment.yaml`**: iki konuşmacıya etiket ("Kadın konuşmacı 1",
+  "Erkek konuşmacı 1").
+- **`mcgurk/ui/__main__.py`**: `--speaker N`, `--modules mcgurk,dichotic`,
+  `--no-practice`, `--no-cross-hearing`, `--no-ask` (menüyü atla).
+- **`mcgurk/ui/session.py`**: `run_session(..., selection=None, ask=True)`;
+  seçim `start_session`'dan **önce** uygulanır, akışın tamamı türetilen config'i
+  kullanır.
+
+**Kabul kriterleri:**
+- [ ] Alt küme uygulanınca `trial_counts()` yalnız seçilenleri sayıyor — test
+- [ ] Türetilen config `config_from_snapshot` turundan geçiyor (her doğrulayıcı
+      hâlâ memnun) — test
+- [ ] Seçilen konuşmacı `speaker_selection.fixed_id` ve ilgili dört modülün
+      `speaker_id`'sine yazılıyor; `required_speaker_ids()` onu içeriyor — test
+- [ ] Ölçüm modülü seçilmeyince / bilinmeyen ad / hazır olmayan konuşmacı →
+      `SelectionError` — test
+- [ ] `--modules` + `--speaker` uçtan uca çalışıyor (`--dry-run` yok; `--limit`
+      ile kısa koşu)
+- [ ] `ruff` + `mypy` temiz; `pytest -m "not psychopy"` yeşil (yerel **ve**
+      Qt'siz CI venv'inde)
+
+**Manuel test:** ekran gerekmez (CLI bayrakları ekranlı testte 12b ile birlikte).
+
+### ADIM 12b — Operatör menüsü (PsychoPy diyaloğu)
+
+**Yapılacaklar:**
+
+- **`mcgurk/ui/setup_dialog.py`** (yeni): girişten **sonra**, tam ekran pencere
+  açılmadan **önce** bir `gui.DlgFromDict`. `login.py` deseni: `build_selection(
+  fields, ...)` saf ve CI-testli, `ask_session_setup(...)` ince kabuk.
+  - Alanlar: **Konuşmacı** (etiketli liste), her ölçüm modülü için onay,
+    **Alıştırma**, **Çapraz dinleme kontrolü**.
+  - Başlıkta/alanlarda bilgi: katılımcının **önceki konuşmacısı** ve konuşmacı
+    başına oturum sayısı — elle dengeleme için (`balanced` stratejisi artık
+    yalnızca ön seçim).
+  - İptal → oturum başlatılmaz (girişteki davranışın aynısı).
+- **Farklı konuşmacı uyarısı:** katılımcının önceki oturumlarında başka bir
+  konuşmacı kullanılmışsa onay istenir ve seçim `operator_notes`'a yazılır.
+- **Resume'da menü çıkmaz** — yarım oturum kendi snapshot'ıyla devam eder; menü
+  göstermek, snapshot'ın taşıdığı tasarımla çelişebilecek bir seçim sunardı.
+- **`mcgurk/db/database.py`**: `participant_speaker_id(participant_id)` ve
+  `speaker_session_counts()` — salt okuma, şema değişmez.
+- **`operator_notes`** artık seçimi de taşır (konuşmacı, koşulan modüller).
+
+**Kabul kriterleri:**
+- [ ] Menü girişten sonra çıkıyor, **tam tasarım ve config'teki konuşmacı
+      önceden seçili**; onaylamak Adım 8 oturumunun aynısını koşuyor
+- [ ] Tek modül seçilince yalnız o koşuyor; oturum `completed` bitiyor
+- [ ] Kısmi oturumdan sonra aynı katılımcıyla yeni oturum açılınca "kaldığı
+      yerden devam?" **sorulmuyor** (kısmi oturum tamamlanmış sayılır)
+- [ ] Kısmi oturum yarıda kesilirse resume **yalnız o alt kümeyi** sürdürüyor
+- [ ] Konuşmacı 2 seçilince gerçekten konuşmacı 2'nin kayıtları sunuluyor
+- [ ] Farklı konuşmacı seçilince onay isteniyor ve nota yazılıyor
+- [ ] Metinler Türkçe; `build_selection` CI-testli
+
+**Manuel test:** ekran + ses gerekir (`TEST_ADIM_12.md`).
+
+### ADIM 12c — Katılımcı düzeyinde analiz + panel + paketleme
+
+**Yapılacaklar:**
+
+- **`mcgurk/analysis/measures.py`**: `participant_measures(db, participant_code)`
+  — katılımcının **tüm** oturumlarını modül modül birleştirir, her oturumun kendi
+  snapshot'ı ve tohumuyla.
+  - **Bir modül birden fazla oturumda varsa havuzlanmaz.** İkisi ayrı raporlanır
+    ve tekrar olarak işaretlenir: aynı modülün iki koşumunu sessizce havuzlamak
+    alışma etkisini veriye gömer.
+- **`mcgurk/analysis/qc_report.py`**: kısmi oturum açıkça işaretlenir (§A12.7) —
+  "kısmi oturum: yalnız X, Y koşuldu; katılımcının diğer oturumlarına da bakın".
+- **`mcgurk/panel/`**: **"Katılımcı analizi"** düğmesi (`core` sarmalayıcısı +
+  Panel sekmesinde buton). Panelin "Oturum başlat"ına **yeni bayrak gerekmiyor** —
+  menü zaten her oturumda çıkıyor.
+- **`.exe` yeniden derlenir.** Derleme `dist/McGurkSSD/`'yi tamamen sildiği için
+  `stimuli/`, `config/`, `logs/`, `backups/` önce taşınır, sonra geri konur
+  (Adım 11 dersi, `progress.md`).
+- **`TEST_ADIM_12.md`**, `progress.md`, `CLAUDE.md` güncellenir.
+
+**Kabul kriterleri:**
+- [ ] `participant_measures` iki kısmi oturumu tek raporda birleştiriyor — test
+- [ ] Aynı modül iki oturumda varsa havuzlanmıyor, işaretleniyor — test
+- [ ] QC raporu kısmi oturumu işaretliyor — test
+- [ ] Panelde "Katılımcı analizi" çalışıyor (offscreen smoke)
+- [ ] `.exe`'de menü çıkıyor, konuşmacı 2 ve tek modül seçimi çalışıyor
+- [ ] `ruff` + `mypy` temiz; testler yerel **ve** Qt'siz CI venv'inde yeşil
+
+**Manuel test:** ekran gerekir; paketlenmiş app dahil.
+
+## §D12. Bilinen riskler / açık noktalar
+
+- **Konuşmacı 2 hazır ama hiçbir oturumda koşulmadı.** Uyaran seti manifest'te
+  tam, ama sunum yolu yalnız konuşmacı 1 ile denendi. 12b'nin manuel testinde
+  konuşmacı 2 ile açık bir koşu var.
+- **Konuşmacı 2'nin token'ları arasında 248 ms patlama farkı var** (Adım 2
+  ölçümü). Hizalama düzeltiyor, ama `progress.md`'deki not duruyor: fotodiyot
+  ölçümü (`01_av_gecikme_olcumu.md`) yapılırken **konuşmacı 2'nin bir uyumsuz
+  denemesiyle de bir kontrol koşulmalı**. Bu adım o notu daha acil kılıyor,
+  çünkü artık konuşmacı 2 gerçekten sunulacak.
+- **Denek-içi konuşmacı karışması.** Kullanıcı kararı: uyar ama izin ver. Bir
+  katılımcının modülleri iki farklı konuşmacıyla ölçülürse bu bir tasarım
+  sorunudur; kod görünür kılar, kararı operatör verir.
+- **Her oturumda bir ekran daha.** Önceden dolu geldiği için maliyeti bir Enter;
+  yine de akışa eklenen ilk "operatör kapısı"dır.
+- **`balanced` / `random` stratejileri artık son söz değil**, menünün ön
+  seçimidir. Dengeleme elle yapılacaksa menüdeki oturum sayısı sayacı buna
+  hizmet eder.
+- **Kısmi oturum + `data_collection` modu.** Yasaklanmadı: bir katılımcının
+  oturumu güne bölmek gerçek bir klinik ihtiyaç. Karşılığı §A12.7'deki
+  işaretleme ve katılımcı düzeyinde analiz.
+- **§F.1 hâlâ açık.** Modül seçimi, tekrar sayısı kararını (Adım 11'in Ayarlar
+  sekmesi) etkilemez; ikisi bağımsız.
+
+## §E12. Kapanış
+
+Adım 12 bitince:
+1. Paketlenmiş app'i yeniden derle ve menüyü **paketlenmiş halde** doğrula
+   (`dist/` içeriğini önce taşımayı unutma).
+2. `progress.md` ve `CLAUDE.md` güncelle.
+3. Sonrası değişmedi: **prova oturumu** → varsa düzeltme → `develop → master`
+   merge + `git tag v1.0.0`.
