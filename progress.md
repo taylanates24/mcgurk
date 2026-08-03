@@ -1,10 +1,11 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
 Son güncelleme: 2026-08-03
-Aktif adım: **12 — konuşmacı ve modül seçimi** (`docs/ADIM_12.md`). 12a TAMAMLANDI
-(konuşmacı seti 2 -> 8; bu sırada patlama/seviye ölçümünün kare-fazına
-bağımlılığı bulundu ve düzeltildi — hazır set yeniden üretildi). Sıra **12b**:
-seçim çekirdeği + CLI.
+Aktif adım: **12 — konuşmacı ve modül seçimi** (`docs/ADIM_12.md`). 12a
+TAMAMLANDI (konuşmacı seti 2 -> 8; bu sırada patlama/seviye ölçümünün
+kare-fazına bağımlılığı bulundu ve düzeltildi — hazır set yeniden üretildi).
+12b TAMAMLANDI (seçim çekirdeği + CLI bayrakları; seçim config'e uygulanıp
+snapshot'a yazılıyor). Sıra **12c**: operatör menüsü (PsychoPy diyaloğu).
 
 Önceki durum: 10 TAMAMLANDI (kod + paketleme + manuel doğrulama, 2026-08-01). **Paketlenmiş `.exe` uçtan uca çalışıyor** (panel açılıyor, deney PsychoPy exe içinde koşuyor, yazmalar writable konuma gidiyor, Türkçe düzgün, analiz/QC/export çalışıyor). Sıra: **prova oturumu (paketlenmiş app) → develop→master merge + `git tag v1.0.0`** (kullanıcı onayıyla).
 
@@ -38,7 +39,7 @@ seçim çekirdeği + CLI.
 | 11a | Config-düzenleme çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-08-02 | `e946eb9` |
 | 11b | PyQt6 "Ayarlar" sekmesi | TAMAMLANDI | 2026-08-02 | `f669199` |
 | 12a | Konuşmacı seti 2 -> 8 (+ patlama/seviye ölçümü düzeltmesi) | TAMAMLANDI | 2026-08-03 | `119a45c` |
-| 12b | Seçim çekirdeği + CLI (GUI'siz) | GELİŞTİRİLİYOR | | |
+| 12b | Seçim çekirdeği + CLI (GUI'siz) | TAMAMLANDI | 2026-08-03 | `ef446e8` |
 | 12c | Operatör menüsü (PsychoPy diyaloğu) | BEKLİYOR | | |
 | 12d | Katılımcı düzeyinde analiz + panel + paketleme | BEKLİYOR | | |
 
@@ -2635,6 +2636,61 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     — 12d'de `dist/McGurkSSD/` silinmeden önce taşıma adımı daha uzun sürecek.
   - Konuşmacı 3–8'in kayıtları **hiçbir oturumda sunulmadı**; ilk ekranlı koşu
     12c'nin manuel testinde.
+
+### Adım 12b — Seçim çekirdeği + CLI (GUI'siz, CI-testli)
+- **Durum:** TAMAMLANDI (kullanıcı manuel testi 2026-08-03'te geçti — `TEST_ADIM_12B.md`)
+- **Tamamlanma:** 2026-08-03
+- **Commit:** `ef446e8`
+- **Ne yapıldı:**
+  - **`mcgurk/config/selection.py`** (yeni, saf — PsychoPy'siz/PyQt6'sız):
+    `SessionSelection`, `SpeakerChoice`, `ModuleChoice`, `available_speakers`,
+    `available_modules`, `default_selection`, `apply`, `SelectionError`,
+    `SPEAKER_MODULES`, `MODULE_LABELS`.
+  - **`select_speaker` taşındı** (`ui/session.py` -> `config/selection.py`) ve
+    `ui.session`'dan yeniden dışa verildi; `SPEAKER_MODULES` de oraya taşındı
+    (tek tanım, iki tüketici).
+  - **`mcgurk/ui/session.py`**: `run_session(..., selection=None)`; seçim
+    `start_session`'dan **önce** uygulanıyor. Devam eden oturum kendi
+    snapshot'ıyla koşuyor ve seçimi log'a yazarak yok sayıyor.
+  - **`mcgurk/ui/__main__.py`**: `--speaker N`, `--modules a,b`,
+    `--no-practice`, `--no-cross-hearing`; parser `build_parser()`e ayrıldı ki
+    bayraklar test edilebilsin.
+  - **Testler:** `test_config_selection.py` (16) + `test_ui_entry_selection.py`
+    (7) + `test_ui_session.py`'nin `select_speaker` testleri (yeniden dışa
+    verim sayesinde değişmedi).
+- **Alınan kararlar:**
+  - **Seçim config'e uygulanıyor, yanında taşınmıyor (§A12.1).** `apply` config'i
+    kendi JSON biçiminden geçiriyor — `sessions.config_snapshot`'ın sakladığı ve
+    `config_from_snapshot`'ın geri okuduğu biçimin aynısı — yani şemanın
+    reddedeceği bir şey **menüde** reddediliyor, oturumun ortasında değil. Bir
+    test alt küme uygulanmış config'i snapshot turundan geçiriyor.
+  - **`speaker_id` isteğe bağlı (`None`).** `--modules` tek başına verildiğinde
+    konuşmacıyı ezmemeli; `None` = "operatör seçmedi, `speaker_selection` karar
+    versin". Menü (12c) her zaman dolduracak, komut satırı zorunda değil.
+  - **Config'te kapalı bir modül seçilemez** (`SelectionError`). Hangi
+    modüllerin var olduğu tasarımın kendisi (§A.9); menü onun **içinden** seçer.
+  - **Sıra config'ten gelir.** `--modules dichotic,mcgurk` verilse de sıra
+    `module_order`'ınki: operatör hangi modüllerin koşacağını seçer, hangi
+    sırada koşacağını değil.
+  - **Hatalı seçim komut satırında yakalanıyor** (`_selection_from` içinde
+    `apply` çağrılarak), giriş diyaloğu ve kontrol listesi açılmadan: yanlış
+    yazılmış bir modül adı katılımcı ekranda beklerken keşfedilmemeli.
+  - **Operatöre gösterilen modül adları kodda** (`MODULE_LABELS`), config'te
+    değil: §A.9 **katılımcıya** gösterilen metni kapsıyor, operatör metni değil
+    (panelin `_MODULE_TITLES`'ı da öyle).
+- **Doğrulama:** `pytest` 979 passed / 59 skipped (yerel); `-m "not psychopy"`
+  978 passed / 26 skipped; `ruff` + `mypy` temiz (135 dosya).
+- **Bilinen sınırlar / sonraki adıma not:**
+  - **`--no-ask` yok** — atlanacak bir soru henüz yok; bayrak 12c'de menüyle
+    birlikte gelmeli.
+  - **`operator_notes` seçimi taşımıyor** (12c'nin işi, farklı konuşmacı
+    uyarısıyla birlikte). Seçim şimdilik yalnız snapshot'ta.
+  - **Kontrol listesi seçimi bilmiyor ve bilemez:** 12c'de menü kontrol
+    listesinden *sonra* çıkacak. Sonucu — yalnız oddball koşulacakken konuşma
+    uyaranları eksikse kontrol listesi yine KIRMIZI verir. Kurulumu doğruluyor,
+    oturumun alt kümesini değil.
+  - **Bir kez ölümcül pytest çökmesi** görüldü (test hatası değil, yorumlayıcı
+    seviyesinde). Sonraki üç tam koşu temiz; tekrarlarsa araştırılmalı.
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 
