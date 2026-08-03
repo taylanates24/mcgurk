@@ -435,6 +435,132 @@ def write_reps(
         ) from exc
 
 
+# ------------------------------------------------------- speaker (Adım 12c-ii)
+
+#: The keys a speaker change writes.  ``speaker_selection.fixed_id`` is what a
+#: real session reads; the four ``modules.*.speaker_id`` are the defaults the
+#: dev tools and the design summary use, and leaving them behind would make
+#: ``python -m mcgurk.config`` describe a different speaker than the one that
+#: gets presented.
+_SPEAKER_MODULE_KEYS = ("mcgurk", "avsr", "tbw", "dichotic")
+
+
+@dataclass(frozen=True)
+class SpeakerOption:
+    """One row of the panel's "Konuşmacı" tab."""
+
+    speaker_id: int
+    label: str
+    #: The still prepared in Adım 12c-ii, or None if the set has none.
+    image: Path | None
+    #: How many sessions have used this speaker so far (the panel fills it in).
+    n_sessions: int = 0
+    selected: bool = False
+
+
+def read_speaker(config: ExperimentConfig) -> int | None:
+    """The speaker a session would use today, or None if it is not pinned.
+
+    None means ``speaker_selection.strategy`` is ``balanced`` or ``random``: the
+    speaker is then decided per session and there is nothing for the tab to tick.
+    """
+    if config.speaker_selection.strategy != "fixed":
+        return None
+    return config.speaker_selection.fixed_id
+
+
+def speaker_options(
+    config: ExperimentConfig,
+    stimuli_root: Path | str | None = None,
+    *,
+    session_counts: Mapping[int, int] | None = None,
+) -> list[SpeakerOption]:
+    """Every prepared speaker, with its still and whether it is the current one.
+
+    The stills come from the prepared set's own folder rather than the manifest
+    so this stays importable and testable without one; a missing file simply
+    yields ``image=None`` and the tab shows the label alone.
+    """
+    current = read_speaker(config)
+    counts = session_counts or {}
+    root = Path(stimuli_root) if stimuli_root is not None else None
+    options: list[SpeakerOption] = []
+    for speaker in config.stimulus_prep.speakers:
+        image = None
+        if root is not None:
+            candidate = root / "thumbnails" / f"speaker_{speaker.id}.png"
+            image = candidate if candidate.is_file() else None
+        options.append(
+            SpeakerOption(
+                speaker_id=speaker.id,
+                label=speaker.label or f"Konuşmacı {speaker.id}",
+                image=image,
+                n_sessions=int(counts.get(speaker.id, 0)),
+                selected=speaker.id == current,
+            )
+        )
+    return options
+
+
+def write_speaker(
+    config_path: Path | str,
+    project_root: Path | str,
+    speaker_id: int,
+) -> ExperimentConfig:
+    """Pin *speaker_id* in *config_path* and re-validate.
+
+    Writes ``speaker_selection`` (``fixed`` + the id) and the four
+    ``modules.*.speaker_id`` in one go: a session reads the first, the dev tools
+    and the design summary read the second, and letting them disagree is how a
+    "check" ends up describing a speaker that is not the one presented.
+
+    Comments survive and a config the schema refuses is rolled back — the same
+    two rules as :func:`write_reps`, for the same reasons.
+    """
+    path = Path(config_path)
+    try:
+        original = path.read_bytes().decode("utf-8")
+    except OSError as exc:
+        raise ConfigError(f"Config dosyası okunamadı: {path} ({exc})") from exc
+
+    yaml_rt = _round_trip_yaml()
+    try:
+        document = yaml_rt.load(original)
+    except YAMLError as exc:
+        raise ConfigError(f"Config geçerli YAML değil: {path}\n{exc}") from exc
+    if not isinstance(document, Mapping):
+        raise ConfigError(f"Config bir eşleme (mapping) olmalı: {path}")
+
+    prepared = [
+        _as_int(entry.get("id"))
+        for entry in _sequence(_mapping(document.get("stimulus_prep")).get("speakers"))
+    ]
+    if speaker_id not in prepared:
+        raise ConfigError(
+            f"Hazır sette olmayan konuşmacı: {speaker_id}. "
+            f"Hazır olanlar: {', '.join(str(i) for i in prepared if i is not None)}"
+        )
+
+    selection = document["speaker_selection"]
+    selection["strategy"] = "fixed"
+    selection["fixed_id"] = int(speaker_id)
+    for name in _SPEAKER_MODULE_KEYS:
+        document["modules"][name]["speaker_id"] = int(speaker_id)
+
+    buffer = io.StringIO()
+    yaml_rt.dump(document, buffer)
+    _atomic_write(path, buffer.getvalue())
+
+    try:
+        return load_config(path, project_root=project_root, check_filesystem=False)
+    except ConfigError as exc:
+        _atomic_write(path, original)
+        raise ConfigError(
+            "Konuşmacı kaydedilmedi: seçim geçerli bir tasarım vermiyor, dosya "
+            f"eski hâline geri alındı ({path}).\n{exc}"
+        ) from exc
+
+
 def default_reps(root: Path | str | None = None) -> dict[str, int]:
     """The factory repetition counts, keyed exactly like :class:`RepField`.
 

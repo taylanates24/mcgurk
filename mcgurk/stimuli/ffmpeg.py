@@ -228,6 +228,37 @@ def extract_audio(source: Path, destination: Path, *, sample_rate: int) -> None:
     )
 
 
+def extract_frame(source: Path, destination: Path, *, at_s: float) -> None:
+    """Write one frame of *source* as a PNG, at the video's own resolution.
+
+    The operator's speaker picker shows these (Adım 12c-ii): a face is what
+    "konuşmacı 5" means to the person choosing, and an id is not.  Produced
+    offline like everything else that reaches a session (§A.12) — a session
+    never shells out to ffmpeg.
+
+    Not scaled here: the recording's resolution is the resolution, and the
+    interface showing it decides how big to draw it.  Writing a fixed width
+    would bake one interface's layout into the prepared set.
+
+    PNG rather than JPEG: it is a still of a face that gets looked at closely
+    while choosing, and the files are a few hundred kB either way.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    run(
+        "-y",
+        # Seeking before -i is the fast path and is frame-accurate here: the
+        # prepared videos are all-intra, so every frame is a seek point.
+        "-ss", f"{at_s:.3f}",
+        "-i", str(source),
+        "-frames:v", "1",
+        str(destination),
+    )
+    if not destination.is_file():
+        raise FFmpegError(
+            f"Küçük resim üretilemedi: {destination} ({at_s:.3f} s, {source})"
+        )
+
+
 def write_silent_video(
     source: Path,
     destination: Path,

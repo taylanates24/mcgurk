@@ -42,11 +42,13 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QCloseEvent, QFont
+from PyQt6.QtGui import QCloseEvent, QFont, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -55,6 +57,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QRadioButton,
     QScrollArea,
     QSpinBox,
     QSplitter,
@@ -85,6 +88,25 @@ _MODULE_TITLES = {
     "dichotic": "Modül 5 — Dikotik dinleme",
     "cross_hearing": "Çapraz dinleme kontrolü",
 }
+
+#: Speaker tile geometry.  The prepared stills are the recording's own size
+#: (640x480); these are how big this window draws them.
+_SPEAKER_TILE_WIDTH = 240
+_SPEAKER_TILE_HEIGHT = 180
+_SPEAKER_COLUMNS = 4
+
+#: Shown above the speaker grid.  The warning matters because the choice is
+#: silent otherwise: nothing on the session screens says which face is being
+#: presented, and a participant measured with two of them across sessions is a
+#: broken within-subject comparison that the numbers will not reveal.
+_SPEAKER_NOTICE = (
+    "Oturumlarda sunulacak konuşmacıyı buradan seçin. Seçim "
+    "config/experiment.yaml'a yazılır ve BUNDAN SONRAKİ oturumlar için "
+    "geçerlidir; geçmiş veriler değişmez (her oturum kendi ayarını kaydeder).\n"
+    "Bir katılımcının bütün modülleri AYNI konuşmacıyla ölçülmelidir — farklı "
+    "yüzlerle ölçmek denek-içi karşılaştırmayı bozar. Katılımcı daha önce başka "
+    "bir konuşmacıyla ölçülmüşse oturum başlarken uyarı çıkar."
+)
 
 #: Shown above the spin boxes.  §A11.5: the operator has to know that raising a
 #: count is safe for the data already collected — and that it is *not* safe for
@@ -165,6 +187,7 @@ class PanelWindow(QMainWindow):
     def _build_ui(self) -> None:
         tabs = QTabWidget()
         tabs.addTab(self._build_panel_tab(), "Panel")
+        tabs.addTab(self._build_speaker_tab(), "Konuşmacı")
         tabs.addTab(self._build_settings_tab(), "Ayarlar")
         self.setCentralWidget(tabs)
         self._tabs = tabs
@@ -244,6 +267,132 @@ class PanelWindow(QMainWindow):
         return group
 
     # -- Ayarlar tab (Adım 11b) -------------------------------------------
+
+    def _build_speaker_tab(self) -> QWidget:
+        """The prepared speakers as photographs, one of them ticked.
+
+        A face is what "konuşmacı 5" means to the person choosing; an id is not,
+        and neither is a folder name.  The choice is written into
+        ``config/experiment.yaml`` rather than asked at the start of each
+        session: one participant is measured with one face, so this is a
+        property of the installation, not of the sitting (Adım 12c-ii).
+        """
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        notice = QLabel(_SPEAKER_NOTICE)
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        inner = QWidget()
+        self._speaker_grid = QGridLayout(inner)
+        self._speaker_buttons = QButtonGroup(self)
+        self._speaker_buttons.setExclusive(True)
+        scroll.setWidget(inner)
+        layout.addWidget(scroll, stretch=1)
+
+        row = QHBoxLayout()
+        row.addWidget(self._button("Konuşmacıyı kaydet", self.save_speaker))
+        row.addStretch()
+        layout.addLayout(row)
+
+        self._speaker_status = QLabel()
+        self._speaker_status.setWordWrap(True)
+        layout.addWidget(self._speaker_status)
+
+        self._reload_speaker_tiles()
+        return page
+
+    def _reload_speaker_tiles(self) -> None:
+        """Rebuild the grid from the config and the prepared stills."""
+        for button in list(self._speaker_buttons.buttons()):
+            self._speaker_buttons.removeButton(button)
+        while self._speaker_grid.count():
+            item = self._speaker_grid.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.deleteLater()
+
+        try:
+            options = core.speaker_options(
+                self._config, self._runtime, db_path=self._db_path
+            )
+        except core.PanelError as exc:  # pragma: no cover - unreadable database
+            self._speaker_status.setText(f"Konuşmacılar okunamadı: {exc}")
+            return
+
+        for index, option in enumerate(options):
+            tile = QGroupBox()
+            tile_layout = QVBoxLayout(tile)
+
+            picture = QLabel()
+            picture.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            if option.image is not None:
+                pixmap = QPixmap(str(option.image))
+                if not pixmap.isNull():
+                    # Scaled to fit rather than written small: the prepared still
+                    # is the recording's own resolution, and how big to draw it
+                    # is this window's business (Adım 12c-ii).
+                    picture.setPixmap(
+                        pixmap.scaled(
+                            _SPEAKER_TILE_WIDTH,
+                            _SPEAKER_TILE_HEIGHT,
+                            Qt.AspectRatioMode.KeepAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                    )
+            if picture.pixmap() is None or picture.pixmap().isNull():
+                picture.setText("(resim yok)")
+                picture.setFixedSize(_SPEAKER_TILE_WIDTH, _SPEAKER_TILE_HEIGHT)
+            tile_layout.addWidget(picture)
+
+            choice = QRadioButton(f"{option.label}  ({option.n_sessions} oturum)")
+            choice.setChecked(option.selected)
+            self._speaker_buttons.addButton(choice, option.speaker_id)
+            tile_layout.addWidget(choice)
+
+            self._speaker_grid.addWidget(
+                tile, index // _SPEAKER_COLUMNS, index % _SPEAKER_COLUMNS
+            )
+
+        current = self._speaker_buttons.checkedId()
+        if current < 0:
+            self._speaker_status.setText(
+                "Config'te sabit bir konuşmacı yok (speaker_selection.strategy "
+                "'fixed' değil). Birini seçip kaydedin."
+            )
+        else:
+            self._speaker_status.setText(
+                f"Şu anki konuşmacı: {current}. Oturumlar bunu kullanır."
+            )
+
+    def save_speaker(self) -> None:
+        """Write the ticked speaker into the config, validate, roll back on error."""
+        if self._is_busy():
+            return
+        speaker_id = self._speaker_buttons.checkedId()
+        if speaker_id < 0:
+            QMessageBox.information(
+                self, "Konuşmacı", "Önce bir konuşmacı seçin."
+            )
+            return
+        try:
+            config = core.save_speaker(
+                self._config_path, self._runtime.writable_root, speaker_id
+            )
+        except core.ConfigError as exc:
+            self._append(f"[Konuşmacı] HATA: {exc}")
+            QMessageBox.critical(self, "Konuşmacı kaydedilemedi", str(exc))
+            return
+        self._config = config
+        self._reload_speaker_tiles()
+        self._append(
+            f"\n[Konuşmacı] kaydedildi: konuşmacı {speaker_id} "
+            f"({self._config_path}). Bundan sonraki oturumlar bu yüzü kullanır."
+        )
+        self._show_status(f"Konuşmacı kaydedildi - {speaker_id}")
 
     def _build_settings_tab(self) -> QWidget:
         """Spin boxes over the editable trial counts, with a live total."""

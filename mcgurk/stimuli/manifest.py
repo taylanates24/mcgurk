@@ -170,6 +170,25 @@ class ToneEntry(StrictModel):
     peak_dbfs: float
 
 
+class ThumbnailEntry(StrictModel):
+    """One still of a speaker's face, for the operator's session menu.
+
+    Never presented to a participant — it is how the operator recognises who
+    "konuşmacı 5" is.  It lives in the prepared set rather than being grabbed at
+    run time because a session must not shell out to ffmpeg (§A.12), and because
+    a picture of the wrong person is exactly the kind of mistake a manifest and
+    a checksum exist to catch.
+    """
+
+    speaker_id: int
+    file: MediaFile
+    #: The prepared video it was taken from, and where in it.
+    source_token: str
+    time_s: float
+    width: int
+    height: int
+
+
 class NoiseEntry(StrictModel):
     """The speech-shaped noise master the noisy tokens are drawn from."""
 
@@ -198,9 +217,20 @@ class StimulusManifest(StrictModel):
     #: rather than being refused wholesale — the same treatment as an AVSR word
     #: set that has not been recorded yet.
     tones: list[ToneEntry] = Field(default_factory=list)
+    #: Added in Adım 12c-ii, and like ``tones`` without a version bump: an older
+    #: set simply has none, and the menu falls back to text rather than refusing
+    #: to open.
+    thumbnails: list[ThumbnailEntry] = Field(default_factory=list)
     noise: NoiseEntry | None = None
 
     # -- lookups ----------------------------------------------------------
+
+    def thumbnail(self, speaker_id: int) -> ThumbnailEntry | None:
+        """The speaker's still, or None if this set was built without them."""
+        for entry in self.thumbnails:
+            if entry.speaker_id == speaker_id:
+                return entry
+        return None
 
     def video(self, speaker_id: int, token: str) -> VideoEntry:
         for entry in self.videos:
@@ -271,6 +301,7 @@ class StimulusManifest(StrictModel):
         entries += [entry.file for entry in self.dichotic]
         entries += [entry.file for entry in self.gin_segments]
         entries += [entry.file for entry in self.tones]
+        entries += [entry.file for entry in self.thumbnails]
         if self.noise is not None:
             entries.append(self.noise.file)
         return entries

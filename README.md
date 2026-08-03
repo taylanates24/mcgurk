@@ -190,21 +190,34 @@ Bu, `python -m mcgurk.ui` ile aynıdır. Geliştirme/kısaltma seçenekleri:
 `--limit N` (modül başına ilk N deneme), `--db PATH`, `--device NAME`,
 `--new-session` (yarım oturum devam teklifini atla).
 
-**Oturum kurulum menüsü** (Adım 12). Girişten sonra, tam ekran pencere açılmadan
-önce operatöre bir menü çıkar: **konuşmacı** (etiketli liste, her birinin yanında
-bugüne kadarki oturum sayısı), her ölçüm modülü için bir **onay kutusu** (yanında
-deneme sayısı), **alıştırma** ve **çapraz dinleme kontrolü**. Menü **önceden dolu
-gelir** — tam tasarım ve config'in seçtiği konuşmacı — yani hiçbir şeye dokunmadan
-onaylamak eskisiyle aynı oturumu koşar. İptal edilirse oturum başlamaz.
+**Konuşmacı seçimi panelde** (Adım 12c-ii). Operatör panelindeki **"Konuşmacı"**
+sekmesi sekiz konuşmacıyı **fotoğraflarıyla** gösterir; hangisi seçiliyse o
+tiklidir, yanında bugüne kadar kaç oturumda kullanıldığı yazar. **Konuşmacıyı
+kaydet** seçimi `config/experiment.yaml`'a yazar (yorumlar korunur, geçersiz
+sonuç geri alınır) ve bundan sonraki oturumlar o yüzü kullanır. Bir katılımcının
+bütün modülleri **aynı** konuşmacıyla ölçülmelidir; konuşmacı oturum başına
+sorulmaz, çünkü oturumun değil kurulumun özelliğidir.
 
-Katılımcı daha önce **başka bir konuşmacıyla** ölçüldüyse menü bunu gösterir ve
-farklı biri seçilirse onay ister; onaylanmazsa menüye dönülür. Seçim
+Fotoğraflar hazırlanmış setten gelir (`stimuli/thumbnails/speaker_<id>.png`,
+kaydın kendi çözünürlüğünde); `prepare_stimuli.py` üretir, `verify_stimuli.py`
+eksiğini KIRMIZI verir.
+
+**Oturum kurulum menüsü** (Adım 12). Girişten sonra, tam ekran pencere açılmadan
+önce çıkar ve **modülleri** sorar: her ölçüm modülü için bir onay kutusu (yanında
+deneme sayısı), **alıştırma** ve **çapraz dinleme kontrolü**. Katılımcı kodu ve o
+oturumun konuşmacısı üstte **salt okunur** görünür. Menü **önceden dolu gelir** —
+tam tasarım — yani hiçbir şeye dokunmadan onaylamak eskisiyle aynı oturumu koşar.
+İptal edilirse oturum başlamaz.
+
+Katılımcı daha önce **başka bir konuşmacıyla** ölçüldüyse oturum başlarken uyarı
+çıkar; onaylanmazsa oturum başlamaz (değişiklik panelden yapılır). Seçim
 `operator_notes`'a da yazılır. **Devam (resume) ettirilen oturumda menü çıkmaz** —
 o oturumun tasarımı kendi snapshot'ında.
 
-Menüyü atlayan / önceden dolduran bayraklar: `--speaker N`,
-`--modules mcgurk,dichotic`, `--no-practice`, `--no-cross-hearing` menüyü
-**önceden doldurur**; `--no-ask` menüyü hiç göstermeden o seçimi koşar.
+Komut satırından: `--modules mcgurk,dichotic`, `--no-practice`,
+`--no-cross-hearing` menüyü **önceden doldurur**; `--no-ask` menüyü hiç
+göstermeden o seçimi koşar. `--speaker N` konuşmacıyı yalnız o koşu için ezer
+(config'e yazmaz) — normal yol paneldeki sekmedir.
 
 Seçim **config'e uygulanır**: seçilmeyen modüller `enabled: false`,
 `session.module_order` kısaltılmış ve konuşmacı sabitlenmiş hâldeki tasarım

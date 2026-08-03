@@ -456,6 +456,17 @@ stimulus_prep:
     # for a control task and is what the calibration trim then sets in SPL.
     level_dbfs: -23.0
 
+  # The still shown in the operator panel's "Konuşmacı" tab (Adım 12c-ii).
+  # Never seen by a participant: it is how the operator recognises who
+  # "konuşmacı 5" is.  Written at the recording's own resolution (640x480 here);
+  # the interface scales it to fit, so no width is fixed in the prepared set.
+  thumbnail:
+    token: ba
+    # Well before the acoustic burst (~1.1 s here), so the mouth is at rest.  A
+    # frame caught mid-articulation would show one speaker mid-/ga/ and another
+    # closed-mouthed — a difference between the pictures, not the speakers.
+    time_s: 0.15
+
   gin:
     gap_ramp_ms: 1.0
     # Segment edges, not gap edges.  A six-second noise burst reaching full

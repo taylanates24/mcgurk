@@ -94,6 +94,7 @@ def verify(
         _check_noise(config, loaded, root, report)
         _check_gin(config, loaded, root, report)
         _check_tones(config, loaded, root, report)
+        _check_thumbnails(config, loaded, report)
         _check_edges(loaded, root, report)
     elif deep:
         report.note("Derin kontroller atlandı — önce yukarıdaki hatalar giderilmeli")
@@ -315,6 +316,32 @@ def _check_noise(
             report.note(f"  {problem}")
     else:
         report.ok(f"{len(loaded.noisy_tokens)} gürültülü uyaran kırpma sınırının altında")
+
+
+def _check_thumbnails(
+    config: ExperimentConfig, loaded: manifest.StimulusManifest, report: Report
+) -> None:
+    """One still per prepared speaker, for the operator's menu (Adım 12c-ii).
+
+    The bytes are already checked by ``_check_files``; what matters here is
+    *coverage*, because a missing still is not a broken picture — it is a
+    speaker the operator cannot recognise in the menu, and picking the wrong
+    face is a silent error in the data.
+    """
+    if config.stimulus_prep.thumbnail is None:
+        report.note("stimulus_prep.thumbnail tanımlı değil — küçük resim yok")
+        return
+
+    prepared = set(config.stimulus_prep.speaker_ids())
+    have = {entry.speaker_id for entry in loaded.thumbnails}
+    missing = sorted(prepared - have)
+    if missing:
+        report.fail(
+            f"Küçük resmi olmayan konuşmacı: {missing}. Operatör menüsü onları "
+            "yüzüyle gösteremez; python tools/prepare_stimuli.py --force"
+        )
+        return
+    report.ok(f"{len(have)} konuşmacı küçük resmi yerinde")
 
 
 def _check_tones(

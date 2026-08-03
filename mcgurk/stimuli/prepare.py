@@ -68,6 +68,7 @@ _SUBDIRS = {
     "gin": "gin",
     "noise": "noise",
     "tones": "tones",
+    "thumbnails": "thumbnails",
 }
 
 
@@ -235,6 +236,51 @@ def _prepare_speaker(
                     token=tokens[(speaker_id, audio_name)],
                 )
             )
+
+    thumbnail = _write_thumbnail(config, root, speaker_id, result)
+    if thumbnail is not None:
+        result.thumbnails.append(thumbnail)
+
+
+def _write_thumbnail(
+    config: ExperimentConfig,
+    root: Path,
+    speaker_id: int,
+    result: manifest.StimulusManifest,
+) -> manifest.ThumbnailEntry | None:
+    """One still of this speaker's face for the operator's menu (Adım 12c-ii).
+
+    Taken from the *prepared* silent video rather than the raw recording: that
+    is the face the participant will actually see, after the frame-rate
+    conversion and the re-encode.
+    """
+    spec = config.stimulus_prep.thumbnail
+    if spec is None:
+        return None
+
+    video = result.video(speaker_id, spec.token)
+    source = root / video.file.path
+    destination = root / _SUBDIRS["thumbnails"] / f"speaker_{speaker_id}.png"
+    if spec.time_s >= video.duration_s:
+        raise StimulusError(
+            f"stimulus_prep.thumbnail.time_s ({spec.time_s:.2f} s) konuşmacı "
+            f"{speaker_id} videosundan ({video.duration_s:.2f} s) uzun."
+        )
+    ffmpeg.extract_frame(source, destination, at_s=spec.time_s)
+
+    info = ffmpeg.probe(destination).require_video()
+    logger.info(
+        "  konuşmacı resmi: %s (%dx%d, %.2f s)",
+        destination.name, info.width, info.height, spec.time_s,
+    )
+    return manifest.ThumbnailEntry(
+        speaker_id=speaker_id,
+        file=manifest.describe(destination, root),
+        source_token=spec.token,
+        time_s=spec.time_s,
+        width=info.width,
+        height=info.height,
+    )
 
 
 def _write_video(

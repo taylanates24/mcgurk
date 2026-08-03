@@ -28,6 +28,7 @@ from ..config.schema import ExperimentConfig
 from ..config.selection import (
     SPEAKER_MODULES,
     SessionSelection,
+    available_speakers,
     default_selection,
     select_speaker,
 )
@@ -398,6 +399,14 @@ def run_session(
     return 0 if status == SESSION_COMPLETED else 2
 
 
+def speaker_label_for(config: ExperimentConfig, speaker_id: int) -> str:
+    """What the operator reads for *speaker_id*, from the config (§A.9)."""
+    for choice in available_speakers(config):
+        if choice.speaker_id == speaker_id:
+            return choice.label
+    return f"Konuşmacı {speaker_id}"
+
+
 def _ask_selection(
     config: ExperimentConfig,
     *,
@@ -407,52 +416,39 @@ def _ask_selection(
     seed: int,
     prefill: SessionSelection | None,
 ) -> SessionSelection | None:
-    """Show the session menu until the operator confirms, or cancels.
+    """Show the module menu, after warning about a changed speaker.
 
-    Choosing a speaker this participant was not tested with before is allowed
-    but never silent (user decision, 2026-08-03): refusing the confirmation
-    returns to the menu rather than to the session, so the operator can pick the
-    previous speaker instead of being pushed into starting.
+    The speaker itself is chosen in the panel (Adım 12c-ii), so what can be
+    wrong here is that the panel's speaker is not the one this participant was
+    measured with last time.  Refusing the warning cancels the session rather
+    than reopening the menu: the fix is in the panel, not in this dialog, and
+    starting anyway would put two faces in one participant's data.
     """
+    speaker_id = select_speaker(config, session_count=db.count_sessions(), seed=seed)
     previous = db.participant_speaker_id(participant_id)
-    counts = db.speaker_session_counts()
-    default = prefill or default_selection(
-        config, session_count=db.count_sessions(), seed=seed
-    )
-    while True:
-        chosen = ask_session_setup(
-            config,
-            default,
-            participant_code=participant.participant_code,
-            previous_speaker_id=previous,
-            speaker_counts=counts,
-        )
-        if chosen is None:
-            return None
-        if (
-            previous is not None
-            and chosen.speaker_id is not None
-            and chosen.speaker_id != previous
-            and not confirm_speaker_change(
-                previous_id=previous, chosen_id=chosen.speaker_id
-            )
-        ):
+    if previous is not None and previous != speaker_id:
+        if not confirm_speaker_change(previous_id=previous, chosen_id=speaker_id):
             logger.info(
-                "Farklı konuşmacı onaylanmadı (önceki %d, seçilen %d); menüye "
-                "dönülüyor.",
+                "Farklı konuşmacı onaylanmadı (önceki %d, config %d); oturum "
+                "başlatılmadı. Panel > Konuşmacı sekmesinden değiştirin.",
                 previous,
-                chosen.speaker_id,
+                speaker_id,
             )
-            default = chosen
-            continue
-        if previous is not None and chosen.speaker_id != previous:
-            logger.warning(
-                "Katılımcı daha önce konuşmacı %d ile ölçülmüştü; bu oturumda "
-                "konuşmacı %s kullanılıyor (operatör onayladı).",
-                previous,
-                chosen.speaker_id,
-            )
-        return chosen
+            return None
+        logger.warning(
+            "Katılımcı daha önce konuşmacı %d ile ölçülmüştü; bu oturumda "
+            "konuşmacı %d kullanılıyor (operatör onayladı).",
+            previous,
+            speaker_id,
+        )
+
+    return ask_session_setup(
+        config,
+        prefill
+        or default_selection(config, session_count=db.count_sessions(), seed=seed),
+        participant_code=participant.participant_code,
+        speaker_label=speaker_label_for(config, speaker_id),
+    )
 
 
 def _run_flow(

@@ -1057,6 +1057,22 @@ class GinPrep(StrictModel):
     bandwidth_hz: tuple[float, float]
 
 
+class ThumbnailPrep(StrictModel):
+    """The speaker still the operator's session menu shows (Adım 12c-ii).
+
+    Which frame is a judgement about the picture — it has to be a clear, neutral
+    face — so it is config rather than a constant in the extractor (§A.9).
+    """
+
+    #: Which of the speaker's videos the frame comes from.
+    token: str
+    #: Where in it.  Well before the acoustic burst (~1.1 s in this corpus), so
+    #: the mouth is still at rest: a frame caught mid-articulation would show
+    #: one speaker mid-/ga/ and another closed-mouthed, which is a difference
+    #: between the pictures and not between the speakers.
+    time_s: float = Field(ge=0)
+
+
 class TonePrep(StrictModel):
     """The part of an oddball tone that is not in ``modules.oddball``.
 
@@ -1088,6 +1104,9 @@ class StimulusPrep(StrictModel):
     noise: NoisePrep
     gin: GinPrep
     tones: TonePrep
+    #: Optional so an older ``sessions.config_snapshot`` still rebuilds; a set
+    #: prepared without it simply has no stills and the menu falls back to text.
+    thumbnail: ThumbnailPrep | None = None
 
     def speaker_ids(self) -> list[int]:
         return [speaker.id for speaker in self.speakers]

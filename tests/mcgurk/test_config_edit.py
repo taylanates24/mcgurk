@@ -339,3 +339,81 @@ def test_defaults_can_be_applied_to_a_changed_config(
     assert restored.session.practice_trials == 12
     # Back to the shipped design, comments included.
     assert config_file.read_bytes() == SHIPPED_CONFIG.read_bytes()
+
+
+# ------------------------------------------------------ speaker (Adım 12c-ii)
+
+
+def test_the_shipped_config_pins_a_speaker(config: ExperimentConfig) -> None:
+    assert edit.read_speaker(config) == config.speaker_selection.fixed_id
+
+
+def test_a_rotating_strategy_pins_nothing(config_file: Path, tmp_path: Path) -> None:
+    """`balanced`/`random` decide per session, so the tab has nothing to tick."""
+    text = _text(config_file).replace("strategy: fixed", "strategy: balanced")
+    config_file.write_bytes(text.encode("utf-8"))
+    config = load_config(config_file, project_root=tmp_path, check_filesystem=False)
+
+    assert edit.read_speaker(config) is None
+
+
+def test_every_prepared_speaker_is_offered_and_one_is_selected(
+    config: ExperimentConfig,
+) -> None:
+    options = edit.speaker_options(config, session_counts={2: 4})
+
+    assert [o.speaker_id for o in options] == config.stimulus_prep.speaker_ids()
+    assert all(o.label for o in options)
+    assert [o.speaker_id for o in options if o.selected] == [
+        config.speaker_selection.fixed_id
+    ]
+    assert next(o for o in options if o.speaker_id == 2).n_sessions == 4
+
+
+def test_a_missing_still_is_not_an_error(
+    config: ExperimentConfig, tmp_path: Path
+) -> None:
+    """A set prepared before 12c-ii has none; the tab shows the label alone."""
+    options = edit.speaker_options(config, tmp_path / "no-such-stimuli")
+    assert all(option.image is None for option in options)
+
+
+def test_writing_a_speaker_pins_it_everywhere_it_is_read(
+    config_file: Path, tmp_path: Path
+) -> None:
+    """One session reads speaker_selection, the dev tools read modules.*."""
+    written = edit.write_speaker(config_file, tmp_path, 6)
+
+    assert written.speaker_selection.strategy == "fixed"
+    assert written.speaker_selection.fixed_id == 6
+    assert written.modules.mcgurk.speaker_id == 6
+    assert written.modules.avsr.speaker_id == 6
+    assert written.modules.tbw.speaker_id == 6
+    assert written.modules.dichotic.speaker_id == 6
+    assert written.required_speaker_ids() == [6]
+
+
+def test_writing_a_speaker_keeps_the_comments(config_file: Path, tmp_path: Path) -> None:
+    edit.write_speaker(config_file, tmp_path, 3)
+    text = _text(config_file)
+
+    assert CELL_COMMENT in text
+    assert LONG_LINE in text
+
+
+def test_writing_the_same_speaker_is_byte_identical(
+    config_file: Path, tmp_path: Path
+) -> None:
+    """Nothing but the speaker may move — the file is mostly explanation."""
+    before = config_file.read_bytes()
+    edit.write_speaker(config_file, tmp_path, 1)
+    assert config_file.read_bytes() == before
+
+
+def test_an_unprepared_speaker_is_refused_and_nothing_is_written(
+    config_file: Path, tmp_path: Path
+) -> None:
+    before = config_file.read_bytes()
+    with pytest.raises(ConfigError, match="Hazır sette olmayan konuşmacı: 99"):
+        edit.write_speaker(config_file, tmp_path, 99)
+    assert config_file.read_bytes() == before

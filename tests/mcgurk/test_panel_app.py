@@ -156,11 +156,12 @@ def test_window_has_the_expected_action_buttons(window: PanelWindow) -> None:
         assert expected in labels
 
 
-def test_window_has_a_panel_and_a_settings_tab(window: PanelWindow) -> None:
+def test_window_has_a_panel_a_speaker_and_a_settings_tab(window: PanelWindow) -> None:
     tabs = window.findChildren(QTabWidget)
     assert len(tabs) == 1
     assert [tabs[0].tabText(i) for i in range(tabs[0].count())] == [
         "Panel",
+        "Konuşmacı",
         "Ayarlar",
     ]
 
@@ -257,3 +258,60 @@ def test_reset_puts_the_factory_values_in_the_spin_boxes(
     assert window._spins["modules.dichotic.reps"].value() == 5
     # A reset does not save: the operator sees the cost first (§C11 11b).
     assert config_path.read_bytes() == before
+
+
+# ---------------------------------------------------- Konuşmacı (Adım 12c-ii)
+
+
+def test_speaker_tab_offers_every_prepared_speaker(
+    window: PanelWindow, config: Any
+) -> None:
+    buttons = window._speaker_buttons.buttons()
+    assert len(buttons) == len(config.stimulus_prep.speaker_ids())
+    assert sorted(window._speaker_buttons.id(b) for b in buttons) == (
+        config.stimulus_prep.speaker_ids()
+    )
+
+
+def test_speaker_tab_ticks_the_configured_speaker(
+    window: PanelWindow, config: Any
+) -> None:
+    """Default ticked: the operator confirms rather than re-chooses."""
+    assert window._speaker_buttons.checkedId() == config.speaker_selection.fixed_id
+
+
+def test_speaker_tab_shows_how_many_sessions_each_has(window: PanelWindow) -> None:
+    """The db fixture ran one session with speaker 1."""
+    labels = {b.text() for b in window._speaker_buttons.buttons()}
+    assert any("(1 oturum)" in text for text in labels)
+    assert any("(0 oturum)" in text for text in labels)
+
+
+def test_saving_a_speaker_writes_it_to_the_config(
+    window: PanelWindow, config_path: Path, tmp_path: Path, no_dialogs: None
+) -> None:
+    button = next(
+        b for b in window._speaker_buttons.buttons()
+        if window._speaker_buttons.id(b) == 6
+    )
+    button.setChecked(True)
+    window.save_speaker()
+
+    written = load_config(config_path, project_root=tmp_path, check_filesystem=False)
+    assert written.speaker_selection.fixed_id == 6
+    assert written.modules.dichotic.speaker_id == 6
+    # And the tab now reports the new one.
+    assert window._speaker_buttons.checkedId() == 6
+
+
+def test_saving_the_same_speaker_leaves_the_file_untouched(
+    window: PanelWindow, config_path: Path, no_dialogs: None
+) -> None:
+    before = config_path.read_bytes()
+    window.save_speaker()
+    assert config_path.read_bytes() == before
+
+
+def test_the_speaker_button_is_locked_while_a_tool_runs(window: PanelWindow) -> None:
+    labels = {b.text() for b in window._action_buttons}
+    assert "Konuşmacıyı kaydet" in labels

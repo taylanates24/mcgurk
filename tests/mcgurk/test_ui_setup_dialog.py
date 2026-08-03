@@ -1,10 +1,14 @@
-"""The operator's session menu, without a screen (ADIM 12c).
+"""The operator's module menu, without a screen (ADIM 12c).
 
 ``build_form`` and ``build_selection`` are the whole decision; the PsychoPy
 dialog only shows the fields and writes the answers back into the same dict.
-So everything that could silently change a session — which speaker comes
-pre-selected, which modules are ticked, what an empty answer means — is checked
+So everything that could silently change a session — which modules are ticked,
+what an empty answer means, whether the speaker can be changed here — is checked
 here, in CI.
+
+The speaker moved to the panel in 12c-ii and is *shown* rather than asked; the
+tests below pin that it stays read-only, because a second place to change it is
+a second place for the config and the panel to disagree.
 """
 
 from __future__ import annotations
@@ -21,11 +25,9 @@ from mcgurk.config.selection import (
     default_selection,
 )
 from mcgurk.ui.setup_dialog import (
-    FIELD_COUNTS,
     FIELD_CROSS,
     FIELD_PARTICIPANT,
     FIELD_PRACTICE,
-    FIELD_PREVIOUS,
     FIELD_SPEAKER,
     build_form,
     build_selection,
@@ -56,39 +58,9 @@ def test_the_menu_comes_prefilled_with_todays_session(
     form = build_form(config, _default(config))
     selection = build_selection(form)
 
-    assert selection == _default(config)
+    assert selection.modules == tuple(config.enabled_modules())
+    assert selection.practice and selection.cross_hearing
     assert apply(config, selection).trial_counts() == config.trial_counts()
-
-
-def test_the_preselected_speaker_is_first_in_the_list(
-    config: ExperimentConfig,
-) -> None:
-    """A DlgFromDict dropdown always selects its first choice.
-
-    If the default were left in id order, the menu would quietly hand every
-    session to speaker 1 whatever the config's strategy chose.
-    """
-    form = build_form(config, SessionSelection(modules=("mcgurk",), speaker_id=5))
-    assert form.speaker_by_label[form.fields[FIELD_SPEAKER][0]] == 5
-
-
-def test_every_prepared_speaker_is_offered_with_its_session_count(
-    config: ExperimentConfig,
-) -> None:
-    form = build_form(config, _default(config), speaker_counts={2: 3})
-    labels = form.fields[FIELD_SPEAKER]
-
-    assert sorted(form.speaker_by_label.values()) == config.stimulus_prep.speaker_ids()
-    assert len(labels) == len(config.stimulus_prep.speaker_ids())
-    assert any("(3 oturum)" in label for label in labels)
-    assert form.fields[FIELD_COUNTS] == "2: 3"
-
-
-def test_the_counts_line_says_so_when_there_are_none(
-    config: ExperimentConfig,
-) -> None:
-    form = build_form(config, _default(config))
-    assert form.fields[FIELD_COUNTS] == "henüz oturum yok"
 
 
 def test_a_module_checkbox_says_what_it_costs(config: ExperimentConfig) -> None:
@@ -100,22 +72,19 @@ def test_a_module_checkbox_says_what_it_costs(config: ExperimentConfig) -> None:
     assert form.fields[key] is True
 
 
-def test_the_participant_and_the_previous_speaker_are_shown_but_not_editable(
+def test_the_participant_and_the_speaker_are_shown_but_not_editable(
     config: ExperimentConfig,
 ) -> None:
+    """The speaker is the panel's decision; this dialog only reports it."""
     form = build_form(
-        config, _default(config), participant_code="SSD-R-007", previous_speaker_id=2
+        config,
+        _default(config),
+        participant_code="SSD-R-007",
+        speaker_label="Konuşmacı 2 — Erkek",
     )
     assert form.fields[FIELD_PARTICIPANT] == "SSD-R-007"
-    assert form.fields[FIELD_PREVIOUS] == "2"
-    assert FIELD_PARTICIPANT in form.fixed and FIELD_PREVIOUS in form.fixed
-
-
-def test_a_first_session_has_no_previous_speaker_row(
-    config: ExperimentConfig,
-) -> None:
-    form = build_form(config, _default(config), participant_code="YENI")
-    assert FIELD_PREVIOUS not in form.fields
+    assert form.fields[FIELD_SPEAKER] == "Konuşmacı 2 — Erkek"
+    assert FIELD_PARTICIPANT in form.fixed and FIELD_SPEAKER in form.fixed
 
 
 def test_only_the_modules_the_config_enables_are_offered(
@@ -141,12 +110,13 @@ def test_unticking_a_module_drops_it(config: ExperimentConfig) -> None:
     assert set(selection.modules) == {"mcgurk", "dichotic"}
 
 
-def test_the_chosen_speaker_is_read_back_by_label(config: ExperimentConfig) -> None:
-    form = build_form(config, _default(config))
-    label = next(k for k, v in form.speaker_by_label.items() if v == 7)
-    form.fields[FIELD_SPEAKER] = label
+def test_the_menu_never_overrides_the_speaker(config: ExperimentConfig) -> None:
+    """``speaker_id`` stays None, so ``speaker_selection`` still decides."""
+    form = build_form(config, _default(config), speaker_label="Konuşmacı 5 — Kadın")
+    selection = build_selection(form)
 
-    assert build_selection(form).speaker_id == 7
+    assert selection.speaker_id is None
+    assert apply(config, selection).speaker_selection == config.speaker_selection
 
 
 def test_the_two_session_steps_are_their_own_checkboxes(
@@ -168,14 +138,6 @@ def test_unticking_every_module_is_refused(config: ExperimentConfig) -> None:
         form.fields[_field_for(form, name)] = False
 
     with pytest.raises(SelectionError, match="Hiç ölçüm modülü"):
-        build_selection(form)
-
-
-def test_an_unknown_speaker_answer_is_refused(config: ExperimentConfig) -> None:
-    form = build_form(config, _default(config))
-    form.fields[FIELD_SPEAKER] = "Konuşmacı 42 — Kim?"
-
-    with pytest.raises(SelectionError, match="Konuşmacı seçilmedi"):
         build_selection(form)
 
 

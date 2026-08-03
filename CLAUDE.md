@@ -19,7 +19,8 @@ TÜBİTAK-supported academic research project: "Behavioral Assessment of Audiovi
 ### Entry points
 1. **`main.py`** (= `python -m mcgurk.ui`) — the full session flow (Adım 8):
    participant login → resume prompt for an interrupted session → operator
-   setup menu (speaker + modules, Adım 12c) → pre-session checklist confirm →
+   module menu (Adım 12c; the speaker comes from the panel) → pre-session
+   checklist confirm →
    practice → every module in `session.module_order` with its instruction screen
    and breaks → cross-hearing check (SSD) → end + backup. ESC opens an "are you
    sure?" confirm at any point.
@@ -32,9 +33,10 @@ cross-hearing check are session-flow steps, not measurement modules.
 
 **The operator's per-session choice is applied to the config, not carried beside
 it (Adım 12, `mcgurk/config/selection.py`).** `apply()` returns a config with the
-unselected modules disabled, `session.module_order` shortened and the chosen
-speaker pinned into `speaker_selection`; the session starts with *that*, so it is
-what `sessions.config_snapshot` stores. Resume, analysis and QC therefore read
+unselected modules disabled, `session.module_order` shortened and — when a
+speaker was explicitly overridden (`--speaker`) — that speaker pinned into
+`speaker_selection`; the session starts with *that*, so it is what
+`sessions.config_snapshot` stores. Resume, analysis and QC therefore read
 the subset from the place they already read everything else and never learn what
 a "selection" is. Things that are easy to get wrong here:
 - **Apply it before `start_session`**, or the snapshot records the full design
@@ -44,9 +46,19 @@ a "selection" is. Things that are easy to get wrong here:
 - **The menu chooses within the config, never around it**: a module disabled in
   `config/experiment.yaml` cannot be ticked (§A.9), and the module *order* stays
   the config's — the operator picks which modules run, not in what sequence.
-- **A `DlgFromDict` dropdown always selects its first entry**, so `build_form`
-  rotates the speaker list to put the pre-selected one first; leaving it in id
-  order would quietly hand every session to speaker 1.
+- **The speaker is not a per-session question** (Adım 12c-ii). It is chosen in
+  the panel's **"Konuşmacı"** tab — the eight speakers as photographs, the
+  configured one ticked — and written into `config/experiment.yaml`
+  (`speaker_selection.fixed_id` **and** the four `modules.*.speaker_id`, in one
+  write, or a design summary would describe a different face than the one
+  presented). One participant is measured with one face, so this is a property
+  of the installation, not of the sitting; the session menu only *shows* it,
+  read-only, and warns when it differs from what this participant saw before.
+  Refusing that warning cancels the session: the fix is in the panel.
+- **The photographs come from the prepared set** (`stimuli/thumbnails/`,
+  written by `prepare_stimuli.py` at the recording's own resolution, checked by
+  `verify_stimuli.py`) — a session never shells out to ffmpeg (§A.12), and the
+  interface decides how big to draw them.
 - **The checklist runs before the menu** and therefore knows nothing about the
   subset — it verifies the installation, not the session.
 
@@ -70,7 +82,7 @@ mcgurk/                          # new platform (Adım 1→)
 ├── config/
 │   ├── schema.py                # Pydantic models, §G — extra="forbid"
 │   ├── loader.py                # load, validate, design summary
-│   ├── edit.py                  # panel-editable rep counts; ruamel round-trip write (Adım 11)
+│   ├── edit.py                  # panel-editable rep counts + speaker; ruamel round-trip write (Adım 11, 12c-ii)
 │   ├── selection.py             # operator's per-session choice: speaker + modules (Adım 12b)
 │   ├── calibration.py           # 02_kalibrasyon.md JSON (Turkish keys → aliases)
 │   ├── word_lists.py            # AVSR word-list schema + reader (Adım 5)
@@ -111,7 +123,7 @@ mcgurk/                          # new platform (Adım 1→)
 ├── analysis/                    # Adım 9 (empty)
 ├── ui/                          # Adım 8 — session flow (8b-i)
 │   ├── login.py                 # gui.DlgFromDict -> Participant; build_participant is pure
-│   ├── setup_dialog.py          # operator menu: speaker + modules (Adım 12c); build_form/build_selection are pure
+│   ├── setup_dialog.py          # operator menu: which modules run (Adım 12c); build_form/build_selection are pure
 │   ├── screens.py               # instruction / break / operator-checklist / quit-confirm screens
 │   ├── runtime.py               # shared hardware open + start_session (also used by run_module)
 │   ├── session.py               # orchestrator: checklist -> login -> practice -> modules -> cross-hearing -> end; installs the ESC confirmer
@@ -663,7 +675,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - **Dichotic Listening**: `scripts/generate_dichotic_stimuli.py` uyumlu videolardan **48 kHz stereo PCM WAV** üretir (`assets/dichotic/{konuşmacı}/Left-{l}_Right-{r}.wav`). Çalışma anında dönüştürme yok. Kanal izolasyonu ölçüldü: kanallar arası sızıntı yok.
 - **Videosuz ses sunumu**: `audio_only` ve `dichotic` bölümleri `MovieStim` **oluşturmaz**; `present_audio_only()` ekranda sabitleme haçı bırakır ve deneme sesin kendi süresi kadar sürer. Eskiden bu bölümler sesi 64×64/1 fps siyah bir videonun içinde taşıyordu ve deneme bitiş anı o akışın kare ızgarasına bağlıydı.
 - **Noisy stimuli**: `scripts/generate_noisy_stimuli.py` mevcut, ancak çalışma anındaki karıştırma yolu (`stimuli.mix_noise_into_audio`) kullanılıyor. SNR hesabı şu an tüm dosya RMS'i üzerinden yapılıyor; konuşma-aktif RMS'e geçirilmesi Adım 2'de.
-- **Operatör paneli**: `mcgurk/panel/` **PyQt6** ile ayrı process olarak çalışır, PsychoPy ile aynı process'te çalıştırılamaz. Deneyi/checklist'i subprocess (`--run`) olarak açar (Adım 10). (Eski `legacy/admin.py` PySide6'ydı.) İki sekme: **Panel** (Adım 10) ve **Ayarlar** (Adım 11 — tekrar sayıları).
+- **Operatör paneli**: `mcgurk/panel/` **PyQt6** ile ayrı process olarak çalışır, PsychoPy ile aynı process'te çalıştırılamaz. Deneyi/checklist'i subprocess (`--run`) olarak açar (Adım 10). (Eski `legacy/admin.py` PySide6'ydı.) Üç sekme: **Panel** (Adım 10), **Konuşmacı** (Adım 12c-ii — fotoğraflarla konuşmacı seçimi) ve **Ayarlar** (Adım 11 — tekrar sayıları).
 - **Modal `QMessageBox` offscreen testte de bloke eder.** Qt'nin `offscreen` platform eklentisi pencereyi çizmez ama event loop'u yine döndürür, yani `QMessageBox.critical(...)` bir yanıt bekleyerek asılır — test kırmızıya dönmez, süresiz takılır (Adım 11b'de 120 sn'lik timeout olarak bulundu). Bir handler'ın diyalog yolunu test edecekseniz `critical`/`question`/`information`'ı monkeypatch'leyin.
 
 ## Git Workflow

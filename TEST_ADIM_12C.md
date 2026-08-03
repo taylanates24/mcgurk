@@ -1,21 +1,28 @@
-# Adım 12c Manuel Test — Operatör menüsü
+# Adım 12c Manuel Test — Konuşmacı sekmesi + oturum modül menüsü
 
-Girişten sonra, tam ekran pencere açılmadan önce bir **oturum kurulum menüsü**
-çıkıyor: konuşmacı, koşulacak modüller, alıştırma, çapraz dinleme. Menü
-**önceden dolu** geliyor — hiçbir şeye dokunmadan Enter'a basmak Adım 8
-oturumunun aynısını koşuyor.
+İki yer değişti:
 
-**Ekran gerekir. Süre ~30 dk** (Test 5 ve 6 ses de ister).
+1. **Operatör panelinde yeni bir "Konuşmacı" sekmesi** — sekiz konuşmacı
+   **fotoğraflarıyla** listeleniyor, config'teki hangisiyse o **tikli** geliyor;
+   seçip kaydedince `config/experiment.yaml`'a yazılıyor ve bundan sonraki
+   oturumlar o yüzü kullanıyor.
+2. **Oturum başında modül menüsü** — girişten sonra, tam ekran açılmadan önce
+   koşulacak modüller onay kutularıyla soruluyor. Konuşmacı burada
+   **değiştirilemiyor**, yalnız gösteriliyor: bir katılımcının bütün modülleri
+   aynı yüzle ölçülmeli.
+
+**Ekran gerekir. Süre ~30 dk** (Test 6 ve 7 ses de ister).
 
 ## Otomatik koşulanlar (bilgi için)
 
 | Ne | Sonuç |
 |---|---|
-| `pytest` (yerel, PsychoPy'li) | **1009 passed, 60 skipped** |
-| `pytest -m "not psychopy"` (PsychoPy'siz venv) | **966 passed, 59 skipped** |
+| `pytest` (yerel, PsychoPy'li) | **1017 passed, 60 skipped** |
+| `pytest -m "not psychopy"` (PsychoPy/PyQt6'sız venv) | **968 passed, 59 skipped** |
 | `ruff` + `mypy` | temiz — **her iki ortamda** (139 dosya) |
-| Yeni dosyalar | `mcgurk/ui/setup_dialog.py`, `tests/mcgurk/test_ui_setup_dialog.py`, `test_ui_session_menu.py`, `test_db_speaker_history.py` |
-| Yeni testler | 14 (menü çekirdeği) + 7 (menü akışı) + 7 (veritabanı geçmişi) + 1 (`--no-ask`) |
+| `verify_stimuli.py` | temiz; `8 konuşmacı küçük resmi yerinde` |
+| Yeni/değişen | `mcgurk/config/edit.py` (konuşmacı yazma), `mcgurk/panel/{core,app}.py` (sekme), `mcgurk/ui/setup_dialog.py` (konuşmacı çıkarıldı), `stimuli/thumbnails/` |
+| Yeni testler | 8 (config yazma) + 6 (panel sekmesi) + 9 (modül menüsü) + 6 (uyarı akışı) |
 
 ## Ön koşullar
 
@@ -23,58 +30,92 @@ oturumunun aynısını koşuyor.
 $PY = "C:\Users\tayla\miniconda3\envs\mcgurk\python.exe"
 ```
 
-- [ ] Kulaklık takılı ve ses açık (Test 5–6 için).
-- [ ] Test verisi karışmasın diye ayrı bir veritabanı kullanın:
-      her komuta `--db data\test12c.sqlite` ekleyin (aşağıda ekli).
+- [ ] Kulaklık takılı ve ses açık (Test 6–7 için).
+- [ ] Test verisi karışmasın diye ayrı bir veritabanı: komutlara
+      `--db data\test12c.sqlite` ekli.
+- [ ] **Config'inizin yedeğini alın** — Test 1 gerçekten dosyayı değiştiriyor:
+
+```powershell
+Copy-Item config\experiment.yaml config\experiment.yaml.yedek
+```
 
 ---
 
-## Test 1: Menü çıkıyor ve önceden dolu (~4 dk)
+## Test 1: Konuşmacı sekmesi — fotoğraflar ve varsayılan tik (~5 dk)
+
+**Komut:**
+```powershell
+& $PY -m mcgurk.panel
+```
+
+**Kontrol edilecek:**
+- [ ] Üç sekme var: **Panel**, **Konuşmacı**, **Ayarlar**.
+- [ ] "Konuşmacı" sekmesinde **sekiz** kutu, her birinde bir **yüz fotoğrafı**
+      ve altında `Konuşmacı N — Kadın/Erkek  (M oturum)` yazan bir radyo düğmesi.
+- [ ] Fotoğraflar kutuya sığıyor, bozulmuyor (en-boy oranı korunuyor).
+- [ ] **Konuşmacı 1** tikli (config'teki `fixed_id`). Alt satırda
+      `Şu anki konuşmacı: 1. Oturumlar bunu kullanır.` yazıyor.
+- [ ] Cinsiyetler doğru: 2, 3, 4, 7 erkek; 1, 5, 6, 8 kadın.
+
+Şimdi **Konuşmacı 5**'i seçip **Konuşmacıyı kaydet**'e basın.
+
+- [ ] Çıktı panelinde `[Konuşmacı] kaydedildi: konuşmacı 5` satırı,
+      durum çubuğunda `Konuşmacı kaydedildi - 5`.
+- [ ] Alt satır `Şu anki konuşmacı: 5` oldu.
+
+**Dosyaya bakın:**
+```powershell
+Select-String -Path config\experiment.yaml -Pattern "fixed_id|speaker_id: " | Select-Object -First 6
+```
+Beklenen: `fixed_id: 5` ve dört modülde `speaker_id: 5`.
+
+```powershell
+Select-String -Path config\experiment.yaml -Pattern "reps is PER CELL" | Measure-Object
+```
+Beklenen: **1** — yorumlar korunmuş.
+
+**Başarısızsa:** fotoğraf yerine "(resim yok)" görüyorsanız hazırlanmış set
+eksiktir: `python tools/prepare_stimuli.py --force`.
+
+---
+
+## Test 2: Modül menüsü — konuşmacı gösteriliyor, sorulmuyor (~4 dk)
 
 **Komut:**
 ```powershell
 & $PY -m mcgurk.ui --db data\test12c.sqlite --limit 2
 ```
 
-Girişte: kod `T12C-1`, grup **Kontrol**, yaş 30. Giriş onaylanınca menü açılmalı.
+Girişte: kod `T12C-1`, grup **Kontrol**, yaş 30.
 
 **Kontrol edilecek:**
-- [ ] Başlık **"McGurk / SSD - Oturum kurulumu"**.
-- [ ] **Katılımcı** satırı `T12C-1` yazıyor ve **değiştirilemiyor** (gri).
-- [ ] **Konuşmacı** açılır listesinde **sekiz** konuşmacı var, her birinin
-      yanında `(0 oturum)` yazıyor; ilk sırada **Konuşmacı 1 — Kadın** (config'in
-      seçtiği) duruyor.
-- [ ] Altı modülün her biri için bir onay kutusu var, **hepsi işaretli**, ve
-      yanlarında deneme sayısı yazıyor (McGurk 140, AVSR 135, TBW 130, Oddball
-      300, Dikotik 30, GIN 30).
+- [ ] Menü başlığı **"McGurk / SSD - Oturum kurulumu"**.
+- [ ] **Katılımcı** = `T12C-1` ve **Konuşmacı (panelden)** = `Konuşmacı 5 — Kadın`
+      satırları var ve **ikisi de değiştirilemiyor** (gri).
+- [ ] Altı modülün her biri için onay kutusu, **hepsi işaretli**, yanlarında
+      deneme sayısı (McGurk 140, AVSR 135, TBW 130, Oddball 300, Dikotik 30,
+      GIN 30).
 - [ ] **Alıştırma** ve **Çapraz dinleme kontrolü** işaretli.
-- [ ] Bu ilk oturum olduğu için **"Önceki konuşmacısı"** satırı **yok**.
 
-**Şimdi hiçbir şeye dokunmadan OK'a basın.** Kontrol listesi ekranı gelmeli,
-sonra alıştırma. Birkaç deneme yapıp **ESC** ile çıkın (onaylayın).
+**Hiçbir şeye dokunmadan OK'a basın** → kontrol listesi ekranı, sonra alıştırma.
+Birkaç deneme yapıp **ESC** ile çıkın (onaylayın).
 
-**Başarısızsa:** menü hiç çıkmıyorsa `ask` bayrağı akışa bağlanmamış demektir.
+- [ ] Sunulan yüz **konuşmacı 5** (Test 1'de seçtiğiniz).
 
 ---
 
-## Test 2: Tek modül seçilince yalnız o koşuyor (~6 dk)
+## Test 3: Tek modül seçilince yalnız o koşuyor (~5 dk)
 
-**Komut:**
 ```powershell
 & $PY -m mcgurk.ui --db data\test12c.sqlite --new-session
 ```
 
-Giriş: `T12C-2`, Kontrol, 30. Menüde:
-1. **Konuşmacı**: listeden **Konuşmacı 2 — Erkek** seçin.
-2. McGurk hariç **bütün modüllerin** işaretini kaldırın.
-3. **Alıştırma** ve **Çapraz dinleme** işaretini kaldırın.
-4. OK.
+Giriş: `T12C-2`, Kontrol, 30. Menüde McGurk hariç bütün modüllerin, ayrıca
+**Alıştırma** ve **Çapraz dinleme**'nin işaretini kaldırın. OK.
 
 **Kontrol edilecek:**
-- [ ] Kontrol listesi onayından sonra **doğrudan McGurk yönergesi** geliyor;
-      alıştırma yok.
-- [ ] Sunulan yüz/ses **konuşmacı 2** (Test 1'deki kadın değil, erkek).
-- [ ] Birkaç deneme sonra ESC ile çıkın.
+- [ ] Kontrol listesinden sonra **doğrudan McGurk yönergesi**; alıştırma yok.
+- [ ] Birkaç deneme sonra ESC.
 
 **Sonra veriye bakın:**
 ```powershell
@@ -84,117 +125,98 @@ Giriş: `T12C-2`, Kontrol, 30. Menüde:
 **Beklenen çıktı:**
 ```
 oturum 2
-not    : ui.session konuşmacı=2 iyi_kulak=right | seçim: konuşmacı=2 modüller=mcgurk
+not    : ui.session konuşmacı=5 iyi_kulak=right | seçim: konuşmacı=(config) modüller=mcgurk
 sıra   : ['mcgurk']
 etkin  : ['mcgurk']
-konuşmacı: {'strategy': 'fixed', 'fixed_id': 2}
+konuşmacı: {'strategy': 'fixed', 'fixed_id': 5}
 ```
 
-**Kontrol edilecek:** Seçim hem **snapshot'ta** hem **operatör notunda**. Not,
-panelin oturum listesinde ilk okunan yer olduğu için kısmi oturum orada da
-görünüyor (§A12.7).
+**Kontrol edilecek:** Seçim hem **snapshot'ta** hem **operatör notunda**.
+`konuşmacı=(config)` doğru: menü konuşmacıyı ezmedi, config'inki kullanıldı.
 
 ---
 
-## Test 3: Farklı konuşmacı uyarısı (~4 dk)
+## Test 4: Farklı konuşmacı uyarısı (~4 dk)
 
-Aynı katılımcı (`T12C-2`) daha önce **konuşmacı 2** ile ölçüldü.
+`T12C-2` konuşmacı 5 ile ölçüldü. Şimdi panelden **konuşmacı 2**'ye geçin
+(Test 1'deki gibi), sonra aynı katılımcıyla yeni bir oturum açın:
 
-**Komut:**
 ```powershell
 & $PY -m mcgurk.ui --db data\test12c.sqlite --new-session
-```
-
-Giriş: yine `T12C-2`. Menüde:
-
-**Kontrol edilecek:**
-- [ ] **"Önceki konuşmacısı"** satırı **2** yazıyor.
-- [ ] Konuşmacı listesinde `Konuşmacı 2 — Erkek` yanında artık **(1 oturum)**
-      yazıyor; **"Konuşmacı başına oturum"** satırı `2: 1` diyor.
-
-Şimdi **Konuşmacı 5 — Kadın** seçip OK'a basın.
-
-- [ ] **Uyarı diyaloğu** çıkıyor: "Bu katılımcı daha önce konuşmacı 2 ile
-      ölçüldü…".
-- [ ] Varsayılan cevap **"Hayır, menüye dön"**. Onu seçin →
-      **menüye dönüyor**, oturum başlamıyor.
-- [ ] Menüde tekrar Konuşmacı 5 seçip bu kez **"Evet, bu konuşmacıyla devam et"**
-      deyin → oturum başlıyor.
-- [ ] Birkaç deneme sonra ESC.
-
-**Sonra:**
-```powershell
-& $PY -c "import sqlite3; con=sqlite3.connect('data/test12c.sqlite'); print(con.execute('select operator_notes from sessions order by session_id desc limit 1').fetchone()[0])"
-```
-Notta `seçim: konuşmacı=5 …` yazmalı. `logs/` altındaki güncel log dosyasında da
-`Katılımcı daha önce konuşmacı 2 ile ölçülmüştü` uyarısı bulunmalı.
-
-**Başarısızsa:** uyarı hiç çıkmıyorsa katılımcı geçmişi okunmuyor demektir.
-
----
-
-## Test 4: Devam eden oturumda menü çıkmıyor (~5 dk)
-
-Test 3'teki oturum ESC ile yarıda kaldı. Aynı katılımcıyla tekrar başlatın:
-
-```powershell
-& $PY -m mcgurk.ui --db data\test12c.sqlite
 ```
 
 Giriş: `T12C-2`.
 
 **Kontrol edilecek:**
-- [ ] "Kaldığı yerden devam?" soruluyor → **Devam et** deyin.
-- [ ] **Menü ÇIKMIYOR** — doğrudan kontrol listesi ekranına geçiliyor.
-- [ ] Koşan modül, yarım kalan oturumun modülü (konuşmacı 5'li seçim), yeni bir
-      tasarım değil.
-- [ ] ESC ile çıkın.
+- [ ] **Uyarı diyaloğu** çıkıyor: "Bu katılımcı daha önce konuşmacı 5 ile
+      ölçüldü; config şu an konuşmacı 2 diyor…" ve panel sekmesini işaret ediyor.
+- [ ] Varsayılan cevap **"Hayır, iptal et"**. Onu seçin → **oturum başlamıyor**,
+      modül menüsü bile açılmıyor.
+- [ ] Tekrar başlatıp bu kez **"Evet, bu konuşmacıyla devam et"** deyin → modül
+      menüsü açılıyor. ESC ile çıkın.
+- [ ] `logs/` altındaki güncel dosyada
+      `Katılımcı daha önce konuşmacı 5 ile ölçülmüştü` uyarısı var.
 
-**Neden böyle:** yarım oturumun tasarımı kendi snapshot'ında; menü göstermek
-onunla çelişebilecek bir seçim sunardı.
+**Neden iptal:** konuşmacı panelden değiştiriliyor; oturumun ortasında
+düzeltilecek bir şey yok.
 
 ---
 
-## Test 5: Menüyü atlamak — `--no-ask` (~4 dk, ses ister)
+## Test 5: Devam eden oturumda menü çıkmıyor (~4 dk)
+
+Test 4'teki oturum yarıda kaldı. Aynı katılımcıyla tekrar başlatın:
 
 ```powershell
-& $PY -m mcgurk.ui --db data\test12c.sqlite --new-session --no-ask --modules dichotic --speaker 7 --no-practice --no-cross-hearing --limit 4
+& $PY -m mcgurk.ui --db data\test12c.sqlite
+```
+
+Giriş: `T12C-2` → "Kaldığı yerden devam?" → **Devam et**.
+
+**Kontrol edilecek:**
+- [ ] **Menü ÇIKMIYOR**, doğrudan kontrol listesine geçiliyor.
+- [ ] Koşan modül, yarım kalan oturumun modülü.
+- [ ] ESC ile çıkın.
+
+---
+
+## Ekran/ses gerektiren testler
+
+## Test 6: `--no-ask` ve bayraklar (~4 dk, ses ister)
+
+```powershell
+& $PY -m mcgurk.ui --db data\test12c.sqlite --new-session --no-ask --modules dichotic --no-practice --no-cross-hearing --limit 4
 ```
 
 Giriş: `T12C-3`, Kontrol, 30.
 
 **Kontrol edilecek:**
 - [ ] **Menü çıkmıyor**, doğrudan kontrol listesine geçiliyor.
-- [ ] Yalnız dikotik koşuyor, konuşmacı **7** (erkek).
-- [ ] Dört deneme sonunda oturum kendiliğinden bitiyor (çıkış kodu **0**).
+- [ ] Yalnız dikotik koşuyor, dört deneme sonunda oturum **kendiliğinden**
+      bitiyor (çıkış kodu 0).
 
 **Ayrıca:** aynı bayrakları `--no-ask` **olmadan** verin — menü çıkmalı ve
-**bayraklardaki seçimle önceden dolu** gelmeli (konuşmacı 7 ilk sırada, yalnız
-dikotik işaretli). Bu, bayrakların menüyü ezmediğini, doldurduğunu gösterir.
+**yalnız dikotik işaretli** gelmeli.
 
 ---
 
-## Test 6: Yeni bir konuşmacı gerçekten sunuluyor (~4 dk, ses ister)
+## Test 7: Yeni bir konuşmacı gerçekten sunuluyor (~4 dk, ses ister)
 
-12a'nın hazırladığı yeni konuşmacılar ilk kez burada gerçek oturumda sunuluyor.
+Panelden **konuşmacı 6**'yı seçip kaydedin, sonra:
 
 ```powershell
 & $PY -m mcgurk.ui --db data\test12c.sqlite --new-session --limit 3
 ```
 
-Giriş: `T12C-4`. Menüde **Konuşmacı 6 — Kadın** ve yalnız **AVSR** seçin.
+Giriş: `T12C-4`. Menüde yalnız **AVSR** bırakın.
 
 **Kontrol edilecek:**
+- [ ] Menüde `Konuşmacı (panelden)` satırı **Konuşmacı 6 — Kadın** diyor.
 - [ ] Video ve ses konuşmacı 6'ya ait, senkron görünüyor/duyuluyor.
-- [ ] Ses seviyesi diğer konuşmacılarla benzer (12a'nın seviye eşitlemesi).
-- [ ] Görüntü ile sesin patlaması **aynı anda** — gecikme hissi yok.
-
-**Başarısızsa:** A/V kayması varsa konsolda hizalama uyarısı olup olmadığına
-bakın ve bana iletin.
+- [ ] Ses seviyesi diğer konuşmacılarla benzer.
 
 ---
 
-## Test 7: Menü iptali oturum başlatmıyor (~2 dk)
+## Test 8: Menü iptali oturum başlatmıyor (~2 dk)
 
 ```powershell
 & $PY -m mcgurk.ui --db data\test12c.sqlite --new-session
@@ -204,7 +226,7 @@ Giriş: `T12C-5`. Menü açılınca **Cancel / X** ile kapatın.
 
 **Kontrol edilecek:**
 - [ ] Program temiz çıkıyor, tam ekran pencere **hiç açılmıyor**.
-- [ ] Veritabanında bu katılımcı için **oturum satırı yok**:
+- [ ] Veritabanında bu katılımcı için oturum yok:
 
 ```powershell
 & $PY -c "import sqlite3; con=sqlite3.connect('data/test12c.sqlite'); print(con.execute(\"select count(*) from sessions s join participants p on p.participant_id=s.participant_id where p.participant_code='T12C-5'\").fetchone()[0])"
@@ -217,38 +239,44 @@ Beklenen: `0`
 
 ```powershell
 Remove-Item data\test12c.sqlite*
+Move-Item -Force config\experiment.yaml.yedek config\experiment.yaml
 ```
 
-(Gerçek veritabanı `data/mcgurk.sqlite` bu testlerden etkilenmedi.)
+(İkincisi config'i test öncesi hâline — konuşmacı 1 — döndürür.)
 
 ---
 
 ## Kabul kriterleri
 
-- [ ] Menü girişten sonra çıkıyor, tam tasarım ve config'teki konuşmacı önceden
-      seçili; onaylamak Adım 8 oturumunun aynısını koşuyor (Test 1)
-- [ ] Sekiz konuşmacı etiketleriyle ve oturum sayılarıyla listeleniyor (Test 1, 3)
-- [ ] Tek modül seçilince yalnız o koşuyor; seçim snapshot'a ve nota yazılıyor (Test 2)
-- [ ] Konuşmacı 2 ve yeni bir konuşmacı (6, 7) gerçekten sunuluyor (Test 2, 5, 6)
-- [ ] Farklı konuşmacı seçilince onay isteniyor; "hayır" menüye dönüyor (Test 3)
-- [ ] Devam eden oturumda menü çıkmıyor (Test 4)
-- [ ] `--no-ask` menüyü atlıyor; bayraklar `--no-ask` olmadan menüyü dolduruyor (Test 5)
-- [ ] İptal oturum başlatmıyor (Test 7)
+- [ ] Panelde "Konuşmacı" sekmesi sekiz konuşmacıyı fotoğrafla listeliyor,
+      varsayılan tikli (Test 1)
+- [ ] Kaydetmek config'e yazıyor, yorumlar korunuyor (Test 1)
+- [ ] Oturum menüsü modülleri soruyor; konuşmacı gösteriliyor ama
+      değiştirilemiyor (Test 2)
+- [ ] Tek modül seçilince yalnız o koşuyor; seçim snapshot'a ve nota yazılıyor
+      (Test 3)
+- [ ] Farklı konuşmacıda uyarı çıkıyor; "hayır" oturumu başlatmıyor (Test 4)
+- [ ] Devam eden oturumda menü çıkmıyor (Test 5)
+- [ ] `--no-ask` menüyü atlıyor; bayraklar menüyü dolduruyor (Test 6)
+- [ ] Konuşmacı 5 ve 6 gerçekten sunuluyor (Test 2, 7)
+- [ ] İptal oturum başlatmıyor (Test 8)
 
-## Bu alt adımda bilerek yapılmayanlar
+## Bilerek yapılmayanlar / bilinen sınırlar
 
-- **Kısmi oturumdan sonra "kaldığı yerden devam?" sorulması.** Kısmi bir oturum
-  `completed` bittiği için resume teklifi zaten çıkmaz; §C12'nin bu kriteri
-  Test 2'den sonra yeni bir oturum açarak doğrulanabilir (menü çıkar, devam
-  teklifi çıkmaz).
-- **Kısmi oturumun QC raporunda işaretlenmesi** ve **katılımcı düzeyinde analiz**
-  12d'nin işi. Şimdilik kısmi oturum snapshot'ında ve operatör notunda görünüyor.
-- **Menüde canlı toplam deneme sayısı yok.** `gui.DlgFromDict` alan değişince
-  yeniden hesaplayan bir yapı sunmuyor; modül başına deneme sayısı onay
-  kutusunun yanında yazıyor, toplam log'a yazılıyor.
+- **Fotoğraf karesi 0.15 s'den alınıyor** (`stimulus_prep.thumbnail.time_s`).
+  Konuşmacı 3 ve 7 kaydın başında ağzı hafif açık başlıyor; başka bir an
+  isterseniz config'ten değiştirip `prepare_stimuli.py --force` koşmak yeterli,
+  kod değişmez.
+- **Menüde canlı toplam deneme sayısı yok** — `gui.DlgFromDict` alan değişince
+  yeniden hesaplayan bir yapı sunmuyor; modül başına sayı kutunun yanında.
+- **Kontrol listesi menüden önce çıkıyor**, dolayısıyla seçilen alt kümeyi
+  bilmiyor: kurulumu doğruluyor, oturumu değil.
+- **Kısmi oturumun QC'de işaretlenmesi ve katılımcı düzeyinde analiz 12d.**
+- **Windows'ta seyrek bir ölümcül pytest çökmesi** görüldü (dört tam koşuda bir,
+  test hatası değil). CI Linux'ta ve orada hiç görülmedi.
 
 ## Sırada ne var
 
 **12d** — katılımcı düzeyinde analiz (`participant_measures`), QC'de kısmi
 oturum işareti, panelde "Katılımcı analizi" düğmesi ve `.exe`'nin yeniden
-derlenmesi.
+derlenmesi (`stimuli/` artık 186 MB, taşıma adımı uzuyor).

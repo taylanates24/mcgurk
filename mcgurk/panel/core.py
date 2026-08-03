@@ -41,7 +41,10 @@ from ..analysis.measures import session_measures
 from ..analysis.qc_report import session_qc
 from ..config import edit
 from ..config.edit import RepField  # noqa: F401 - re-exported for the Qt shell
-from ..config.loader import ConfigError  # noqa: F401 - the panel catches it
+from ..config.loader import (
+    ConfigError,  # noqa: F401 - the panel catches it
+    resolve_path,
+)
 from ..config.schema import ExperimentConfig
 from ..db.database import Database
 
@@ -516,3 +519,42 @@ def default_reps(runtime: Runtime) -> dict[str, int]:
     file is that it is the copy the operator cannot have edited.
     """
     return edit.default_reps(runtime.resource_root)
+
+
+# ------------------------------------------------------ speaker (Adım 12c-ii)
+
+
+def speaker_options(
+    config: ExperimentConfig,
+    runtime: Runtime,
+    *,
+    db_path: Path | str | None = None,
+) -> list[edit.SpeakerOption]:
+    """The rows of the "Konuşmacı" tab: every prepared speaker, with its photo.
+
+    The session counts come from the database when there is one — the operator
+    balancing speakers by hand needs to see how they are spread so far, and
+    since Adım 12 the ``balanced`` strategy no longer does it for them.  A
+    database that is not there yet is not an error: it is a fresh installation.
+    """
+    stimuli_root = resolve_path(runtime.writable_root, config.paths.stimuli)
+    counts: dict[int, int] = {}
+    path = Path(db_path) if db_path is not None else None
+    if path is not None and path.exists():
+        with Database(path, create=False) as db:
+            counts = db.speaker_session_counts()
+    return edit.speaker_options(config, stimuli_root, session_counts=counts)
+
+
+def save_speaker(
+    config_path: Path | str,
+    project_root: Path | str,
+    speaker_id: int,
+) -> ExperimentConfig:
+    """Pin the speaker in the config file and return the re-validated config.
+
+    Comments are preserved and an invalid result is rolled back — see
+    :func:`mcgurk.config.edit.write_speaker`.  Raises :class:`ConfigError`,
+    which the Qt shell turns into a dialog.
+    """
+    return edit.write_speaker(config_path, project_root, speaker_id)

@@ -1,10 +1,10 @@
-"""How the session flow drives the menu (ADIM 12c).
+"""How the session flow drives the menu and the speaker warning (ADIM 12c).
 
-``_ask_selection`` is the part of the flow that decides *whether* to warn and
-what to do with the answer.  The dialogs themselves are monkeypatched here, so
-the loop is testable without a screen — which matters because its failure mode
-is silent: a participant measured with two different faces still produces data
-that looks fine.
+Since 12c-ii the speaker is the panel's decision, so what the flow still has to
+get right is the *warning*: this participant was measured with one face before
+and the config now names another.  Its failure mode is silent — a participant
+measured with two faces produces data that looks fine — so the dialogs are
+monkeypatched here and the decision is tested without a screen.
 """
 
 from __future__ import annotations
@@ -74,13 +74,13 @@ def _earlier_session_with(db: Database, participant_id: int, speaker_id: int) ->
     db.finish_session(session_id, SESSION_COMPLETED)
 
 
-def _install(monkeypatch, answers: list[SessionSelection | None], confirms: list[bool]):
-    """Queue the menu's answers and the confirmation's, and record the calls."""
+def _install(monkeypatch, answer: SessionSelection | None, confirms: list[bool]):
+    """Queue the menu's answer and the confirmation's, and record the calls."""
     seen: dict[str, list[Any]] = {"menu": [], "confirm": []}
 
     def fake_menu(config, default, **kwargs):
         seen["menu"].append((default, kwargs))
-        return answers.pop(0)
+        return answer
 
     def fake_confirm(*, previous_id: int, chosen_id: int) -> bool:
         seen["confirm"].append((previous_id, chosen_id))
@@ -106,8 +106,8 @@ def test_a_first_session_is_not_warned_about(
     config: ExperimentConfig, db: Database, monkeypatch
 ) -> None:
     participant, participant_id = _participant(db)
-    chosen = SessionSelection(modules=("mcgurk",), speaker_id=3)
-    seen = _install(monkeypatch, [chosen], [])
+    chosen = SessionSelection(modules=("mcgurk",))
+    seen = _install(monkeypatch, chosen, [])
 
     assert _ask(config, db, participant_id, participant) == chosen
     assert seen["confirm"] == []
@@ -117,76 +117,57 @@ def test_the_same_speaker_as_last_time_is_not_warned_about(
     config: ExperimentConfig, db: Database, monkeypatch
 ) -> None:
     participant, participant_id = _participant(db)
-    _earlier_session_with(db, participant_id, 2)
-    chosen = SessionSelection(modules=("mcgurk",), speaker_id=2)
-    seen = _install(monkeypatch, [chosen], [])
+    _earlier_session_with(db, participant_id, config.speaker_selection.fixed_id or 1)
+    chosen = SessionSelection(modules=("mcgurk",))
+    seen = _install(monkeypatch, chosen, [])
 
     assert _ask(config, db, participant_id, participant) == chosen
     assert seen["confirm"] == []
 
 
-def test_the_menu_is_told_what_this_participant_saw_before(
+def test_a_different_speaker_in_the_config_needs_confirming(
     config: ExperimentConfig, db: Database, monkeypatch
 ) -> None:
     participant, participant_id = _participant(db)
     _earlier_session_with(db, participant_id, 6)
-    seen = _install(
-        monkeypatch, [SessionSelection(modules=("mcgurk",), speaker_id=6)], []
-    )
-
-    _ask(config, db, participant_id, participant)
-    _default, kwargs = seen["menu"][0]
-    assert kwargs["previous_speaker_id"] == 6
-    assert kwargs["speaker_counts"] == {6: 1}
-    assert kwargs["participant_code"] == "T12C"
-
-
-def test_a_different_speaker_needs_confirming(
-    config: ExperimentConfig, db: Database, monkeypatch
-) -> None:
-    participant, participant_id = _participant(db)
-    _earlier_session_with(db, participant_id, 2)
-    chosen = SessionSelection(modules=("mcgurk",), speaker_id=5)
-    seen = _install(monkeypatch, [chosen], [True])
+    chosen = SessionSelection(modules=("mcgurk",))
+    seen = _install(monkeypatch, chosen, [True])
 
     assert _ask(config, db, participant_id, participant) == chosen
-    assert seen["confirm"] == [(2, 5)]
+    assert seen["confirm"] == [(6, config.speaker_selection.fixed_id)]
 
 
-def test_refusing_the_confirmation_returns_to_the_menu(
+def test_refusing_the_warning_cancels_the_session(
     config: ExperimentConfig, db: Database, monkeypatch
 ) -> None:
-    """Not to the session: the operator gets to pick the previous speaker."""
+    """The fix is in the panel, so there is nothing useful to re-ask here."""
     participant, participant_id = _participant(db)
-    _earlier_session_with(db, participant_id, 2)
-    rejected = SessionSelection(modules=("mcgurk",), speaker_id=5)
-    accepted = SessionSelection(modules=("mcgurk",), speaker_id=2)
-    seen = _install(monkeypatch, [rejected, accepted], [False])
+    _earlier_session_with(db, participant_id, 6)
+    seen = _install(monkeypatch, SessionSelection(modules=("mcgurk",)), [False])
 
-    assert _ask(config, db, participant_id, participant) == accepted
-    assert len(seen["menu"]) == 2
-    # The second showing keeps what was typed rather than resetting the form.
-    assert seen["menu"][1][0] == rejected
+    assert _ask(config, db, participant_id, participant) is None
+    assert seen["menu"] == []
 
 
 def test_cancelling_the_menu_starts_nothing(
     config: ExperimentConfig, db: Database, monkeypatch
 ) -> None:
     participant, participant_id = _participant(db)
-    _install(monkeypatch, [None], [])
+    _install(monkeypatch, None, [])
 
     assert _ask(config, db, participant_id, participant) is None
 
 
-def test_the_menu_defaults_to_the_config_when_nothing_was_prefilled(
+def test_the_menu_is_told_which_speaker_the_session_will_use(
     config: ExperimentConfig, db: Database, monkeypatch
 ) -> None:
     participant, participant_id = _participant(db)
-    seen = _install(
-        monkeypatch, [SessionSelection(modules=("mcgurk",), speaker_id=1)], []
-    )
+    seen = _install(monkeypatch, SessionSelection(modules=("mcgurk",)), [])
 
     _ask(config, db, participant_id, participant)
-    default, _kwargs = seen["menu"][0]
+    default, kwargs = seen["menu"][0]
+    assert kwargs["participant_code"] == "T12C"
+    assert kwargs["speaker_label"] == session_module.speaker_label_for(
+        config, config.speaker_selection.fixed_id or 1
+    )
     assert default.modules == tuple(config.enabled_modules())
-    assert default.speaker_id == config.speaker_selection.fixed_id
