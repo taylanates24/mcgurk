@@ -5,7 +5,9 @@ Aktif adım: **12 — konuşmacı ve modül seçimi** (`docs/ADIM_12.md`). 12a
 TAMAMLANDI (konuşmacı seti 2 -> 8; bu sırada patlama/seviye ölçümünün
 kare-fazına bağımlılığı bulundu ve düzeltildi — hazır set yeniden üretildi).
 12b TAMAMLANDI (seçim çekirdeği + CLI bayrakları; seçim config'e uygulanıp
-snapshot'a yazılıyor). Sıra **12c**: operatör menüsü (PsychoPy diyaloğu).
+snapshot'a yazılıyor). **12c TESTTE** — operatör menüsü kodu ve otomatik
+testleri bitti, kullanıcının manuel testi (`TEST_ADIM_12C.md`) bekliyor.
+Sonra **12d**: katılımcı düzeyinde analiz + panel + paketleme.
 
 Önceki durum: 10 TAMAMLANDI (kod + paketleme + manuel doğrulama, 2026-08-01). **Paketlenmiş `.exe` uçtan uca çalışıyor** (panel açılıyor, deney PsychoPy exe içinde koşuyor, yazmalar writable konuma gidiyor, Türkçe düzgün, analiz/QC/export çalışıyor). Sıra: **prova oturumu (paketlenmiş app) → develop→master merge + `git tag v1.0.0`** (kullanıcı onayıyla).
 
@@ -40,7 +42,7 @@ snapshot'a yazılıyor). Sıra **12c**: operatör menüsü (PsychoPy diyaloğu).
 | 11b | PyQt6 "Ayarlar" sekmesi | TAMAMLANDI | 2026-08-02 | `f669199` |
 | 12a | Konuşmacı seti 2 -> 8 (+ patlama/seviye ölçümü düzeltmesi) | TAMAMLANDI | 2026-08-03 | `119a45c` |
 | 12b | Seçim çekirdeği + CLI (GUI'siz) | TAMAMLANDI | 2026-08-03 | `ef446e8` |
-| 12c | Operatör menüsü (PsychoPy diyaloğu) | BEKLİYOR | | |
+| 12c | Operatör menüsü (PsychoPy diyaloğu) | TESTTE | 2026-08-03 | `26ae6a6` |
 | 12d | Katılımcı düzeyinde analiz + panel + paketleme | BEKLİYOR | | |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
@@ -2691,6 +2693,59 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     oturumun alt kümesini değil.
   - **Bir kez ölümcül pytest çökmesi** görüldü (test hatası değil, yorumlayıcı
     seviyesinde). Sonraki üç tam koşu temiz; tekrarlarsa araştırılmalı.
+
+### Adım 12c — Operatör menüsü (PsychoPy diyaloğu)
+- **Durum:** TESTTE — kod ve otomatik testler bitti, **manuel test (`TEST_ADIM_12C.md`)
+  kullanıcı tarafından henüz yapılmadı** (kullanıcı isteğiyle commit önden atıldı,
+  2026-08-03). Manuel test geçmeden TAMAMLANDI sayılmaz.
+- **Commit:** `26ae6a6`
+- **Ne yapıldı:**
+  - **`mcgurk/ui/setup_dialog.py`** (yeni): `build_form` / `build_selection`
+    (saf, CI-testli) + `ask_session_setup` / `confirm_speaker_change` (ince
+    `gui.DlgFromDict` kabuğu). Alanlar: konuşmacı (etiket + oturum sayısı),
+    ölçüm modülü başına onay kutusu (yanında deneme sayısı), alıştırma, çapraz
+    dinleme; katılımcı kodu ve önceki konuşmacı `fixed` (değiştirilemez) satır.
+  - **`mcgurk/ui/session.py`**: `run_session(..., ask=True)` ve `_ask_selection`
+    — menü girişten sonra, `open_hardware`'den **önce**. Devam eden oturumda
+    menü yok. Seçim `operator_notes`'a da yazılıyor.
+  - **`mcgurk/db/database.py`**: `participant_speaker_id()` ve
+    `speaker_session_counts()` — salt okuma, **şema değişmedi** (sürüm 5).
+  - **`mcgurk/ui/__main__.py`**: `--no-ask` (12b'den ertelenmişti).
+  - **Testler:** `test_ui_setup_dialog.py` (14), `test_ui_session_menu.py` (7),
+    `test_db_speaker_history.py` (7), `test_ui_entry_selection.py`'ye 1.
+- **Alınan kararlar:**
+  - **`DlgFromDict` açılır listesi her zaman ilk seçeneği seçer**, ayrı bir
+    "initial" yok. Bu yüzden `build_form` konuşmacı listesini döndürüp önceden
+    seçileni başa alıyor; id sırasında bırakmak menünün her oturumu sessizce
+    konuşmacı 1'e vermesi demek olurdu. Bir test bunu koruyor.
+  - **Cevaplanmamış form varsayılanı verir:** `build_selection`, konuşmacı alanı
+    hâlâ bir liste ise ilk öğeyi seçilmiş sayıyor — widget'ın davranışının aynısı.
+    Böylece `build_selection(build_form(...)) == varsayılan` bir testle
+    doğrulanabiliyor (§A12.3'ün asıl güvencesi).
+  - **Farklı konuşmacı onaylanmazsa menüye dönülüyor**, oturuma değil: operatör
+    önceki konuşmacıyı seçebilmeli. Onay diyaloğunun **ilk (varsayılan) cevabı
+    "Hayır"**.
+  - **Konuşmacı geçmişi `trials.design_extra`'dan okunuyor**, snapshot'tan değil:
+    `balanced`/`random` stratejide snapshot konuşmacıyı adlandırmaz.
+  - **Oturum sayacı denemeyi değil oturumu sayıyor** (`COUNT(DISTINCT session_id)`).
+- **Doğrulama:** `pytest` 1009 passed / 60 skipped (yerel); PsychoPy'siz venv'de
+  `-m "not psychopy"` 966 passed / 59 skipped; `ruff` + `mypy` **her iki
+  ortamda** temiz (139 dosya).
+- **Bilinen sınırlar / sonraki adıma not:**
+  - **Menüde canlı toplam deneme sayısı yok** — `gui.DlgFromDict` alan
+    değişince yeniden hesaplayan bir yapı sunmuyor. Modül başına sayı onay
+    kutusunun yanında, toplam log'da.
+  - **Kontrol listesi menüden önce çıkıyor**, dolayısıyla seçimi bilmiyor
+    (12b'nin notu).
+  - **Kısmi oturumun QC'de işaretlenmesi ve katılımcı düzeyinde analiz 12d.**
+    Şimdilik kısmi oturum snapshot'ta ve `operator_notes`'ta görünüyor.
+  - **Windows'ta seyrek bir ölümcül pytest çökmesi** iki kez görüldü (test
+    hatası değil, yorumlayıcı seviyesinde; tekrar üretilemedi). CI Linux'ta ve
+    pytest job'ı hep geçti. Tekrarlarsa araştırılmalı.
+  - **CI dersi (12b):** ruff/mypy/pytest üçü de **commit edilecek son hâl**
+    üzerinde koşulmalı — mypy'yi memnun eden `getattr` ruff'ı kırmıştı ve CI
+    kırmızıya döndü (`e758ac5` düzeltti). PsychoPy'siz bir venv'de doğrulamak
+    geliştirme makinesinin gizlediği farkları da yakalıyor.
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 
