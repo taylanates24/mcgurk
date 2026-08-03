@@ -1,7 +1,12 @@
 # İlerleme Raporu — McGurk / SSD Platformu
 
-Son güncelleme: 2026-07-30
-Aktif adım: 10 TAMAMLANDI (kod + paketleme + manuel doğrulama, 2026-08-01). **Paketlenmiş `.exe` uçtan uca çalışıyor** (panel açılıyor, deney PsychoPy exe içinde koşuyor, yazmalar writable konuma gidiyor, Türkçe düzgün, analiz/QC/export çalışıyor). Sıra: **prova oturumu (paketlenmiş app) → develop→master merge + `git tag v1.0.0`** (kullanıcı onayıyla).
+Son güncelleme: 2026-08-03
+Aktif adım: **12 — konuşmacı ve modül seçimi** (`docs/ADIM_12.md`). 12a TAMAMLANDI
+(konuşmacı seti 2 -> 8; bu sırada patlama/seviye ölçümünün kare-fazına
+bağımlılığı bulundu ve düzeltildi — hazır set yeniden üretildi). Sıra **12b**:
+seçim çekirdeği + CLI.
+
+Önceki durum: 10 TAMAMLANDI (kod + paketleme + manuel doğrulama, 2026-08-01). **Paketlenmiş `.exe` uçtan uca çalışıyor** (panel açılıyor, deney PsychoPy exe içinde koşuyor, yazmalar writable konuma gidiyor, Türkçe düzgün, analiz/QC/export çalışıyor). Sıra: **prova oturumu (paketlenmiş app) → develop→master merge + `git tag v1.0.0`** (kullanıcı onayıyla).
 
 ## Durum tablosu
 
@@ -32,6 +37,10 @@ Aktif adım: 10 TAMAMLANDI (kod + paketleme + manuel doğrulama, 2026-08-01). **
 | 10c-ii | PyInstaller ile Windows .exe | TAMAMLANDI | 2026-08-01 | `b6a3f6f` |
 | 11a | Config-düzenleme çekirdeği (GUI'siz, CI-testli) | TAMAMLANDI | 2026-08-02 | `e946eb9` |
 | 11b | PyQt6 "Ayarlar" sekmesi | TAMAMLANDI | 2026-08-02 | `f669199` |
+| 12a | Konuşmacı seti 2 -> 8 (+ patlama/seviye ölçümü düzeltmesi) | TAMAMLANDI | 2026-08-03 | `119a45c` |
+| 12b | Seçim çekirdeği + CLI (GUI'siz) | GELİŞTİRİLİYOR | | |
+| 12c | Operatör menüsü (PsychoPy diyaloğu) | BEKLİYOR | | |
+| 12d | Katılımcı düzeyinde analiz + panel + paketleme | BEKLİYOR | | |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
 analiz kütüphanesi, 9b QC + testler, 9c dokümanlar. Prova oturumu ve master merge
@@ -2542,6 +2551,90 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     **veri toplama başladıktan sonra** tekrar sayısını değiştirmek oturumları
     karşılaştırılamaz kılar; sekme bunu da yazıyor, ama kararı veren danışmandır
     (§F.1 hâlâ açık).
+
+### Adım 12a — Konuşmacı setinin genişletilmesi (2 -> 8)
+- **Durum:** TAMAMLANDI (kullanıcı manuel testi 2026-08-03'te geçti — `TEST_ADIM_12A.md`)
+- **Tamamlanma:** 2026-08-03
+- **Commit:** `119a45c`
+- **Ne yapıldı:**
+  - **`mcgurk/stimuli/import_sources.py`** (yeni, saf — PsychoPy'siz):
+    `plan_import` / `apply_import`, `ImportItem`, `Verdict`. Teslim klasöründeki
+    `Vis-<g>_Aud-<s>_Speaker-<n>.mp4` dosyalarından **yalnız uyumlu takeleri**
+    config'in gösterdiği `assets/` klasörüne kopyalar.
+  - **`tools/import_speakers.py`** (yeni, ince CLI): `--dry-run`, `--speaker`,
+    `--source`.
+  - **`assets/` yeniden adlandırıldı:** `female_speaker_1` -> `speaker_1_female`,
+    `male_speaker_1` -> `speaker_2_male`; 3–8 içe aktarıldı (18 dosya).
+  - **`config/experiment.yaml`**: `stimulus_prep.speakers` **sekiz** girdi +
+    `label`. `speaker_selection.fixed_id` ve `modules.*.speaker_id` **1'de kaldı**.
+  - **`mcgurk/config/schema.py`**: `SpeakerSource.label: str | None`.
+  - **`mcgurk/stimuli/dsp.py`**: `rms_envelope` (yeni) + `detect_burst` ve
+    `active_speech_level_dbfs` onu kullanıyor — aşağıdaki kararın gereği.
+  - **Testler:** `test_stimuli_import_sources.py` (9 yeni) + `test_stimuli_dsp.py`'ye
+    2 kaydırma-bağımsızlık testi; `test_config_stimulus_prep.py` ve
+    `test_ui_session.py` sekiz konuşmacıya göre güncellendi.
+  - Hazır set yeniden üretildi ve doğrulandı: **393 dosya** (24 video, 72 token,
+    216 gürültülü, 48 dikotik), **185 MB** (önce 70 MB / 141 dosya), hazırlık ~6 dk.
+- **Alınan kararlar:**
+  - **Klasör adı `speaker_<id>_<cinsiyet>`.** Eski `{cinsiyet}_speaker_{n}`
+    cinsiyet içinde sayıyordu: konuşmacı **id 5** `female_speaker_2`'de otururdu
+    ve hata ayıklayan biri bunu yanlış okurdu. Ham kayıtlar zaten git dışında
+    (`.gitignore`), yani yeniden adlandırmanın depoya maliyeti yok.
+  - **Var olan hedefe sessizce yazılmıyor.** Aynı içerik atlanır, **farklı**
+    içerikte içe aktarma **hiçbir şey yazmadan durur**: üzerine yazmak,
+    hazırlanmış setin hangi kayıttan geldiğini belirsizleştirirdi. Kaynağın elde
+    olmadığı ama hedefin yerinde olduğu durum ayrı bir hüküm (`KEPT`) — hiçbir
+    karşılaştırma yapılmadığı için "aynı" demek yanlış olurdu.
+  - **`detect_burst` ve `active_speech_level_dbfs` kare-fazına bağımlıydı; ölçüm
+    düzeltildi (asıl bulgu).** Hazırlık konuşmacı 4'te durdu (`hizalama hatası
+    5.1 ms, tolerans 5.0`). Sebep kayıt değil, ölçümün kendisiydi: zarf **bitişik
+    karelerle** örnekleniyordu, yani aynı dalga biçimi birkaç örnek kaydırılıp
+    yeniden ölçüldüğünde sonuç değişiyordu. Ölçülen yayılım (24 token, bir karenin
+    her fazı): patlama **13 / 24 token'da > 2 ms** — konuşmacı 1 /ba/ **12.98 ms**,
+    konuşmacı 2 /ga/ 8.92 ms, yani **hâlihazırda kullanılan iki konuşmacıda da
+    vardı**; seviye ölçümünde konuşmacı 8 /ga/ **0.97 dB** (tolerans 0.5 dB).
+    Hizalama her denemede dosyanın önünden birkaç örnek kırptığı için bu kayma
+    gerçekten oluyordu ve hem hizalama hedefi hem token patlaması bu ölçümden
+    geldiği için belirsizlik **sunulan uyaranın A/V ofsetine** giriyordu.
+    - **Çözüm:** `dsp.rms_envelope` — zarfı **her örnekte** okuyan, kümülatif
+      toplamla O(n) hesaplanan pencere RMS'i. Yayılım 24 token'ın hepsinde
+      **0.000 ms / 0.000 dB**; doğrulama "en büyük sapma 0.0 ms" diyor.
+    - **Toleranslar değişmedi** (5.0 ms hizalama, 0.5 dB seviye) ve patlama
+      **tanımı** değişmedi — ölçüm *tekrarlanabilir* hale geldi. "Geçsin diye
+      gevşetme" değil; §D12'nin izin verdiği "eşiği/kaynağı gözden geçirme".
+    - **Ara çözüm yetmiyor:** 0.125 ms'lik hop 24 token'ın 23'ünde işe yarıyor,
+      konuşmacı 4 /da/ hâlâ 4.46 ms oynuyor.
+    - **Ölçüm tuzağı:** kaydırma adımı hop'un katı seçilirse ızgara fazı hiç
+      değişmez ve ölçüm kusursuz görünür. İlk ölçümde tam bu oldu; regresyon
+      testi bu yüzden **tek örneklik** adımlarla ilerliyor.
+    - **Bedeli:** ölçülen patlama anları birkaç ms oynadı (konuşmacı 2 /ga/
+      836.0 -> 842.8 ms), yani hazır set **tümüyle** yeniden üretildi. Etkilenen
+      veri yok: veritabanında tek bir geliştirme oturumu (12 deneme) vardı.
+  - **Deneme sayısı değişmedi** (797 / 58.8 dk): oturum başına tek konuşmacı
+    kullanılıyor, konuşmacı sayısı tasarımı değil seçeneği büyütüyor.
+  - **Cinsiyetler kullanıcıdan alındı:** 2, 3, 4, 7 erkek; 1, 5, 6, 8 kadın.
+    Etiketler (`label`) operatör menüsünün okuyacağı adlar; bir test her
+    konuşmacının etiketi olmasını zorluyor.
+- **Doğrulama:** `pytest` 954 passed / 59 skipped (yerel, PsychoPy'li);
+  `pytest -m "not psychopy"` 953 passed / 26 skipped; `ruff` + `mypy` temiz;
+  `verify_stimuli.py` çıkış 0; `python -m mcgurk.config` 797 deneme.
+- **Bilinen sınırlar / sonraki adıma not:**
+  - **Konuşmacı başına patlama yayılımı** (tokenlar arası): 1 -> 24.9 ms,
+    **2 -> 239.6 ms**, 3 -> 15.4, 4 -> 12.4, 5 -> 6.7, **6 -> 48.6**, 7 -> 18.4,
+    8 -> 17.7 ms. Fotodiyot kontrolüne (`01_av_gecikme_olcumu.md`) eklenecek
+    konuşmacı hâlâ **2**; 6 ikinci sırada.
+  - **Konuşmacı 3–8 hakkında cinsiyet dışında bilgi yok** (yaş, kayıt koşulları,
+    aynı stüdyo mu). Dosya biçimleri birebir aynı (640x480, 29.97 fps, 2.58 s,
+    aac 44.1 kHz) ama bu kanıt değil. **Danışmana:** kayıtlar karşılaştırılabilir
+    mi, konuşmacı seçimi yöntem dokümanında nasıl anlatılacak.
+  - **Cinsiyet artık bir seçim ekseni** (4 kadın / 4 erkek). Operatör menüden
+    seçerken gruplar arasında farkında olmadan cinsiyet dengesizliği
+    yaratabilir; dengeleme kuralı **danışman kararı** (`balanced` bugün id
+    sırasına göre dönüyor, cinsiyete göre değil).
+  - **`.exe` yeniden derlemesinde taşınacak veri 2.6 katına çıktı** (70 -> 185 MB)
+    — 12d'de `dist/McGurkSSD/` silinmeden önce taşıma adımı daha uzun sürecek.
+  - Konuşmacı 3–8'in kayıtları **hiçbir oturumda sunulmadı**; ilk ekranlı koşu
+    12c'nin manuel testinde.
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 
