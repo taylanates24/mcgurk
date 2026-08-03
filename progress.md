@@ -5,9 +5,10 @@ Aktif adım: **12 — konuşmacı ve modül seçimi** (`docs/ADIM_12.md`). 12a
 TAMAMLANDI (konuşmacı seti 2 -> 8; bu sırada patlama/seviye ölçümünün
 kare-fazına bağımlılığı bulundu ve düzeltildi — hazır set yeniden üretildi).
 12b TAMAMLANDI (seçim çekirdeği + CLI bayrakları; seçim config'e uygulanıp
-snapshot'a yazılıyor). **12c TESTTE** — operatör menüsü kodu ve otomatik
-testleri bitti, kullanıcının manuel testi (`TEST_ADIM_12C.md`) bekliyor.
-Sonra **12d**: katılımcı düzeyinde analiz + panel + paketleme.
+snapshot'a yazılıyor). **12c + 12c-ii TESTTE** — oturum başındaki modül
+menüsü ve panelin fotoğraflı "Konuşmacı" sekmesi hazır, kullanıcının manuel
+testi (`TEST_ADIM_12C.md`) bekliyor. Sonra **12d**: katılımcı düzeyinde analiz +
+panel + paketleme.
 
 Önceki durum: 10 TAMAMLANDI (kod + paketleme + manuel doğrulama, 2026-08-01). **Paketlenmiş `.exe` uçtan uca çalışıyor** (panel açılıyor, deney PsychoPy exe içinde koşuyor, yazmalar writable konuma gidiyor, Türkçe düzgün, analiz/QC/export çalışıyor). Sıra: **prova oturumu (paketlenmiş app) → develop→master merge + `git tag v1.0.0`** (kullanıcı onayıyla).
 
@@ -42,7 +43,8 @@ Sonra **12d**: katılımcı düzeyinde analiz + panel + paketleme.
 | 11b | PyQt6 "Ayarlar" sekmesi | TAMAMLANDI | 2026-08-02 | `f669199` |
 | 12a | Konuşmacı seti 2 -> 8 (+ patlama/seviye ölçümü düzeltmesi) | TAMAMLANDI | 2026-08-03 | `119a45c` |
 | 12b | Seçim çekirdeği + CLI (GUI'siz) | TAMAMLANDI | 2026-08-03 | `ef446e8` |
-| 12c | Operatör menüsü (PsychoPy diyaloğu) | TESTTE | 2026-08-03 | `26ae6a6` |
+| 12c | Operatör menüsü (modüller) | TESTTE | 2026-08-03 | `26ae6a6` |
+| 12c-ii | Panelde "Konuşmacı" sekmesi (fotoğraflarla) | TESTTE | 2026-08-03 | `59c4183` |
 | 12d | Katılımcı düzeyinde analiz + panel + paketleme | BEKLİYOR | | |
 
 **Adım 9 kod + doküman olarak TAMAMLANDI (kullanıcı onayı, 2026-07-30).** 9a
@@ -2746,6 +2748,55 @@ config'te (§A.9). Danışman gösterimi ayrı bir geliştirme gerektirmiyor —
     üzerinde koşulmalı — mypy'yi memnun eden `getattr` ruff'ı kırmıştı ve CI
     kırmızıya döndü (`e758ac5` düzeltti). PsychoPy'siz bir venv'de doğrulamak
     geliştirme makinesinin gizlediği farkları da yakalıyor.
+
+### Adım 12c-ii — Panelde "Konuşmacı" sekmesi (fotoğraflarla)
+- **Durum:** TESTTE — kod ve otomatik testler bitti, manuel test
+  (`TEST_ADIM_12C.md`, yeniden yazıldı) bekliyor.
+- **Commit:** `59c4183`
+- **Neden (kullanıcı isteği, 2026-08-03):** "konuşmacıları fotoğrafla seçelim;
+  default konuşmacı sabit olsun; 'Ayarlar' gibi bir 'Konuşmacı' sekmesi açılsın,
+  varsayılan tikli gelsin." Önce tam ekran PsychoPy menüsü yazılmaya başlanmıştı;
+  kullanıcı panele taşınmasını isteyince o çalışma geri alındı.
+- **Ne yapıldı:**
+  - **Hazırlama hattı:** `ffmpeg.extract_frame` + `stimulus_prep.thumbnail`
+    (`token`, `time_s`) -> `stimuli/thumbnails/speaker_<id>.png`, manifest'te
+    `ThumbnailEntry`, `verify_stimuli` kapsama kontrolü. **Kaydın kendi
+    çözünürlüğü** (640x480) yazılıyor; ölçekleme arayüzün işi (kullanıcı isteği).
+    Set 401 dosya / 186 MB.
+  - **`mcgurk/config/edit.py`**: `read_speaker`, `speaker_options`,
+    `write_speaker` — ruamel round-trip, doğrula/geri-al, `write_reps` ile aynı
+    kurallar.
+  - **`mcgurk/panel/core.py`**: `speaker_options` (oturum sayılarıyla),
+    `save_speaker`.
+  - **`mcgurk/panel/app.py`**: **"Konuşmacı"** sekmesi — fotoğraf ızgarası,
+    radyo düğmeleri, mevcut olan tikli, "Konuşmacıyı kaydet".
+  - **`mcgurk/ui/setup_dialog.py`**: konuşmacı alanı **kaldırıldı**; menü artık
+    yalnız modülleri soruyor, konuşmacıyı salt okunur gösteriyor.
+  - **`mcgurk/ui/session.py`**: farklı konuşmacı uyarısı artık config'in
+    konuşmacısını katılımcının öncekiyle karşılaştırıyor; onaylanmazsa oturum
+    **başlamıyor** (düzeltme panelde).
+- **Alınan kararlar:**
+  - **Konuşmacı oturumun değil kurulumun özelliği.** Bir katılımcının bütün
+    modülleri aynı yüzle ölçülmeli, dolayısıyla her oturumda sorulacak bir şey
+    değil. Oturum menüsü onu yalnız gösteriyor; iki yerden değiştirilebilseydi
+    panel ile config farklı şeyler söyleyebilirdi.
+  - **Tek yazımda beş anahtar:** `speaker_selection.fixed_id` + dört
+    `modules.*.speaker_id`. İlkini gerçek oturum, ikincisini dev araçları ve
+    tasarım özeti okuyor; ayrık kalmaları "kontrol" çıktısının sunulandan başka
+    bir konuşmacıyı anlatması demek olurdu.
+  - **Aynı konuşmacıyı kaydetmek bayt bayt aynı dosya bırakıyor** (test).
+  - **Uyarı reddedilirse oturum iptal** — menüye dönmek işe yaramaz, çünkü
+    konuşmacı orada değiştirilemiyor.
+  - **Fotoğraf hazır setten** (§A.12): oturum ffmpeg çağırmaz, ve yanlış kişinin
+    resmi tam olarak manifest+sağlama toplamının yakalamak için var olduğu hata.
+- **Doğrulama:** `pytest` 1017 passed / 60 skipped (yerel); PsychoPy/PyQt6'sız
+  venv'de 968 passed / 59 skipped; `ruff` + `mypy` her iki ortamda temiz;
+  `verify_stimuli` temiz (`8 konuşmacı küçük resmi yerinde`); 797 deneme aynı.
+- **Bilinen sınırlar:**
+  - Kare 0.15 s'den alınıyor; konuşmacı 3 ve 7 kaydın başında ağzı hafif açık.
+    Config'ten değiştirilebilir, kod değişmez.
+  - **`.exe` yeniden derlemesinde** `stimuli/` artık 186 MB (12d).
+  - Panelden başlatılan oturum `--no-ask` vermiyor; modül menüsü her zaman çıkar.
 
 ## Açık kararlar (kullanıcı + danışman verecek)
 
