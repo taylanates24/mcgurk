@@ -32,6 +32,13 @@ def test_no_flags_means_no_selection(config: ExperimentConfig) -> None:
     assert _selection(["--limit", "4"], config) is None
 
 
+def test_no_ask_alone_is_not_a_selection(config: ExperimentConfig) -> None:
+    """``--no-ask`` skips the menu; it does not narrow anything by itself."""
+    args = build_parser().parse_args(["--no-ask"])
+    assert args.no_ask is True
+    assert _selection_from(args, config) is None
+
+
 def test_modules_are_split_on_commas(config: ExperimentConfig) -> None:
     selection = _selection(["--modules", "mcgurk, dichotic"], config)
     assert selection is not None

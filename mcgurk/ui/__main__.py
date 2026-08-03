@@ -116,6 +116,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-cross-hearing", action="store_true", help="çapraz dinleme kontrolünü atla"
     )
+    parser.add_argument(
+        "--no-ask",
+        action="store_true",
+        help="oturum kurulum menüsünü gösterme (bayraklardaki seçimi doğrudan koş)",
+    )
     return parser
 
 
@@ -159,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
             offer_resume=not args.new_session,
             selection=selection,
+            ask=not args.no_ask,
         )
     except (EngineError, DatabaseError, ManifestError) as exc:
         # A broken timing chain, a database problem or a missing stimulus is

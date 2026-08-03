@@ -190,11 +190,21 @@ Bu, `python -m mcgurk.ui` ile aynıdır. Geliştirme/kısaltma seçenekleri:
 `--limit N` (modül başına ilk N deneme), `--db PATH`, `--device NAME`,
 `--new-session` (yarım oturum devam teklifini atla).
 
-**Oturuma özel seçim** (Adım 12): `--speaker N` bu oturumun konuşmacısını,
-`--modules mcgurk,dichotic` yalnız belirli ölçüm modüllerini koşar;
-`--no-practice` ve `--no-cross-hearing` iki oturum adımını atlar. Hiçbiri
-verilmezse tam tasarım ve `speaker_selection`'ın seçtiği konuşmacı koşulur —
-yani varsayılan davranış değişmez.
+**Oturum kurulum menüsü** (Adım 12). Girişten sonra, tam ekran pencere açılmadan
+önce operatöre bir menü çıkar: **konuşmacı** (etiketli liste, her birinin yanında
+bugüne kadarki oturum sayısı), her ölçüm modülü için bir **onay kutusu** (yanında
+deneme sayısı), **alıştırma** ve **çapraz dinleme kontrolü**. Menü **önceden dolu
+gelir** — tam tasarım ve config'in seçtiği konuşmacı — yani hiçbir şeye dokunmadan
+onaylamak eskisiyle aynı oturumu koşar. İptal edilirse oturum başlamaz.
+
+Katılımcı daha önce **başka bir konuşmacıyla** ölçüldüyse menü bunu gösterir ve
+farklı biri seçilirse onay ister; onaylanmazsa menüye dönülür. Seçim
+`operator_notes`'a da yazılır. **Devam (resume) ettirilen oturumda menü çıkmaz** —
+o oturumun tasarımı kendi snapshot'ında.
+
+Menüyü atlayan / önceden dolduran bayraklar: `--speaker N`,
+`--modules mcgurk,dichotic`, `--no-practice`, `--no-cross-hearing` menüyü
+**önceden doldurur**; `--no-ask` menüyü hiç göstermeden o seçimi koşar.
 
 Seçim **config'e uygulanır**: seçilmeyen modüller `enabled: false`,
 `session.module_order` kısaltılmış ve konuşmacı sabitlenmiş hâldeki tasarım
@@ -203,9 +213,9 @@ kendi snapshot'ıyla koşar ve seçim yok sayılır. Yanlış yazılmış bir mo
 ya da hazır olmayan bir konuşmacı, katılımcı ekrana oturmadan **komut satırında**
 hata verir.
 
-Akış: katılımcı girişi → (yarım oturum varsa) devam teklifi → oturum öncesi
-kontrol onayı → alıştırma → her modül yönergesiyle → molalar → çapraz dinleme
-(SSD) → bitiş + yedek. Oturum yarıda kalırsa aynı katılımcıyla **kaldığı yerden
+Akış: katılımcı girişi → (yarım oturum varsa) devam teklifi → **oturum kurulumu
+(konuşmacı + modüller)** → oturum öncesi kontrol onayı → alıştırma → her modül
+yönergesiyle → molalar → çapraz dinleme (SSD) → bitiş + yedek. Oturum yarıda kalırsa aynı katılımcıyla **kaldığı yerden
 devam** edilebilir (tamamlanan modüller atlanır).
 
 `ESC` **her aşamada** çalışır (uyaran sunumu dâhil) ve "çıkmak istediğinize emin

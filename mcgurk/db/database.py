@@ -327,6 +327,49 @@ class Database:
             return None
         return int(row["speaker_id"])
 
+    def participant_speaker_id(self, participant_id: int) -> int | None:
+        """The speaker this participant was most recently tested with.
+
+        The session menu (Adım 12c) defaults to it and warns when a different
+        one is chosen: measuring one participant's modules with two faces breaks
+        the within-subject comparison the design rests on.  Read from the trials
+        rather than from the config snapshot, because with a ``balanced`` or
+        ``random`` strategy the snapshot does not name the speaker that was
+        actually presented.
+        """
+        row = self.conn.execute(
+            "SELECT json_extract(t.design_extra, '$.speaker_id') AS speaker_id "
+            "FROM trials t "
+            "JOIN blocks b ON b.block_id = t.block_id "
+            "JOIN sessions s ON s.session_id = b.session_id "
+            "WHERE s.participant_id = ? "
+            "AND json_extract(t.design_extra, '$.speaker_id') IS NOT NULL "
+            "ORDER BY b.session_id DESC, t.trial_id LIMIT 1",
+            (participant_id,),
+        ).fetchone()
+        if row is None or row["speaker_id"] is None:
+            return None
+        return int(row["speaker_id"])
+
+    def speaker_session_counts(self) -> dict[int, int]:
+        """How many sessions each speaker has been presented in.
+
+        Shown in the menu so the operator can balance by hand: since Adım 12 the
+        ``balanced`` strategy is only the menu's pre-selection, so nothing keeps
+        the speakers even unless someone is looking at the counts.  Speakers with
+        no sessions yet are absent rather than zero — the caller knows the full
+        list from the config.
+        """
+        rows = self.conn.execute(
+            "SELECT speaker_id, COUNT(DISTINCT session_id) AS n FROM ("
+            "  SELECT b.session_id AS session_id, "
+            "         json_extract(t.design_extra, '$.speaker_id') AS speaker_id "
+            "  FROM trials t JOIN blocks b ON b.block_id = t.block_id "
+            "  WHERE json_extract(t.design_extra, '$.speaker_id') IS NOT NULL"
+            ") GROUP BY speaker_id ORDER BY speaker_id"
+        ).fetchall()
+        return {int(row["speaker_id"]): int(row["n"]) for row in rows}
+
     def get_session(self, session_id: int) -> dict[str, Any] | None:
         row = self.conn.execute(
             "SELECT * FROM sessions WHERE session_id = ?", (session_id,)

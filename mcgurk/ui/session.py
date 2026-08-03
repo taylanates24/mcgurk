@@ -25,7 +25,12 @@ from ..checklist import Check, any_red, render, run_checks
 from ..config.calibration import Calibration, load_calibration
 from ..config.loader import config_from_snapshot, resolve_path
 from ..config.schema import ExperimentConfig
-from ..config.selection import SPEAKER_MODULES, SessionSelection, select_speaker
+from ..config.selection import (
+    SPEAKER_MODULES,
+    SessionSelection,
+    default_selection,
+    select_speaker,
+)
 from ..config.selection import apply as apply_selection
 from ..db.database import Database
 from ..db.models import (
@@ -54,6 +59,7 @@ from ..stimuli import manifest as manifest_module
 from . import screens
 from .login import ask_resume_or_new, show_login_dialog
 from .runtime import Hardware, open_hardware, start_session
+from .setup_dialog import ask_session_setup, confirm_speaker_change
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +208,7 @@ def run_session(
     limit: int | None = None,
     offer_resume: bool = True,
     selection: SessionSelection | None = None,
+    ask: bool = True,
 ) -> int:
     """Run one full session.  Returns 0 completed, 1 refused/failed, 2 aborted.
 
@@ -216,6 +223,10 @@ def run_session(
     and QC then read the subset from the same place they read everything else.
     A resumed session ignores it: that session already has a design, and
     offering a different one would contradict the snapshot it continues under.
+
+    With *ask* (the default) the operator gets the menu (12c), pre-filled from
+    *selection* when the command line gave one and from the config otherwise.
+    ``--no-ask`` runs the pre-fill without stopping to confirm it.
     """
     # 1. Pre-session checklist (pure part) on the console.  The hardware is
     #    verified when it is opened below (open_hardware raises on a bad backend
@@ -269,17 +280,37 @@ def run_session(
         # A resumed session runs under the config it was started with, so the
         # trials still to run are the ones it originally planned.  A fresh one
         # runs under the operator's selection, which becomes its snapshot.
+        seed = 0
         if resume_row is not None:
             active_config = config_from_snapshot(str(resume_row["config_snapshot"]))
-            if selection is not None:
+            if selection is not None or ask:
                 logger.info(
-                    "Devam eden oturum kendi tasarımıyla koşuyor; seçim yok sayıldı."
+                    "Devam eden oturum kendi tasarımıyla koşuyor; menü/seçim "
+                    "yok sayıldı."
                 )
-        elif selection is not None:
-            active_config = apply_selection(config, selection)
-            logger.info("Oturum seçimi: %s", selection.describe())
         else:
-            active_config = config
+            # The seed is drawn before the menu because the menu's pre-selected
+            # speaker comes from it when the strategy is `random`.
+            seed = random.SystemRandom().randrange(2**31)
+            if ask:
+                # 3b. The operator's menu (Adım 12c): after login, before the
+                #     fullscreen window.  Cancel backs out with nothing started.
+                selection = _ask_selection(
+                    config,
+                    db=db,
+                    participant=participant,
+                    participant_id=participant_id,
+                    seed=seed,
+                    prefill=selection,
+                )
+                if selection is None:
+                    logger.info("Oturum kurulumu iptal edildi; oturum başlatılmadı.")
+                    return 0
+            if selection is not None:
+                active_config = apply_selection(config, selection)
+                logger.info("Oturum seçimi: %s", selection.describe())
+            else:
+                active_config = config
 
         # 4. Hardware (under the active config).
         hardware = open_hardware(active_config)
@@ -297,11 +328,16 @@ def run_session(
             completed = db.completed_trial_counts(session_id)
             logger.info("Oturum %d DEVAM ediyor. Tamamlanan: %s", session_id, completed)
         else:
-            seed = random.SystemRandom().randrange(2**31)
             speaker_id = select_speaker(
                 active_config, session_count=db.count_sessions(), seed=seed
             )
             completed = {}
+            notes = f"ui.session konuşmacı={speaker_id} iyi_kulak={good_ear}"
+            if selection is not None:
+                # The snapshot is the authority on what ran (§A12.1); the note
+                # is what a person reads first in the panel's session list, so a
+                # partial session says so there too (§A12.7).
+                notes += f" | seçim: {selection.describe()}"
             session_id = start_session(
                 db,
                 active_config,
@@ -309,7 +345,7 @@ def run_session(
                 participant_id=participant_id,
                 seed=seed,
                 hardware=hardware,
-                operator_notes=f"ui.session konuşmacı={speaker_id} iyi_kulak={good_ear}",
+                operator_notes=notes,
             )
         logger.info(
             "Oturum %d, katılımcı %s (%s), tohum %d, konuşmacı %d, iyi kulak %s, "
@@ -360,6 +396,63 @@ def run_session(
         db.close()
 
     return 0 if status == SESSION_COMPLETED else 2
+
+
+def _ask_selection(
+    config: ExperimentConfig,
+    *,
+    db: Database,
+    participant: Participant,
+    participant_id: int,
+    seed: int,
+    prefill: SessionSelection | None,
+) -> SessionSelection | None:
+    """Show the session menu until the operator confirms, or cancels.
+
+    Choosing a speaker this participant was not tested with before is allowed
+    but never silent (user decision, 2026-08-03): refusing the confirmation
+    returns to the menu rather than to the session, so the operator can pick the
+    previous speaker instead of being pushed into starting.
+    """
+    previous = db.participant_speaker_id(participant_id)
+    counts = db.speaker_session_counts()
+    default = prefill or default_selection(
+        config, session_count=db.count_sessions(), seed=seed
+    )
+    while True:
+        chosen = ask_session_setup(
+            config,
+            default,
+            participant_code=participant.participant_code,
+            previous_speaker_id=previous,
+            speaker_counts=counts,
+        )
+        if chosen is None:
+            return None
+        if (
+            previous is not None
+            and chosen.speaker_id is not None
+            and chosen.speaker_id != previous
+            and not confirm_speaker_change(
+                previous_id=previous, chosen_id=chosen.speaker_id
+            )
+        ):
+            logger.info(
+                "Farklı konuşmacı onaylanmadı (önceki %d, seçilen %d); menüye "
+                "dönülüyor.",
+                previous,
+                chosen.speaker_id,
+            )
+            default = chosen
+            continue
+        if previous is not None and chosen.speaker_id != previous:
+            logger.warning(
+                "Katılımcı daha önce konuşmacı %d ile ölçülmüştü; bu oturumda "
+                "konuşmacı %s kullanılıyor (operatör onayladı).",
+                previous,
+                chosen.speaker_id,
+            )
+        return chosen
 
 
 def _run_flow(

@@ -18,16 +18,37 @@ TÜBİTAK-supported academic research project: "Behavioral Assessment of Audiovi
 
 ### Entry points
 1. **`main.py`** (= `python -m mcgurk.ui`) — the full session flow (Adım 8):
-   participant login → resume prompt for an interrupted session → pre-session
-   checklist confirm → practice → every module in `session.module_order` with its
-   instruction screen and breaks → cross-hearing check (SSD) → end + backup. ESC
-   opens an "are you sure?" confirm at any point.
+   participant login → resume prompt for an interrupted session → operator
+   setup menu (speaker + modules, Adım 12c) → pre-session checklist confirm →
+   practice → every module in `session.module_order` with its instruction screen
+   and breaks → cross-hearing check (SSD) → end + backup. ESC opens an "are you
+   sure?" confirm at any point.
 2. **`python -m mcgurk.checklist`** — the operator's pre-session GREEN/RED pre-flight.
 3. Admin / analysis (browse results, export) — Adım 9.
 
 The six assessment modules are `mcgurk`, `avsr`, `tbw`, `oddball`, `dichotic`,
 `gin` (documented under `mcgurk/modules/` below); `practice` and the
 cross-hearing check are session-flow steps, not measurement modules.
+
+**The operator's per-session choice is applied to the config, not carried beside
+it (Adım 12, `mcgurk/config/selection.py`).** `apply()` returns a config with the
+unselected modules disabled, `session.module_order` shortened and the chosen
+speaker pinned into `speaker_selection`; the session starts with *that*, so it is
+what `sessions.config_snapshot` stores. Resume, analysis and QC therefore read
+the subset from the place they already read everything else and never learn what
+a "selection" is. Things that are easy to get wrong here:
+- **Apply it before `start_session`**, or the snapshot records the full design
+  while a subset actually ran.
+- **A resumed session ignores the menu and the flags** — it has a design, and
+  offering another one would contradict the snapshot it continues under.
+- **The menu chooses within the config, never around it**: a module disabled in
+  `config/experiment.yaml` cannot be ticked (§A.9), and the module *order* stays
+  the config's — the operator picks which modules run, not in what sequence.
+- **A `DlgFromDict` dropdown always selects its first entry**, so `build_form`
+  rotates the speaker list to put the pre-selected one first; leaving it in id
+  order would quietly hand every session to speaker 1.
+- **The checklist runs before the menu** and therefore knows nothing about the
+  subset — it verifies the installation, not the session.
 
 ### Legacy retired under legacy/ (Adım 8c-ii)
 
@@ -90,6 +111,7 @@ mcgurk/                          # new platform (Adım 1→)
 ├── analysis/                    # Adım 9 (empty)
 ├── ui/                          # Adım 8 — session flow (8b-i)
 │   ├── login.py                 # gui.DlgFromDict -> Participant; build_participant is pure
+│   ├── setup_dialog.py          # operator menu: speaker + modules (Adım 12c); build_form/build_selection are pure
 │   ├── screens.py               # instruction / break / operator-checklist / quit-confirm screens
 │   ├── runtime.py               # shared hardware open + start_session (also used by run_module)
 │   ├── session.py               # orchestrator: checklist -> login -> practice -> modules -> cross-hearing -> end; installs the ESC confirmer
@@ -622,7 +644,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
 - Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin --dry-run` (gin needs `--ear left|right`)
 - Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin [--limit N] [--seed N]` (gin needs `--ear left|right`)
-- Run a full session (Adım 8, new package): `python -m mcgurk.ui [--limit N] [--db PATH] [--device NAME] [--new-session] [--speaker N] [--modules mcgurk,dichotic] [--no-practice] [--no-cross-hearing]` — login → (resume prompt if a half-finished session exists) → checklist confirm → practice → instructions → modules → breaks → cross-hearing (SSD) → end. ESC opens an "are you sure?" confirm (Adım 8b-ii); confirmed → `aborted` + backup. Resume (Adım 8c-i) reuses the same session/seed/snapshot and skips completed modules; `--new-session` forces a fresh one.
+- Run a full session (Adım 8, new package): `python -m mcgurk.ui [--limit N] [--db PATH] [--device NAME] [--new-session] [--speaker N] [--modules mcgurk,dichotic] [--no-practice] [--no-cross-hearing] [--no-ask]` — login → (resume prompt if a half-finished session exists) → **setup menu (speaker + modules, Adım 12c; the flags pre-fill it, `--no-ask` skips it)** → checklist confirm → practice → instructions → modules → breaks → cross-hearing (SSD) → end. ESC opens an "are you sure?" confirm (Adım 8b-ii); confirmed → `aborted` + backup. Resume (Adım 8c-i) reuses the same session/seed/snapshot and skips completed modules; `--new-session` forces a fresh one.
 - Verify cross-hearing lateralisation on its own (Adım 8b-ii): `python tools/run_cross_hearing.py --ear left|right` — `--ear` is the deaf ear; the tone routes there, the other channel is silent, half the trials are catch. Runs just this check so the side can be confirmed without a full session.
 - Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
 - Verify stimuli: `python tools/verify_stimuli.py [--quick]`
