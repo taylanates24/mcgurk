@@ -134,13 +134,17 @@ def test_the_chosen_speaker_is_written_everywhere_it_is_read(
 
     assert applied.speaker_selection.strategy == "fixed"
     assert applied.speaker_selection.fixed_id == 5
-    modules = applied.modules.by_name()
     # The constant is the set of modules that actually carry a speaker, not a
     # list kept in step by hand: oddball's tones and gin's noise have no face.
-    assert {n for n, m in modules.items() if hasattr(m, "speaker_id")} == set(
-        SPEAKER_MODULES
-    )
-    assert all(getattr(modules[name], "speaker_id") == 5 for name in SPEAKER_MODULES)
+    assert {
+        name
+        for name, module in applied.modules.by_name().items()
+        if hasattr(module, "speaker_id")
+    } == set(SPEAKER_MODULES)
+    assert applied.modules.mcgurk.speaker_id == 5
+    assert applied.modules.avsr.speaker_id == 5
+    assert applied.modules.tbw.speaker_id == 5
+    assert applied.modules.dichotic.speaker_id == 5
     assert 5 in applied.required_speaker_ids()
     # The selection is what select_speaker now returns: the session flow needs
     # no separate path for "the operator picked one".
