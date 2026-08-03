@@ -25,6 +25,8 @@ from ..checklist import Check, any_red, render, run_checks
 from ..config.calibration import Calibration, load_calibration
 from ..config.loader import config_from_snapshot, resolve_path
 from ..config.schema import ExperimentConfig
+from ..config.selection import SPEAKER_MODULES, SessionSelection, select_speaker
+from ..config.selection import apply as apply_selection
 from ..db.database import Database
 from ..db.models import (
     GROUP_SSD_LEFT,
@@ -68,9 +70,6 @@ MODULE_IMPLS = {
 }
 #: Presented as a continuous stream — no AVPresenter, no per-block break.
 STREAM_MODULES = {"oddball", "gin"}
-#: Carry a speaker; the design picks that speaker's recordings.  oddball's tones
-#: and gin's noise have no speaker.
-SPEAKER_MODULES = {"mcgurk", "avsr", "tbw", "dichotic"}
 
 _BLOCK_RUNNERS = {
     "mcgurk": run_mcgurk,
@@ -83,22 +82,9 @@ _STREAM_RUNNERS = {"oddball": run_oddball, "gin": run_gin}
 
 # ----------------------------------------------------------- pure decisions
 
-
-def select_speaker(config: ExperimentConfig, *, session_count: int, seed: int) -> int:
-    """Which speaker this participant is tested with (§F.4).
-
-    ``fixed`` pins one; ``balanced`` rotates by how many sessions have run so a
-    fresh participant takes the next in turn; ``random`` draws one, seeded from
-    the session seed so the choice is reproducible from the stored data.
-    """
-    selection = config.speaker_selection
-    ids = config.stimulus_prep.speaker_ids()
-    if selection.strategy == "fixed":
-        assert selection.fixed_id is not None  # the schema guarantees it
-        return selection.fixed_id
-    if selection.strategy == "balanced":
-        return ids[session_count % len(ids)]
-    return random.Random(seed).choice(ids)
+# ``select_speaker`` moved to ``config.selection`` in Adım 12b, where the rest of
+# the per-session choice lives; it is re-exported here because it was this
+# module's function for four steps and callers still import it from here.
 
 
 def good_ear_for(participant: Participant) -> str:
@@ -215,6 +201,7 @@ def run_session(
     db_path: Path,
     limit: int | None = None,
     offer_resume: bool = True,
+    selection: SessionSelection | None = None,
 ) -> int:
     """Run one full session.  Returns 0 completed, 1 refused/failed, 2 aborted.
 
@@ -222,6 +209,13 @@ def run_session(
     operator is asked to continue it (Adım 8c-i): the same session id, seed and
     stored config snapshot are reused and the already-completed modules are
     skipped.
+
+    *selection* is the operator's choice of speaker and modules (Adım 12).  It
+    is applied to the config **before** the session is started, so the design it
+    produces is what goes into ``sessions.config_snapshot`` — resume, analysis
+    and QC then read the subset from the same place they read everything else.
+    A resumed session ignores it: that session already has a design, and
+    offering a different one would contradict the snapshot it continues under.
     """
     # 1. Pre-session checklist (pure part) on the console.  The hardware is
     #    verified when it is opened below (open_hardware raises on a bad backend
@@ -273,12 +267,19 @@ def run_session(
                     resume_row = resumable
 
         # A resumed session runs under the config it was started with, so the
-        # trials still to run are the ones it originally planned.
-        active_config = (
-            config_from_snapshot(str(resume_row["config_snapshot"]))
-            if resume_row is not None
-            else config
-        )
+        # trials still to run are the ones it originally planned.  A fresh one
+        # runs under the operator's selection, which becomes its snapshot.
+        if resume_row is not None:
+            active_config = config_from_snapshot(str(resume_row["config_snapshot"]))
+            if selection is not None:
+                logger.info(
+                    "Devam eden oturum kendi tasarımıyla koşuyor; seçim yok sayıldı."
+                )
+        elif selection is not None:
+            active_config = apply_selection(config, selection)
+            logger.info("Oturum seçimi: %s", selection.describe())
+        else:
+            active_config = config
 
         # 4. Hardware (under the active config).
         hardware = open_hardware(active_config)

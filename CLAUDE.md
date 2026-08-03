@@ -50,6 +50,7 @@ mcgurk/                          # new platform (Adım 1→)
 │   ├── schema.py                # Pydantic models, §G — extra="forbid"
 │   ├── loader.py                # load, validate, design summary
 │   ├── edit.py                  # panel-editable rep counts; ruamel round-trip write (Adım 11)
+│   ├── selection.py             # operator's per-session choice: speaker + modules (Adım 12b)
 │   ├── calibration.py           # 02_kalibrasyon.md JSON (Turkish keys → aliases)
 │   ├── word_lists.py            # AVSR word-list schema + reader (Adım 5)
 │   └── __main__.py              # python -m mcgurk.config
@@ -194,7 +195,10 @@ psychometric fit are tested in CI. Things that are easy to get wrong:
   the clean token's — the manifest records it only once.
 - **`trials.design_extra.speaker_id` is per trial.** The config snapshot only
   pins the speaker down while `speaker_selection.strategy` is `fixed`;
-  `plan_trials(..., speaker_id=...)` lets Adım 8 choose per participant.
+  `plan_trials(..., speaker_id=...)` lets Adım 8 choose per participant. Since
+  Adım 12b the operator's choice is applied to the config *before* the session
+  starts (`config/selection.py`), so a chosen speaker **is** pinned in that
+  session's snapshot and `select_speaker` simply reads it back.
 - **Both RTs come from one measurement.** `rt_from_prompt_ms` is the keyboard's
   own clock, reset at the prompt flip; `rt_from_burst_ms` adds the known
   prompt−burst interval. Nothing is computed from `KeyPress.tDown`, but the
@@ -618,7 +622,7 @@ Six tables + `v_trials_flat`. See `mcgurk/db/schema.sql`.
 - Timing self-test: `python tools/timing_selftest.py --level 1` / `--demo`
 - Inspect a module's design (no hardware): `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin --dry-run` (gin needs `--ear left|right`)
 - Run a module: `python tools/run_module.py --module mcgurk|avsr|tbw|oddball|dichotic|gin [--limit N] [--seed N]` (gin needs `--ear left|right`)
-- Run a full session (Adım 8, new package): `python -m mcgurk.ui [--limit N] [--db PATH] [--device NAME] [--new-session]` — login → (resume prompt if a half-finished session exists) → checklist confirm → practice → instructions → modules → breaks → cross-hearing (SSD) → end. ESC opens an "are you sure?" confirm (Adım 8b-ii); confirmed → `aborted` + backup. Resume (Adım 8c-i) reuses the same session/seed/snapshot and skips completed modules; `--new-session` forces a fresh one.
+- Run a full session (Adım 8, new package): `python -m mcgurk.ui [--limit N] [--db PATH] [--device NAME] [--new-session] [--speaker N] [--modules mcgurk,dichotic] [--no-practice] [--no-cross-hearing]` — login → (resume prompt if a half-finished session exists) → checklist confirm → practice → instructions → modules → breaks → cross-hearing (SSD) → end. ESC opens an "are you sure?" confirm (Adım 8b-ii); confirmed → `aborted` + backup. Resume (Adım 8c-i) reuses the same session/seed/snapshot and skips completed modules; `--new-session` forces a fresh one.
 - Verify cross-hearing lateralisation on its own (Adım 8b-ii): `python tools/run_cross_hearing.py --ear left|right` — `--ear` is the deaf ear; the tone routes there, the other channel is silent, half the trials are catch. Runs just this check so the side can be confirmed without a full session.
 - Prepare stimuli: `python tools/prepare_stimuli.py [--force]`
 - Verify stimuli: `python tools/verify_stimuli.py [--quick]`

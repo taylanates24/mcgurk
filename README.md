@@ -190,6 +190,19 @@ Bu, `python -m mcgurk.ui` ile aynıdır. Geliştirme/kısaltma seçenekleri:
 `--limit N` (modül başına ilk N deneme), `--db PATH`, `--device NAME`,
 `--new-session` (yarım oturum devam teklifini atla).
 
+**Oturuma özel seçim** (Adım 12): `--speaker N` bu oturumun konuşmacısını,
+`--modules mcgurk,dichotic` yalnız belirli ölçüm modüllerini koşar;
+`--no-practice` ve `--no-cross-hearing` iki oturum adımını atlar. Hiçbiri
+verilmezse tam tasarım ve `speaker_selection`'ın seçtiği konuşmacı koşulur —
+yani varsayılan davranış değişmez.
+
+Seçim **config'e uygulanır**: seçilmeyen modüller `enabled: false`,
+`session.module_order` kısaltılmış ve konuşmacı sabitlenmiş hâldeki tasarım
+oturumun `config_snapshot`'ına yazılır. Devam (resume) ettirilen bir oturum
+kendi snapshot'ıyla koşar ve seçim yok sayılır. Yanlış yazılmış bir modül adı
+ya da hazır olmayan bir konuşmacı, katılımcı ekrana oturmadan **komut satırında**
+hata verir.
+
 Akış: katılımcı girişi → (yarım oturum varsa) devam teklifi → oturum öncesi
 kontrol onayı → alıştırma → her modül yönergesiyle → molalar → çapraz dinleme
 (SSD) → bitiş + yedek. Oturum yarıda kalırsa aynı katılımcıyla **kaldığı yerden
